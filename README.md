@@ -1,2 +1,1 @@
-# capstone-audio-to-text
-research phase of learning audio to text
+Check README.md file within folders.
