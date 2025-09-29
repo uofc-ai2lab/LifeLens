@@ -1,6 +1,6 @@
 # WhisperX Environment Setup & Fine-Tuning Guide
 
-## 3. Create and Activate Python Virtual Environment
+## 1. Create and Activate Python Virtual Environment
 
 ```sh
 python3.11 -m venv venv311
@@ -10,13 +10,13 @@ venv311\Scripts\activate
 source venv311/bin/activate
 ```
 
-## 4. Upgrade pip
+## 2. Upgrade pip
 
 ```sh
 pip install --upgrade pip
 ```
 
-## 5. Install Dependencies
+## 3. Install Dependencies
 
 ```sh
 pip install torch torchvision torchaudio
@@ -24,12 +24,12 @@ pip install -r requirements.txt
 pip install .
 ```
 
-## 6. (Optional) Install CUDA for GPU Acceleration
+## 4. (Optional) Install CUDA for GPU Acceleration
 
 - Make sure you have a compatible NVIDIA GPU and CUDA drivers.
 - See [PyTorch CUDA Installation Guide](https://pytorch.org/get-started/locally/).
 
-## 7. Hugging Face Authentication
+## 5. Hugging Face Authentication
 
 1. Register at [Hugging Face](https://huggingface.co).
 2. Get your access token.
@@ -39,7 +39,7 @@ pip install .
     huggingface-cli login
     ```
 
-## 8. Fine-Tuning WhisperX
+## 6. Fine-Tuning WhisperX
 
 - Prepare your dataset (see [WhisperX docs](https://github.com/m-bain/whisperx#fine-tuning)).
 - Run fine-tuning:
@@ -54,7 +54,7 @@ pip install .
     python whisper.py --help
     ```
 
-## 9. Running Inference
+## 7. Running Inference
 
 ```sh
 python whisper.py --audio_file /path/to/audio.wav --model_dir /path/to/save/model
@@ -62,6 +62,18 @@ python whisper.py --audio_file /path/to/audio.wav --model_dir /path/to/save/mode
 
 ---
 
+## 8. (optional) Download pip WhisperX package
+
+NOTE: Make sure you're in the python venv environment before doing any pip installs.
+
+```sh
+pip install whisperx
+```
+
+and run using the test .wav file, include your HF_Token:
+```sh
+whisperx test_data/ShortParamedicClip.wav --compute_type int8 --hf_token YOUR_TOKEN_HERE  --model large-v2 --diarize --highlight_words True
+```
 ## Troubleshooting
 
 - If you have dependency issues, reinstall them or check [WhisperX Issues](https://github.com/m-bain/whisperx/issues).
