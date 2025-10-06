@@ -21,7 +21,7 @@ pip install --upgrade pip
 ```sh
 pip install torch torchvision torchaudio
 pip install -r requirements.txt
-pip install .
+pip install whisperX
 ```
 
 ## 4. (Optional) Install CUDA for GPU Acceleration

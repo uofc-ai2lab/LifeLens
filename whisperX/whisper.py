@@ -43,12 +43,12 @@ del model_a
 dotenv.load_dotenv()
 HUGGING_FACE_TOKEN = os.getenv("HUGGING_FACE_TOKEN")
 # 3. Assign speaker labels
-# diarize_model = whisperx.diarize.DiarizationPipeline(use_auth_token=HUGGING_FACE_TOKEN, device=device)
+diarize_model = whisperx.diarize.DiarizationPipeline(use_auth_token=HUGGING_FACE_TOKEN, device=device)
 
 # add min/max number of speakers if known
-# diarize_segments = diarize_model(audio)
-# diarize_model(audio, min_speakers=min_speakers, max_speakers=max_speakers)
+diarize_segments = diarize_model(audio)
+diarize_model(audio, min_speakers=min_speakers, max_speakers=max_speakers)
 
-# result = whisperx.assign_word_speakers(diarize_segments, result)
-# print(diarize_segments)
+result = whisperx.assign_word_speakers(diarize_segments, result)
+print(diarize_segments)
 print(result["segments"]) # segments are now assigned speaker IDs
