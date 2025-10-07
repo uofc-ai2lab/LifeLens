@@ -3,6 +3,7 @@ import os
 import dotenv
 import json
 import pandas as pd
+from datetime import datetime
 
 device = "cpu"  # or "cuda" if NVIDIA GPU
 ##### TODO: CHANGE THIS TO YOUR AUDIO FILE #####
@@ -89,11 +90,20 @@ def export_results(result, output_dir="output", filename="transcript"):
 
     csv_path = f"{output_dir}/{filename}.csv"
     df_data = []
+
+    # get length of audio
+    AUDIO_LENGTH = result["segments"][-1]["end"]
+    BASE_TIMESTAMP: float = datetime.now().timestamp() - AUDIO_LENGTH # set to current time - length of audio
     for seg in result["segments"]:
+        # convert start and end to realtime format
+        # start is base + seg start
+        start_time = datetime.fromtimestamp((BASE_TIMESTAMP + seg["start"]))
+        # end is base + seg end
+        end_time = datetime.fromtimestamp((BASE_TIMESTAMP + seg["end"]))
 
         df_data.append({
-            "start": seg["start"],
-            "end": seg["end"],
+            "start": start_time,
+            "end": end_time,
             "text": seg["text"].strip()
         })
     pd.DataFrame(df_data).to_csv(csv_path, index=False)
