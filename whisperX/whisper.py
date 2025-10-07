@@ -1,8 +1,11 @@
 import whisperx
 import os
 import dotenv
+import json
+import pandas as pd
 
 device = "cpu"  # or "cuda" if NVIDIA GPU
+##### TODO: CHANGE THIS TO YOUR AUDIO FILE #####
 audio_file = os.path.join("test_data", "ShortParamedicClip.wav")
 batch_size = 4 # reduce if low on GPU mem
 compute_type = "int8"  # change to "float16" for GPU
@@ -47,8 +50,75 @@ diarize_model = whisperx.diarize.DiarizationPipeline(use_auth_token=HUGGING_FACE
 
 # add min/max number of speakers if known
 diarize_segments = diarize_model(audio)
-diarize_model(audio, min_speakers=min_speakers, max_speakers=max_speakers)
+diarize_model(audio)
 
 result = whisperx.assign_word_speakers(diarize_segments, result)
 print(diarize_segments)
 print(result["segments"]) # segments are now assigned speaker IDs
+
+
+# 4. Export results
+
+def export_results(result, output_dir="output", filename="transcript"):
+    """Export results in multiple formats"""
+    os.makedirs(output_dir, exist_ok=True)
+
+    json_path = f"{output_dir}/{filename}.json"
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(result, f, indent=2, ensure_ascii=False)
+
+    srt_path = f"{output_dir}/{filename}.srt"
+    with open(srt_path, "w", encoding="utf-8") as f:
+        for i, seg in enumerate(result["segments"], 1):
+            start = format_timestamp(seg["start"])
+            end = format_timestamp(seg["end"])
+            f.write(f"{i}\n{start} --> {end}\n{seg['text'].strip()}\n\n")
+
+    vtt_path = f"{output_dir}/{filename}.vtt"
+    with open(vtt_path, "w", encoding="utf-8") as f:
+        f.write("WEBVTT\n\n")
+        for i, seg in enumerate(result["segments"], 1):
+            start = format_timestamp_vtt(seg["start"])
+            end = format_timestamp_vtt(seg["end"])
+            f.write(f"{start} --> {end}\n{seg['text'].strip()}\n\n")
+
+    txt_path = f"{output_dir}/{filename}.txt"
+    with open(txt_path, "w", encoding="utf-8") as f:
+        for seg in result["segments"]:
+            f.write(f"{seg['text'].strip()}\n")
+
+    csv_path = f"{output_dir}/{filename}.csv"
+    df_data = []
+    for seg in result["segments"]:
+
+        df_data.append({
+            "start": seg["start"],
+            "end": seg["end"],
+            "text": seg["text"].strip()
+        })
+    pd.DataFrame(df_data).to_csv(csv_path, index=False)
+
+    print(f"\n💾 Results exported to '{output_dir}/' directory:")
+    print(f"   ✓ {filename}.json (full structured data)")
+    print(f"   ✓ {filename}.srt (subtitles)")
+    print(f"   ✓ {filename}.vtt (web video subtitles)")
+    print(f"   ✓ {filename}.txt (plain text)")
+    print(f"   ✓ {filename}.csv (timestamps + text)")
+ 
+def format_timestamp(seconds):
+    """Convert seconds to SRT timestamp format"""
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    millis = int((seconds % 1) * 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+def format_timestamp_vtt(seconds):
+    """Convert seconds to VTT timestamp format"""
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    millis = int((seconds % 1) * 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}.{millis:03d}"
+
+export_results(result, output_dir="output", filename="transcript")
