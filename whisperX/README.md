@@ -24,6 +24,10 @@ pip install -r requirements.txt
 pip install whisperX
 ```
 
+#### OPTIONAL ffmpeg download
+
+You may optionally need to download ffmpeg, make sure you install **version 7.1.2** from [ffmpeg install](https://ffmpeg.org/download.html#releases)
+
 ## 4. (Optional) Install CUDA for GPU Acceleration
 
 - Make sure you have a compatible NVIDIA GPU and CUDA drivers.
