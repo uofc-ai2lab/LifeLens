@@ -5,11 +5,12 @@ import json
 import pandas as pd
 from datetime import datetime
 
-device = "cpu"  # or "cuda" if NVIDIA GPU
-##### TODO: CHANGE THIS TO YOUR AUDIO FILE #####
-audio_file = os.path.join("test_data", "ShortParamedicClip.wav")
+device = os.getenv("DEVICE", "cpu")
+audio_from_env = os.getenv("AUDIO_FILE_PATH")
+audio_file_list = audio_from_env.split("/") if audio_from_env else []
+audio_file = os.path.join(*audio_file_list)
 batch_size = 4 # reduce if low on GPU mem
-compute_type = "int8"  # change to "float16" for GPU
+compute_type = "int8" if device == "cpu" else "float16"
 
 # 1. Transcribe with original whisper (batched)
 model = whisperx.load_model("large-v2", device, compute_type=compute_type)
@@ -114,7 +115,7 @@ def export_results(result, output_dir="output", filename="transcript"):
     print(f"   ✓ {filename}.vtt (web video subtitles)")
     print(f"   ✓ {filename}.txt (plain text)")
     print(f"   ✓ {filename}.csv (timestamps + text)")
- 
+
 def format_timestamp(seconds):
     """Convert seconds to SRT timestamp format"""
     hours = int(seconds // 3600)
@@ -131,4 +132,5 @@ def format_timestamp_vtt(seconds):
     millis = int((seconds % 1) * 1000)
     return f"{hours:02d}:{minutes:02d}:{secs:02d}.{millis:03d}"
 
-export_results(result, output_dir="output", filename="transcript")
+output = os.getenv("OUTPUT_DIR", "output")
+export_results(result, output_dir=output, filename="transcript")
