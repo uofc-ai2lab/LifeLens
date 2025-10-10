@@ -1,0 +1,104 @@
+{
+  "segments": [
+    {
+      "start": 0.0,
+      "end": 17.0,
+      "text": "Dispatch, this is Unit 27, en route to Foothills ER with a trauma patient, male, approximately thirty-two years old. High-speed head-on collision with a transport truck. Found restrained in driver’s seat, airbags deployed."
+    },
+    {
+      "start": 17.0,
+      "end": 30.0,
+      "text": "Patient semi-conscious, GCS ten, responds to painful stimuli only. Airway patent but gurgling respirations noted — suctioning performed on scene."
+    },
+    {
+      "start": 30.0,
+      "end": 45.0,
+      "text": "Cervical collar applied, full spinal precautions maintained. Oxygen via non-rebreather mask at fifteen liters per minute. Initial SpO₂ eighty-nine, now ninety-four."
+    },
+    {
+      "start": 45.0,
+      "end": 62.0,
+      "text": "Blood pressure eighty-eight over fifty-six, heart rate one-thirty-two, respirations twenty-six, skin pale and diaphoretic. Abdomen firm, distended — possible internal bleeding."
+    },
+    {
+      "start": 62.0,
+      "end": 78.0,
+      "text": "Two large-bore IVs established — sixteen gauge left antecubital, eighteen gauge right hand. Administered five hundred milliliters normal saline bolus, fluids running wide open."
+    },
+    {
+      "start": 78.0,
+      "end": 92.0,
+      "text": "Minor scalp wound and superficial laceration to right forearm. Bleeding controlled with direct pressure and dressing."
+    },
+    {
+      "start": 92.0,
+      "end": 108.0,
+      "text": "Chest assessment — equal breath sounds, slightly diminished on left. No tracheal deviation or JVD. Possible pulmonary contusion."
+    },
+    {
+      "start": 108.0,
+      "end": 125.0,
+      "text": "Pelvis unstable on compression, applied pelvic binder. No movement in lower limbs, possible spinal involvement."
+    },
+    {
+      "start": 125.0,
+      "end": 145.0,
+      "text": "Two milligrams morphine given slow IV push for pain, no adverse reaction observed. Patient drifting in and out of consciousness, GCS now eight."
+    },
+    {
+      "start": 145.0,
+      "end": 165.0,
+      "text": "Preparing for rapid transport. Current vitals: heart rate one-twenty-eight, blood pressure eighty-four over fifty-two, SpO₂ ninety-three on oxygen, respirations twenty-four. ETA nine minutes."
+    },
+    {
+      "start": 165.0,
+      "end": 195.0,
+      "text": "Foothills ER, this is Unit 27 inbound with one critical trauma. Thirty-two-year-old male, high-speed MVC, hypotensive, possible internal bleed and pelvic fracture. Two IVs established, fluids running, morphine administered, airway maintained. ETA nine minutes."
+    },
+    {
+      "start": 195.0,
+      "end": 208.0,
+      "text": "Copy that, continue fluids, monitor airway, notify if vitals deteriorate."
+    },
+    {
+      "start": 208.0,
+      "end": 225.0,
+      "text": "Blood pressure dropping — now seventy-eight over fifty, heart rate one-thirty-six. Switching to pressure infusion. Preparing for airway intervention if needed."
+    },
+    {
+      "start": 225.0,
+      "end": 242.0,
+      "text": "Patient cyanotic, SpO₂ eighty-eight. Beginning assisted ventilations with BVM. Suctioning again — significant blood in oropharynx."
+    },
+    {
+      "start": 242.0,
+      "end": 260.0,
+      "text": "Airway adjunct inserted, oropharyngeal airway in place. Continuing bag-valve-mask ventilations. Chest rise present but shallow. Pressure improving slightly — eighty-two over fifty-four."
+    },
+    {
+      "start": 260.0,
+      "end": 275.0,
+      "text": "Maintain airway support. We’re five minutes out. Notify trauma bay — probable massive transfusion required."
+    },
+    {
+      "start": 275.0,
+      "end": 292.0,
+      "text": "Monitoring en route. Abdomen remains rigid, no new external bleeding. IV fluids wide open."
+    },
+    {
+      "start": 292.0,
+      "end": 325.0,
+      "text": "Final report: thirty-two-year-old male, polytrauma. Suspected internal hemorrhage, pelvic instability, possible spinal injury. Airway supported with OPA and BVM. Received five hundred milliliters normal saline and two milligrams morphine IV. Current vitals — BP eighty-two over fifty-four, HR one-thirty, assisted respirations at eighteen per minute, SpO₂ ninety-one. ETA two minutes."
+    },
+    {
+      "start": 325.0,
+      "end": 335.0,
+      "text": "Copy that, Foothills ER ready for immediate handoff."
+    },
+    {
+      "start": 335.0,
+      "end": 345.0,
+      "text": "Roger, arriving now."
+    }
+  ]
+}
