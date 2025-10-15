@@ -7,4 +7,4 @@ tqdm>=4.65.0
 huggingface-hub>=0.16.0
 sentencepiece>=0.1.99
 openai-whisper>=20230314
-dotenv>=17.2.3
+dotenv>=1.1.1

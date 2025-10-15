@@ -13,7 +13,7 @@ source venv311/bin/activate
 ## 2. Upgrade pip
 
 ```sh
-pip install --upgrade pip
+python.exe -m pip install --upgrade pip
 ```
 
 ## 3. Install Dependencies
@@ -36,7 +36,7 @@ You may optionally need to download ffmpeg, make sure you install **version 7.1.
 ## 5. Hugging Face Authentication and .ENV Setup
 
 1. Register at [Hugging Face](https://huggingface.co).
-2. Get your access token.
+2. Get your access token with READ permissions.
 3. Create `.env` file in this folder holding the hugging face token and the rest of the variables found in the `sample.env`:
 
     ```.env

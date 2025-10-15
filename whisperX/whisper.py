@@ -5,13 +5,19 @@ import json
 import pandas as pd
 from datetime import datetime
 
+dotenv.load_dotenv()  # take environment variables
+
 device = os.getenv("DEVICE", "cpu")
 audio_from_env = os.getenv("AUDIO_FILE_PATH")
 audio_file_list = audio_from_env.split("/") if audio_from_env else []
+print(f"Audio file path from env: {audio_file_list} from {audio_from_env}")
 audio_file = os.path.join(*audio_file_list)
 batch_size = 4 # reduce if low on GPU mem
 compute_type = "int8" if device == "cpu" else "float16"
 
+print(
+    f"Using device {device} with compute type {compute_type} for whisperX.\n\nTranscribing {audio_file}...\n"
+)
 # 1. Transcribe with original whisper (batched)
 model = whisperx.load_model("large-v2", device, compute_type=compute_type)
 
@@ -31,6 +37,7 @@ gc.collect()
 torch.cuda.empty_cache()
 del model
 
+print("\nAligning with whisperX...\n")
 # 2. Align whisper output
 model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=device)
 result = whisperx.align(result["segments"], model_a, metadata, audio, device, return_char_alignments=False)
@@ -45,7 +52,7 @@ gc.collect()
 torch.cuda.empty_cache()
 del model_a
 
-dotenv.load_dotenv()
+print("\nDiarizing with whisperX...\n")
 HUGGING_FACE_TOKEN = os.getenv("HUGGING_FACE_TOKEN")
 # 3. Assign speaker labels
 diarize_model = whisperx.diarize.DiarizationPipeline(use_auth_token=HUGGING_FACE_TOKEN, device=device)
@@ -59,6 +66,7 @@ print(diarize_segments)
 print(result["segments"]) # segments are now assigned speaker IDs
 
 
+print("\nFinished diarization, exporting results...\n")
 # 4. Export results
 
 def export_results(result, output_dir="output", filename="transcript"):
@@ -109,7 +117,7 @@ def export_results(result, output_dir="output", filename="transcript"):
         })
     pd.DataFrame(df_data).to_csv(csv_path, index=False)
 
-    print(f"\n💾 Results exported to '{output_dir}/' directory:")
+    print(f"\nResults exported to '{output_dir}/' directory:")
     print(f"   ✓ {filename}.json (full structured data)")
     print(f"   ✓ {filename}.srt (subtitles)")
     print(f"   ✓ {filename}.vtt (web video subtitles)")
