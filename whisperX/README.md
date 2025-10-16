@@ -47,6 +47,14 @@ AUDIO_FILE_PATH=
 OUTPUT_DIR=./output
     ```
 
+## 6. Running whisper.py to Transcribe Audio on Base WhisperX Model
+Run the whisper.py file found in `whisperX`:
+```sh
+    python whisper.py
+```
+
+# OR 
+
 ## 6. Fine-Tuning WhisperX
 
 - Prepare your dataset (see [WhisperX docs](https://github.com/m-bain/whisperx#fine-tuning)).

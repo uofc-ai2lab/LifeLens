@@ -67,7 +67,6 @@ diarize_model = whisperx.diarize.DiarizationPipeline(use_auth_token=HUGGING_FACE
 
 # add min/max number of speakers if known
 diarize_segments = diarize_model(audio)
-diarize_model(audio)
 
 result = whisperx.assign_word_speakers(diarize_segments, result)
 print(diarize_segments)
