@@ -18,6 +18,9 @@ compute_type = "int8" if device == "cpu" else "float16"
 print(
     f"Using device {device} with compute type {compute_type} for whisperX.\n\nTranscribing {audio_file}...\n"
 )
+
+# track time taken in total for loading transcription, alignment, diarization and exporting and total time
+transcribe_start_time = datetime.now()
 # 1. Transcribe with original whisper (batched)
 model = whisperx.load_model("large-v2", device, compute_type=compute_type)
 
@@ -37,6 +40,7 @@ gc.collect()
 torch.cuda.empty_cache()
 del model
 
+transcribe_end_time = datetime.now()
 print("\nAligning with whisperX...\n")
 # 2. Align whisper output
 model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=device)
@@ -52,9 +56,13 @@ gc.collect()
 torch.cuda.empty_cache()
 del model_a
 
+align_end_time = datetime.now()
 print("\nDiarizing with whisperX...\n")
 HUGGING_FACE_TOKEN = os.getenv("HUGGING_FACE_TOKEN")
 # 3. Assign speaker labels
+# diarization can be slow since we have to use the CPU, and the model is online on huggingface
+# local model can be cached first, requires more disk space
+# local model needs to be downloaded from https://huggingface.co/pyannote/speaker-diarization
 diarize_model = whisperx.diarize.DiarizationPipeline(use_auth_token=HUGGING_FACE_TOKEN, device=device)
 
 # add min/max number of speakers if known
@@ -65,7 +73,7 @@ result = whisperx.assign_word_speakers(diarize_segments, result)
 print(diarize_segments)
 print(result["segments"]) # segments are now assigned speaker IDs
 
-
+diarize_end_time = datetime.now()
 print("\nFinished diarization, exporting results...\n")
 # 4. Export results
 
@@ -142,3 +150,17 @@ def format_timestamp_vtt(seconds):
 
 output = os.getenv("OUTPUT_DIR", "output")
 export_results(result, output_dir=output, filename="transcript")
+export_end_time = datetime.now()
+
+time_for_transcription = transcribe_end_time - transcribe_start_time
+time_for_alignment = align_end_time - transcribe_end_time
+time_for_diarization = diarize_end_time - align_end_time
+time_for_export = export_end_time - diarize_end_time
+time_total = export_end_time - transcribe_start_time
+
+# print time taken mm:ss format
+print(f"Time taken: {time_total.seconds // 60} minutes and {time_total.seconds % 60} seconds")
+print(f" - Transcription time: {time_for_transcription.seconds // 60} minutes and {time_for_transcription.seconds % 60} seconds")
+print(f" - Alignment time: {time_for_alignment.seconds // 60} minutes and {time_for_alignment.seconds % 60} seconds")
+print(f" - Diarization time: {time_for_diarization.seconds // 60} minutes and {time_for_diarization.seconds % 60} seconds")
+print(f" - Export time: {time_for_export.seconds // 60} minutes and {time_for_export.seconds % 60} seconds")

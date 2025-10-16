@@ -19,7 +19,6 @@ python.exe -m pip install --upgrade pip
 ## 3. Install Dependencies
 
 ```sh
-pip install torch torchvision torchaudio
 pip install -r requirements.txt
 pip install whisperX
 ```

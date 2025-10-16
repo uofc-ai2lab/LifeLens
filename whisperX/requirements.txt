@@ -1,10 +1,11 @@
-torch>=2.0.0
-torchaudio>=2.0.0
+torch==2.8.0
+torchvision==0.23.0
+torchaudio==2.8.0
 transformers>=4.30.0
-numpy>=1.23.0
+numpy>=1.23.0,<2.0
 soundfile>=0.12.1
 tqdm>=4.65.0
 huggingface-hub>=0.16.0
 sentencepiece>=0.1.99
 openai-whisper>=20230314
-dotenv>=1.1.1
+python-dotenv>=1.0.0
