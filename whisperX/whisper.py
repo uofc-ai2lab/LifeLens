@@ -4,6 +4,14 @@ import dotenv
 import json
 import pandas as pd
 from datetime import datetime
+from rapidfuzz import process, fuzz
+import jellyfish, re, pandas as pd
+import spacy
+
+from sentence_transformers import SentenceTransformer, util
+model = SentenceTransformer("all-MiniLM-L6-v2") 
+
+nlp = spacy.load("en_core_sci_sm")
 
 dotenv.load_dotenv()  # take environment variables
 
@@ -70,83 +78,81 @@ diarize_segments = diarize_model(audio)
 diarize_model(audio)
 
 result = whisperx.assign_word_speakers(diarize_segments, result)
+
 print(diarize_segments)
 print(result["segments"]) # segments are now assigned speaker IDs
 
 diarize_end_time = datetime.now()
+
 print("\nFinished diarization, exporting results...\n")
+
+
 # 4. Export results
+# These are random words for testing. we won't do a key search going fwd anyways so no need for anything bigger 
+KEYWORDS = ["shot", "compression", "blood"]
 
-def export_results(result, output_dir="output", filename="transcript"):
-    """Export results in multiple formats"""
+
+def normalize(text):
+    text = text.lower()
+    text = re.sub(r"[^a-z0-9\s]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+def phonetic_matches(phrase, words):
+    pm = jellyfish.metaphone(phrase)
+    return [w for w in words if jellyfish.metaphone(w) == pm]
+
+def export_results(result, output_dir="output", filename="filtered", fuzzy_thresh=80):
     os.makedirs(output_dir, exist_ok=True)
-
-    json_path = f"{output_dir}/{filename}.json"
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(result, f, indent=2, ensure_ascii=False)
-
-    srt_path = f"{output_dir}/{filename}.srt"
-    with open(srt_path, "w", encoding="utf-8") as f:
-        for i, seg in enumerate(result["segments"], 1):
-            start = format_timestamp(seg["start"])
-            end = format_timestamp(seg["end"])
-            f.write(f"{i}\n{start} --> {end}\n{seg['text'].strip()}\n\n")
-
-    vtt_path = f"{output_dir}/{filename}.vtt"
-    with open(vtt_path, "w", encoding="utf-8") as f:
-        f.write("WEBVTT\n\n")
-        for i, seg in enumerate(result["segments"], 1):
-            start = format_timestamp_vtt(seg["start"])
-            end = format_timestamp_vtt(seg["end"])
-            f.write(f"{start} --> {end}\n{seg['text'].strip()}\n\n")
-
-    txt_path = f"{output_dir}/{filename}.txt"
-    with open(txt_path, "w", encoding="utf-8") as f:
-        for seg in result["segments"]:
-            f.write(f"{seg['text'].strip()}\n")
-
-    csv_path = f"{output_dir}/{filename}.csv"
     df_data = []
 
-    # get length of audio
-    AUDIO_LENGTH = result["segments"][-1]["end"]
-    BASE_TIMESTAMP: float = datetime.now().timestamp() - AUDIO_LENGTH # set to current time - length of audio
-    for seg in result["segments"]:
-        # convert start and end to realtime format
-        # start is base + seg start
-        start_time = datetime.fromtimestamp((BASE_TIMESTAMP + seg["start"]))
-        # end is base + seg end
-        end_time = datetime.fromtimestamp((BASE_TIMESTAMP + seg["end"]))
+    for seg in result["segments"]:  # make sure it's .segments
+        text = normalize(seg["text"])
+        tokens = text.split()
+        matched = False  # track if anything matched
+        reason = ""
 
-        df_data.append({
-            "start": start_time,
-            "end": end_time,
-            "text": seg["text"].strip()
-        })
-    pd.DataFrame(df_data).to_csv(csv_path, index=False)
+        # 1. keyword / fuzzy / phonetic
+        for n in range(1, min(3, len(tokens)) + 1):
+            for i in range(len(tokens) - n + 1):
+                ng = " ".join(tokens[i:i+n])
 
-    print(f"\nResults exported to '{output_dir}/' directory:")
-    print(f"   ✓ {filename}.json (full structured data)")
-    print(f"   ✓ {filename}.srt (subtitles)")
-    print(f"   ✓ {filename}.vtt (web video subtitles)")
-    print(f"   ✓ {filename}.txt (plain text)")
-    print(f"   ✓ {filename}.csv (timestamps + text)")
+                if ng in KEYWORDS:
+                    matched = True
+                    reason = f"exact match: {ng}"
+                match = process.extractOne(ng, KEYWORDS, scorer=fuzz.token_sort_ratio)
+                if match and match[1] >= fuzzy_thresh:
+                    matched = True
+                    reason = f"fuzzy match: {match[0]}"
+                ph = phonetic_matches(ng, KEYWORDS)
+                if ph:
+                    matched = True
+                    reason = f"phonetic match: {ph[0]}"
 
-def format_timestamp(seconds):
-    """Convert seconds to SRT timestamp format"""
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-    millis = int((seconds % 1) * 1000)
-    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+        # NLP entities --> need to replace with llm its not doing much smh
+        doc = nlp(seg["text"])
+        for ent in doc.ents:
+            if ent.label_ in ["DISEASE", "CHEMICAL", "PROCEDURE"]:
+                matched = True
+                reason = f"nlp entity: {ent.text}"
+                break
 
-def format_timestamp_vtt(seconds):
-    """Convert seconds to VTT timestamp format"""
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-    millis = int((seconds % 1) * 1000)
-    return f"{hours:02d}:{minutes:02d}:{secs:02d}.{millis:03d}"
+        # Only save if matched
+        if matched:
+            df_data.append({
+                "start": seg["start"],
+                "end": seg["end"],
+                "phrase": seg["text"].strip(),
+                "reason": reason
+            })
+
+    if not df_data:
+        print("No important segments found.")
+        return
+
+    pd.DataFrame(df_data).to_csv(f"{output_dir}/{filename}.csv", index=False)
+    print(f" Exported filtered matches to {output_dir}/{filename}.csv")
+
 
 output = os.getenv("OUTPUT_DIR", "output")
 export_results(result, output_dir=output, filename="transcript")
