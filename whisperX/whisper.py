@@ -5,6 +5,18 @@ import json
 import pandas as pd
 from datetime import datetime
 
+# class for printing in colour to terminal
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
 dotenv.load_dotenv()  # take environment variables
 
 device = os.getenv("DEVICE", "cpu")
@@ -15,9 +27,11 @@ audio_file = os.path.join(*audio_file_list)
 batch_size = 4 # reduce if low on GPU mem
 compute_type = "int8" if device == "cpu" else "float16"
 
-print(
-    f"Using device {device} with compute type {compute_type} for whisperX.\n\nTranscribing {audio_file}...\n"
+print(bcolors.HEADER +
+    f"Using device {device} with compute type {compute_type} for whisperX.\n\n" + bcolors.ENDC
 )
+
+print(bcolors.OKGREEN + f"Transcribing {audio_file}...\n" + bcolors.ENDC)
 
 # track time taken in total for loading transcription, alignment, diarization and exporting and total time
 transcribe_start_time = datetime.now()
@@ -41,7 +55,8 @@ torch.cuda.empty_cache()
 del model
 
 transcribe_end_time = datetime.now()
-print("\nAligning with whisperX...\n")
+print(bcolors.OKGREEN + f"Transcription completed, took {transcribe_end_time - transcribe_start_time}.\n" + bcolors.ENDC)
+print(bcolors.OKGREEN + "\nAligning with whisperX...\n" + bcolors.ENDC)
 # 2. Align whisper output
 model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=device)
 result = whisperx.align(result["segments"], model_a, metadata, audio, device, return_char_alignments=False)
@@ -57,7 +72,8 @@ torch.cuda.empty_cache()
 del model_a
 
 align_end_time = datetime.now()
-print("\nDiarizing with whisperX...\n")
+print(bcolors.OKGREEN + f"Alignment completed, took {align_end_time - transcribe_end_time}.\n" + bcolors.ENDC)
+print(bcolors.OKGREEN + "\nDiarizing with whisperX...\n" + bcolors.ENDC)
 HUGGING_FACE_TOKEN = os.getenv("HUGGING_FACE_TOKEN")
 # 3. Assign speaker labels
 # diarization can be slow since we have to use the CPU, and the model is online on huggingface
@@ -73,7 +89,7 @@ result = whisperx.assign_word_speakers(diarize_segments, result)
 # print(result["segments"]) # segments are now assigned speaker IDs
 
 diarize_end_time = datetime.now()
-print("\nFinished diarization, exporting results...\n")
+print(bcolors.OKGREEN + "\nFinished diarization, exporting results...\n" + bcolors.ENDC)
 # 4. Export results
 
 def export_results(result, output_dir="output", filename="transcript"):
@@ -124,12 +140,12 @@ def export_results(result, output_dir="output", filename="transcript"):
         })
     pd.DataFrame(df_data).to_csv(csv_path, index=False)
 
-    print(f"\nResults exported to '{output_dir}/' directory:")
-    print(f"   ✓ {filename}.json (full structured data)")
-    print(f"   ✓ {filename}.srt (subtitles)")
-    print(f"   ✓ {filename}.vtt (web video subtitles)")
-    print(f"   ✓ {filename}.txt (plain text)")
-    print(f"   ✓ {filename}.csv (timestamps + text)")
+    print(bcolors.OKCYAN + f"\nResults exported to '{output_dir}/' directory:" + bcolors.ENDC)
+    print(bcolors.OKGREEN + f"   ✓ {filename}.json (full structured data)" + bcolors.ENDC)
+    print(bcolors.OKGREEN + f"   ✓ {filename}.srt (subtitles)" + bcolors.ENDC)
+    print(bcolors.OKGREEN + f"   ✓ {filename}.vtt (web video subtitles)" + bcolors.ENDC)
+    print(bcolors.OKGREEN + f"   ✓ {filename}.txt (plain text)" + bcolors.ENDC)
+    print(bcolors.OKGREEN + f"   ✓ {filename}.csv (timestamps + text)" + bcolors.ENDC)
 
 def format_timestamp(seconds):
     """Convert seconds to SRT timestamp format"""
@@ -158,8 +174,8 @@ time_for_export = export_end_time - diarize_end_time
 time_total = export_end_time - transcribe_start_time
 
 # print time taken mm:ss format
-print(f"Time taken: {time_total.seconds // 60} minutes and {time_total.seconds % 60} seconds")
-print(f" - Transcription time: {time_for_transcription.seconds // 60} minutes and {time_for_transcription.seconds % 60} seconds")
-print(f" - Alignment time: {time_for_alignment.seconds // 60} minutes and {time_for_alignment.seconds % 60} seconds")
-print(f" - Diarization time: {time_for_diarization.seconds // 60} minutes and {time_for_diarization.seconds % 60} seconds")
-print(f" - Export time: {time_for_export.seconds // 60} minutes and {time_for_export.seconds % 60} seconds")
+print(bcolors.OKBLUE + f"\n\nTime taken: {time_total.seconds // 60} minutes and {time_total.seconds % 60} seconds" + bcolors.ENDC)
+print(bcolors.OKBLUE + f" - Transcription time: {time_for_transcription.seconds // 60} minutes and {time_for_transcription.seconds % 60} seconds" + bcolors.ENDC)
+print(bcolors.OKBLUE + f" - Alignment time: {time_for_alignment.seconds // 60} minutes and {time_for_alignment.seconds % 60} seconds" + bcolors.ENDC)
+print(bcolors.OKBLUE + f" - Diarization time: {time_for_diarization.seconds // 60} minutes and {time_for_diarization.seconds % 60} seconds" + bcolors.ENDC)
+print(bcolors.OKBLUE + f" - Export time: {time_for_export.seconds // 60} minutes and {time_for_export.seconds % 60} seconds" + bcolors.ENDC)
