@@ -123,16 +123,11 @@ def export_results(result, output_dir="output", filename="transcript"):
     csv_path = f"{output_dir}/{filename}.csv"
     df_data = []
 
-    # get length of audio
-    AUDIO_LENGTH = result["segments"][-1]["end"]
-    BASE_TIMESTAMP: float = datetime.now().timestamp() - AUDIO_LENGTH # set to current time - length of audio
+    # Export start/end as seconds relative to start of the audio (no absolute anchoring).
+    # Use 3 decimal places for milliseconds precision.
     for seg in result["segments"]:
-        # convert start and end to realtime format
-        # start is base + seg start
-        start_time = datetime.fromtimestamp((BASE_TIMESTAMP + seg["start"]))
-        # end is base + seg end
-        end_time = datetime.fromtimestamp((BASE_TIMESTAMP + seg["end"]))
-
+        start_time = format_timestamp_vtt(seg["start"])
+        end_time = format_timestamp_vtt(seg["end"])
         df_data.append({
             "start": start_time,
             "end": end_time,
