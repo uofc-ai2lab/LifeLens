@@ -1,39 +1,40 @@
 import os
 import autogen
 from dotenv import load_dotenv
-
 load_dotenv()
 
 # option 1: transcript to meaning
 # option 2: deidentify data - then send to saba
 
-api_key = os.getenv("OPENAI_API_KEY") # 'model: 'gpt-3.5-turbo
-if not api_key:
-    raise ValueError("OPENAI_API_KEY not set in environment variables!")
+# ----------------------------
+# LLM Configuration (DeepSeek)
+# ----------------------------
 
 CONFIG_LIST = [
     {
-        "model": "gpt-3.5-turbo", # for openai: gpt-3.5-turbo
-        "base_url": "https://api.openai.com/v1", # for openai: https://api.openai.com/v1
-        "api_key": api_key 
+        "model": "deepseek-r1-distill-llama-8b",  # local DeepSeek model
+        "base_url": "http://localhost:1234/v1",   # DeepSeek server endpoint
+        "api_key": None                            # local model does not require a key
     },
 ]
 
-LLM_CONFIG={
-    "timeout": 600,     # kills request after certain amount of time
-    "seed": 42,                 # for caching
+LLM_CONFIG = {
+    "timeout": 600,            # kills request after certain amount of time
+    "seed": 42,                # for caching / deterministic results
     "config_list": CONFIG_LIST,
-    "temperature": 0.1           # higher temperature = more creative responses 
+    "temperature": 0.1         # low = deterministic, higher = more creative
 }
 
-LLM_CONFIG_HIGH={
-    "timeout": 600,     # kills request after certain amount of time
-    "seed": 42,                 # for caching
+LLM_CONFIG_HIGH = {
+    "timeout": 600,
+    "seed": 42,
     "config_list": CONFIG_LIST,
-    "temperature": 10           # higher temperature = more creative responses 
+    "temperature": 1.0         # more creative responses
 }
 
-
+# ----------------------------
+# User Proxy Configuration
+# ----------------------------
 USER_PROXY_CONFIG = {
     "name": "user_proxy",
     "system_message": 
@@ -43,12 +44,10 @@ USER_PROXY_CONFIG = {
             2. Monitor the conversation and identify when the final output is ready
             3. Extract the JSON output for each table and save it to separate files
             4. Terminate the conversation when all outputs have been saved
-            5. Agents order should always be 
     """,
-    "code_execution_config":{"work_dir": "output"},
-    "human_input_mode": "NEVER", #whether to ask for human input severy time a message is received ALWAYS=every step, TERMINATE=when task is completed, asks for feedback
+    "code_execution_config": {"work_dir": "output"},
+    "human_input_mode": "NEVER",               # NEVER=automatic, ALWAYS=ask every step
     "max_consecutive_auto_reply": 10,
-    "llm_config":LLM_CONFIG,
-    "is_termination_msg":lambda x: x.get("content", "").rstrip().endswith("TERMINATE") # keyword that ends task
+    "llm_config": LLM_CONFIG,
+    "is_termination_msg": lambda x: x.get("content", "").rstrip().endswith("TERMINATE")
 }
-# user proxy -> acts on behalf of the user, can do things automatically like executing code and responding to the assistant agent, etc.
