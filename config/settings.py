@@ -1,35 +1,37 @@
 import os
-import autogen
 from dotenv import load_dotenv
 load_dotenv()
+import google.generativeai as genai
+import autogen
 
-# option 1: transcript to meaning
-# option 2: deidentify data - then send to saba
+# No need to pass the key, it is loaded from the environment variable
+# genai.configure()
+api_key = os.getenv("GOOGLE_API_KEY")
 
+if not api_key:
+    print("Error: GOOGLE_API_KEY or GEMINI_API_KEY not found in environment variables.")
+    
 # ----------------------------
-# LLM Configuration (DeepSeek)
+# LLM Configuration (Google Gemini)
 # ----------------------------
 
+# Autogen needs the config to be in a specific format to work with Gemini
+# Note: As of AutoGen 0.2, Gemini doesn't use a 'system_message' field.
+# The system instruction will be added to the initial user message instead.
+# `api_type` should be 'google', and the API key can be set as an environment variable
+# named `GOOGLE_GEMINI_API_KEY` or passed directly via `api_key`.
 CONFIG_LIST = [
     {
-        "model": "deepseek-r1-distill-llama-8b",  # local DeepSeek model
-        "base_url": "http://localhost:1234/v1",   # DeepSeek server endpoint
-        "api_key": None                            # local model does not require a key
+        "model": "models/gemini-2.5-flash",
+        "api_type": "google",
+        "api_key":api_key
     },
 ]
 
 LLM_CONFIG = {
-    "timeout": 600,            # kills request after certain amount of time
-    "seed": 42,                # for caching / deterministic results
     "config_list": CONFIG_LIST,
-    "temperature": 0.1         # low = deterministic, higher = more creative
-}
-
-LLM_CONFIG_HIGH = {
-    "timeout": 600,
-    "seed": 42,
-    "config_list": CONFIG_LIST,
-    "temperature": 1.0         # more creative responses
+    "temperature": 0.5,
+    "cache_seed": None, # or a number for caching
 }
 
 # ----------------------------

@@ -1,0 +1,885 @@
+```json
+[
+  {
+    "timestamp": "00:00:00",
+    "event_type": "communication",
+    "description": "Initial report to dispatch regarding a trauma patient, including demographics and mechanism of injury.",
+    "data": {
+      "unit": "Unit 27",
+      "destination": "Foothills ER",
+      "patient_age": 32,
+      "patient_sex": "male",
+      "mechanism_of_injury": "high-speed head-on collision with a transport truck",
+      "patient_status_at_scene": "restrained in driver’s seat, airbags deployed"
+    }
+  },
+  {
+    "timestamp": "00:00:17",
+    "event_type": "assessment",
+    "description": "Initial neurological and airway assessment, with intervention for gurgling respirations.",
+    "data": {
+      "consciousness_level": "semi-conscious",
+      "gcs": 10,
+      "response_to_stimuli": "painful stimuli only",
+      "airway_status": "patent",
+      "respirations_quality": "gurgling",
+      "intervention": {
+        "type": "suctioning",
+        "location": "on scene"
+      }
+    }
+  },
+  {
+    "timestamp": "00:00:30",
+    "event_type": "intervention",
+    "description": "Spinal precautions initiated, oxygen administered, and initial oxygen saturation recorded with improvement.",
+    "data": {
+      "intervention": [
+        {
+          "type": "cervical collar application"
+        },
+        {
+          "type": "spinal precautions",
+          "status": "maintained"
+        },
+        {
+          "type": "oxygen administration",
+          "device": "non-rebreather mask",
+          "flow_rate": "15 L/min"
+        }
+      ],
+      "oxygen_saturation": [
+        {
+          "spo2": 89,
+          "status": "initial"
+        },
+        {
+          "spo2": 94,
+          "status": "current"
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "00:00:45",
+    "event_type": "vitals",
+    "description": "Initial vital signs recorded, and abdominal assessment indicates possible internal bleeding.",
+    "data": {
+      "blood_pressure": {
+        "systolic": 88,
+        "diastolic": 56
+      },
+      "heart_rate": 132,
+      "respiratory_rate": 26,
+      "skin_condition": "pale and diaphoretic",
+      "abdomen_assessment": {
+        "firmness": "firm",
+        "distention": "distended"
+      },
+      "suspected_condition": "internal bleeding"
+    }
+  },
+  {
+    "timestamp": "00:01:02",
+    "event_type": "medication",
+    "description": "Two large-bore IVs established and a normal saline bolus administered.",
+    "data": {
+      "intervention": [
+        {
+          "type": "IV access",
+          "site": "left antecubital",
+          "gauge": 16
+        },
+        {
+          "type": "IV access",
+          "site": "right hand",
+          "gauge": 18
+        }
+      ],
+      "medication_details": {
+        "name": "normal saline",
+        "dosage": "500 mL",
+        "route": "IV bolus",
+        "infusion_rate": "wide open"
+      }
+    }
+  },
+  {
+    "timestamp": "00:01:18",
+    "event_type": "assessment",
+    "description": "Assessment of external injuries and control of bleeding.",
+    "data": {
+      "injuries": [
+        {
+          "type": "scalp wound",
+          "severity": "minor"
+        },
+        {
+          "type": "laceration",
+          "location": "right forearm",
+          "severity": "superficial"
+        }
+      ],
+      "intervention": [
+        {
+          "type": "bleeding control",
+          "method": "direct pressure"
+        },
+        {
+          "type": "dressing application"
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "00:01:32",
+    "event_type": "assessment",
+    "description": "Chest assessment findings, indicating possible pulmonary contusion.",
+    "data": {
+      "chest_assessment": {
+        "breath_sounds": "equal, slightly diminished on left",
+        "tracheal_deviation": "absent",
+        "jvd": "absent"
+      },
+      "suspected_condition": "pulmonary contusion"
+    }
+  },
+  {
+    "timestamp": "00:01:35.453",
+    "event_type": "assessment",
+    "description": "Assessment of gag reflex.",
+    "data": {
+      "gag_reflex": "absent"
+    }
+  },
+  {
+    "timestamp": "00:01:48",
+    "event_type": "intervention",
+    "description": "Pelvic assessment reveals instability, leading to pelvic binder application; neurological findings suggest spinal involvement.",
+    "data": {
+      "pelvic_assessment": "unstable on compression",
+      "intervention": {
+        "type": "pelvic binder application"
+      },
+      "neurological_assessment": "no movement in lower limbs",
+      "suspected_condition": "spinal involvement"
+    }
+  },
+  {
+    "timestamp": "00:01:57.346",
+    "event_type": "preparation",
+    "description": "Checking readiness of defibrillator (pre-charged status).",
+    "data": {
+      "equipment": "defibrillator",
+      "status_check": "pre-charged"
+    }
+  },
+  {
+    "timestamp": "00:02:05",
+    "event_type": "medication",
+    "description": "Morphine administered for pain, and neurological status deteriorates.",
+    "data": {
+      "medication_details": {
+        "name": "morphine",
+        "dosage": "2 mg",
+        "route": "slow IV push",
+        "reason": "pain",
+        "adverse_reaction": "none observed"
+      },
+      "consciousness_level": "drifting in and out of consciousness",
+      "gcs": 8,
+      "gcs_trend": "deteriorating"
+    }
+  },
+  {
+    "timestamp": "00:02:25",
+    "event_type": "vitals",
+    "description": "Preparation for rapid transport with updated vital signs showing continued hemodynamic instability.",
+    "data": {
+      "transport_status": "preparing for rapid transport",
+      "eta": "9 minutes",
+      "vitals": {
+        "heart_rate": 128,
+        "blood_pressure": {
+          "systolic": 84,
+          "diastolic": 52
+        },
+        "oxygen_saturation": {
+          "spo2": 93,
+          "oxygen_support": "on oxygen"
+        },
+        "respiratory_rate": 24
+      },
+      "vitals_trend": {
+        "blood_pressure": "deteriorating",
+        "heart_rate": "improving slightly",
+        "respiratory_rate": "improving slightly",
+        "oxygen_saturation": "stable/improving"
+      }
+    }
+  },
+  {
+    "timestamp": "00:02:45",
+    "event_type": "communication",
+    "description": "Inbound report to Foothills ER, summarizing critical patient status, injuries, and interventions.",
+    "data": {
+      "unit": "Unit 27",
+      "destination": "Foothills ER",
+      "patient_status": "critical trauma",
+      "patient_age": 32,
+      "patient_sex": "male",
+      "mechanism_of_injury": "high-speed MVC",
+      "patient_condition_summary": {
+        "hemodynamic_status": "hypotensive",
+        "suspected_injuries": [
+          "internal bleed",
+          "pelvic fracture"
+        ],
+        "interventions": [
+          "two IVs established",
+          "fluids running",
+          "morphine administered",
+          "airway maintained"
+        ]
+      },
+      "eta": "9 minutes"
+    }
+  },
+  {
+    "timestamp": "00:03:15",
+    "event_type": "communication",
+    "description": "Foothills ER acknowledges report and provides instructions.",
+    "data": {
+      "sender": "Foothills ER",
+      "instruction": [
+        "continue fluids",
+        "monitor airway",
+        "notify if vitals deteriorate"
+      ]
+    }
+  },
+  {
+    "timestamp": "00:03:28",
+    "event_type": "vitals",
+    "description": "Significant vital sign deterioration, prompting switch to pressure infusion and preparation for airway intervention.",
+    "data": {
+      "vitals": {
+        "blood_pressure": {
+          "systolic": 78,
+          "diastolic": 50
+        },
+        "heart_rate": 136
+      },
+      "vitals_trend": {
+        "blood_pressure": "deteriorating",
+        "heart_rate": "deteriorating"
+      },
+      "intervention": {
+        "type": "pressure infusion",
+        "action": "switching to"
+      },
+      "preparation": "airway intervention if needed",
+      "inferred_condition": "worsening hypovolemic shock"
+    }
+  },
+  {
+    "timestamp": "00:03:45",
+    "event_type": "assessment",
+    "description": "Patient shows signs of hypoxia; assisted ventilations initiated and repeat suctioning performed due to airway compromise.",
+    "data": {
+      "assessment": {
+        "skin_color": "cyanotic"
+      },
+      "vitals": {
+        "oxygen_saturation": {
+          "spo2": 88
+        }
+      },
+      "vitals_trend": {
+        "oxygen_saturation": "deteriorating"
+      },
+      "intervention": [
+        {
+          "type": "assisted ventilations",
+          "device": "BVM"
+        },
+        {
+          "type": "suctioning",
+          "reason": "significant blood in oropharynx"
+        }
+      ],
+      "inferred_condition": "airway compromise, respiratory distress"
+    }
+  },
+  {
+    "timestamp": "00:04:02",
+    "event_type": "intervention",
+    "description": "Oropharyngeal airway inserted, BVM ventilations continued, and slight improvement in blood pressure noted.",
+    "data": {
+      "intervention": [
+        {
+          "type": "airway adjunct insertion",
+          "device": "oropharyngeal airway (OPA)"
+        },
+        {
+          "type": "assisted ventilations",
+          "device": "BVM",
+          "status": "continuing"
+        }
+      ],
+      "assessment": {
+        "chest_rise": "present but shallow"
+      },
+      "vitals": {
+        "blood_pressure": {
+          "systolic": 82,
+          "diastolic": 54
+        }
+      },
+      "vitals_trend": {
+        "blood_pressure": "improving slightly"
+      }
+    }
+  },
+  {
+    "timestamp": "00:04:20",
+    "event_type": "communication",
+    "description": "Instructions for continued airway support, updated ETA, and pre-arrival notification for potential massive transfusion.",
+    "data": {
+      "instruction": "maintain airway support",
+      "eta": "5 minutes",
+      "communication_to_hospital": {
+        "department": "trauma bay",
+        "message": "probable massive transfusion required"
+      },
+      "inferred_intervention_required": "massive transfusion"
+    }
+  },
+  {
+    "timestamp": "00:04:35",
+    "event_type": "assessment",
+    "description": "Ongoing monitoring en route, abdominal rigidity persists, no new external bleeding, IV fluids continue wide open.",
+    "data": {
+      "monitoring_status": "en route",
+      "abdomen_assessment": {
+        "rigidity": "remains rigid"
+      },
+      "bleeding_status": "no new external bleeding",
+      "intervention": {
+        "type": "IV fluids",
+        "infusion_rate": "wide open",
+        "status": "continuing"
+      }
+    }
+  },
+  {
+    "timestamp": "00:04:52",
+    "event_type": "communication",
+    "description": "Final pre-arrival report to ER, summarizing polytrauma status, interventions, and current vitals.",
+    "data": {
+      "report_type": "final pre-arrival report",
+      "patient_age": 32,
+      "patient_sex": "male",
+      "diagnosis_summary": "polytrauma",
+      "suspected_injuries": [
+        "internal hemorrhage",
+        "pelvic instability",
+        "spinal injury"
+      ],
+      "airway_management": {
+        "support_method": "OPA and BVM"
+      },
+      "medications_administered": [
+        {
+          "name": "normal saline",
+          "dosage": "500 mL",
+          "route": "IV"
+        },
+        {
+          "name": "morphine",
+          "dosage": "2 mg",
+          "route": "IV"
+        }
+      ],
+      "vitals": {
+        "blood_pressure": {
+          "systolic": 82,
+          "diastolic": 54
+        },
+        "heart_rate": 130,
+        "respiratory_rate": 18,
+        "respiratory_support": "assisted",
+        "oxygen_saturation": {
+          "spo2": 91
+        }
+      },
+      "vitals_trend": {
+        "blood_pressure": "stable",
+        "heart_rate": "improving slightly",
+        "oxygen_saturation": "improving slightly"
+      },
+      "eta": "2 minutes"
+    }
+  },
+  {
+    "timestamp": "00:05:25",
+    "event_type": "communication",
+    "description": "Foothills ER confirms readiness for immediate patient handoff.",
+    "data": {
+      "sender": "Foothills ER",
+      "message": "ready for immediate handoff"
+    }
+  },
+  {
+    "timestamp": "00:05:35",
+    "event_type": "communication",
+    "description": "Unit 27 confirms arrival at Foothills ER.",
+    "data": {
+      "unit": "Unit 27",
+      "status": "arriving now"
+    }
+  }
+]
+``````json
+[
+  {
+    "timestamp": "00:00:00",
+    "event_type": "communication",
+    "description": "Initial report to dispatch regarding a trauma patient, including demographics and mechanism of injury.",
+    "data": {
+      "unit": "Unit 27",
+      "destination": "Foothills ER",
+      "patient_age": 32,
+      "patient_sex": "male",
+      "mechanism_of_injury": "high-speed head-on collision with a transport truck",
+      "patient_status_at_scene": "restrained in driver’s seat, airbags deployed"
+    }
+  },
+  {
+    "timestamp": "00:00:17",
+    "event_type": "assessment",
+    "description": "Initial neurological and airway assessment, with intervention for gurgling respirations.",
+    "data": {
+      "consciousness_level": "semi-conscious",
+      "gcs": 10,
+      "response_to_stimuli": "painful stimuli only",
+      "airway_status": "patent",
+      "respirations_quality": "gurgling",
+      "intervention": {
+        "type": "suctioning",
+        "location": "on scene"
+      }
+    }
+  },
+  {
+    "timestamp": "00:00:30",
+    "event_type": "intervention",
+    "description": "Spinal precautions initiated, oxygen administered, and initial oxygen saturation recorded with improvement.",
+    "data": {
+      "intervention": [
+        {
+          "type": "cervical collar application"
+        },
+        {
+          "type": "spinal precautions",
+          "status": "maintained"
+        },
+        {
+          "type": "oxygen administration",
+          "device": "non-rebreather mask",
+          "flow_rate": "15 L/min"
+        }
+      ],
+      "oxygen_saturation": [
+        {
+          "spo2": 89,
+          "status": "initial"
+        },
+        {
+          "spo2": 94,
+          "status": "current"
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "00:00:45",
+    "event_type": "vitals",
+    "description": "Initial vital signs recorded, and abdominal assessment indicates possible internal bleeding.",
+    "data": {
+      "blood_pressure": {
+        "systolic": 88,
+        "diastolic": 56
+      },
+      "heart_rate": 132,
+      "respiratory_rate": 26,
+      "skin_condition": "pale and diaphoretic",
+      "abdomen_assessment": {
+        "firmness": "firm",
+        "distention": "distended"
+      },
+      "suspected_condition": "internal bleeding"
+    }
+  },
+  {
+    "timestamp": "00:01:02",
+    "event_type": "medication",
+    "description": "Two large-bore IVs established and a normal saline bolus administered.",
+    "data": {
+      "intervention": [
+        {
+          "type": "IV access",
+          "site": "left antecubital",
+          "gauge": 16
+        },
+        {
+          "type": "IV access",
+          "site": "right hand",
+          "gauge": 18
+        }
+      ],
+      "medication_details": {
+        "name": "normal saline",
+        "dosage": "500 mL",
+        "route": "IV bolus",
+        "infusion_rate": "wide open"
+      }
+    }
+  },
+  {
+    "timestamp": "00:01:18",
+    "event_type": "assessment",
+    "description": "Assessment of external injuries and control of bleeding.",
+    "data": {
+      "injuries": [
+        {
+          "type": "scalp wound",
+          "severity": "minor"
+        },
+        {
+          "type": "laceration",
+          "location": "right forearm",
+          "severity": "superficial"
+        }
+      ],
+      "intervention": [
+        {
+          "type": "bleeding control",
+          "method": "direct pressure"
+        },
+        {
+          "type": "dressing application"
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "00:01:32",
+    "event_type": "assessment",
+    "description": "Chest assessment findings, indicating possible pulmonary contusion.",
+    "data": {
+      "chest_assessment": {
+        "breath_sounds": "equal, slightly diminished on left",
+        "tracheal_deviation": "absent",
+        "jvd": "absent"
+      },
+      "suspected_condition": "pulmonary contusion"
+    }
+  },
+  {
+    "timestamp": "00:01:35.453",
+    "event_type": "assessment",
+    "description": "Assessment of gag reflex.",
+    "data": {
+      "gag_reflex": "absent"
+    }
+  },
+  {
+    "timestamp": "00:01:48",
+    "event_type": "intervention",
+    "description": "Pelvic assessment reveals instability, leading to pelvic binder application; neurological findings suggest spinal involvement.",
+    "data": {
+      "pelvic_assessment": "unstable on compression",
+      "intervention": {
+        "type": "pelvic binder application"
+      },
+      "neurological_assessment": "no movement in lower limbs",
+      "suspected_condition": "spinal involvement"
+    }
+  },
+  {
+    "timestamp": "00:01:57.346",
+    "event_type": "equipment_check",
+    "description": "Inquiry about defibrillator pre-charge status.",
+    "data": {
+      "equipment": "defibrillator",
+      "status_check": "pre-charged"
+    }
+  },
+  {
+    "timestamp": "00:02:05",
+    "event_type": "medication",
+    "description": "Morphine administered for pain, and neurological status deteriorates.",
+    "data": {
+      "medication_details": {
+        "name": "morphine",
+        "dosage": "2 mg",
+        "route": "slow IV push",
+        "reason": "pain",
+        "adverse_reaction": "none observed"
+      },
+      "consciousness_level": "drifting in and out of consciousness",
+      "gcs": 8,
+      "gcs_trend": "deteriorating"
+    }
+  },
+  {
+    "timestamp": "00:02:25",
+    "event_type": "vitals",
+    "description": "Preparation for rapid transport with updated vital signs showing continued hemodynamic instability.",
+    "data": {
+      "transport_status": "preparing for rapid transport",
+      "eta": "9 minutes",
+      "vitals": {
+        "heart_rate": 128,
+        "blood_pressure": {
+          "systolic": 84,
+          "diastolic": 52
+        },
+        "oxygen_saturation": {
+          "spo2": 93,
+          "oxygen_support": "on oxygen"
+        },
+        "respiratory_rate": 24
+      },
+      "vitals_trend": {
+        "blood_pressure": "deteriorating",
+        "heart_rate": "improving slightly",
+        "respiratory_rate": "improving slightly",
+        "oxygen_saturation": "stable/improving"
+      }
+    }
+  },
+  {
+    "timestamp": "00:02:45",
+    "event_type": "communication",
+    "description": "Inbound report to Foothills ER, summarizing critical patient status, injuries, and interventions.",
+    "data": {
+      "unit": "Unit 27",
+      "destination": "Foothills ER",
+      "patient_status": "critical trauma",
+      "patient_age": 32,
+      "patient_sex": "male",
+      "mechanism_of_injury": "high-speed MVC",
+      "patient_condition_summary": {
+        "hemodynamic_status": "hypotensive",
+        "suspected_injuries": [
+          "internal bleed",
+          "pelvic fracture"
+        ],
+        "interventions": [
+          "two IVs established",
+          "fluids running",
+          "morphine administered",
+          "airway maintained"
+        ]
+      },
+      "eta": "9 minutes"
+    }
+  },
+  {
+    "timestamp": "00:03:15",
+    "event_type": "communication",
+    "description": "Foothills ER acknowledges report and provides instructions.",
+    "data": {
+      "sender": "Foothills ER",
+      "instruction": [
+        "continue fluids",
+        "monitor airway",
+        "notify if vitals deteriorate"
+      ]
+    }
+  },
+  {
+    "timestamp": "00:03:28",
+    "event_type": "vitals",
+    "description": "Significant vital sign deterioration, prompting switch to pressure infusion and preparation for airway intervention.",
+    "data": {
+      "vitals": {
+        "blood_pressure": {
+          "systolic": 78,
+          "diastolic": 50
+        },
+        "heart_rate": 136
+      },
+      "vitals_trend": {
+        "blood_pressure": "deteriorating",
+        "heart_rate": "deteriorating"
+      },
+      "intervention": {
+        "type": "pressure infusion",
+        "action": "switching to"
+      },
+      "preparation": "airway intervention if needed",
+      "inferred_condition": "worsening hypovolemic shock"
+    }
+  },
+  {
+    "timestamp": "00:03:45",
+    "event_type": "assessment",
+    "description": "Patient shows signs of hypoxia; assisted ventilations initiated and repeat suctioning performed due to airway compromise.",
+    "data": {
+      "assessment": {
+        "skin_color": "cyanotic"
+      },
+      "vitals": {
+        "oxygen_saturation": {
+          "spo2": 88
+        }
+      },
+      "vitals_trend": {
+        "oxygen_saturation": "deteriorating"
+      },
+      "intervention": [
+        {
+          "type": "assisted ventilations",
+          "device": "BVM"
+        },
+        {
+          "type": "suctioning",
+          "reason": "significant blood in oropharynx"
+        }
+      ],
+      "inferred_condition": "airway compromise, respiratory distress"
+    }
+  },
+  {
+    "timestamp": "00:04:02",
+    "event_type": "intervention",
+    "description": "Oropharyngeal airway inserted, BVM ventilations continued, and slight improvement in blood pressure noted.",
+    "data": {
+      "intervention": [
+        {
+          "type": "airway adjunct insertion",
+          "device": "oropharyngeal airway (OPA)"
+        },
+        {
+          "type": "assisted ventilations",
+          "device": "BVM",
+          "status": "continuing"
+        }
+      ],
+      "assessment": {
+        "chest_rise": "present but shallow"
+      },
+      "vitals": {
+        "blood_pressure": {
+          "systolic": 82,
+          "diastolic": 54
+        }
+      },
+      "vitals_trend": {
+        "blood_pressure": "improving slightly"
+      }
+    }
+  },
+  {
+    "timestamp": "00:04:20",
+    "event_type": "communication",
+    "description": "Instructions for continued airway support, updated ETA, and pre-arrival notification for potential massive transfusion.",
+    "data": {
+      "instruction": "maintain airway support",
+      "eta": "5 minutes",
+      "communication_to_hospital": {
+        "department": "trauma bay",
+        "message": "probable massive transfusion required"
+      },
+      "inferred_intervention_required": "massive transfusion"
+    }
+  },
+  {
+    "timestamp": "00:04:35",
+    "event_type": "assessment",
+    "description": "Ongoing monitoring en route, abdominal rigidity persists, no new external bleeding, IV fluids continue wide open.",
+    "data": {
+      "monitoring_status": "en route",
+      "abdomen_assessment": {
+        "rigidity": "remains rigid"
+      },
+      "bleeding_status": "no new external bleeding",
+      "intervention": {
+        "type": "IV fluids",
+        "infusion_rate": "wide open",
+        "status": "continuing"
+      }
+    }
+  },
+  {
+    "timestamp": "00:04:52",
+    "event_type": "communication",
+    "description": "Final pre-arrival report to ER, summarizing polytrauma status, interventions, and current vitals.",
+    "data": {
+      "report_type": "final pre-arrival report",
+      "patient_age": 32,
+      "patient_sex": "male",
+      "diagnosis_summary": "polytrauma",
+      "suspected_injuries": [
+        "internal hemorrhage",
+        "pelvic instability",
+        "spinal injury"
+      ],
+      "airway_management": {
+        "support_method": "OPA and BVM"
+      },
+      "medications_administered": [
+        {
+          "name": "normal saline",
+          "dosage": "500 mL",
+          "route": "IV"
+        },
+        {
+          "name": "morphine",
+          "dosage": "2 mg",
+          "route": "IV"
+        }
+      ],
+      "vitals": {
+        "blood_pressure": {
+          "systolic": 82,
+          "diastolic": 54
+        },
+        "heart_rate": 130,
+        "respiratory_rate": 18,
+        "respiratory_support": "assisted",
+        "oxygen_saturation": {
+          "spo2": 91
+        }
+      },
+      "vitals_trend": {
+        "blood_pressure": "stable",
+        "heart_rate": "improving slightly",
+        "oxygen_saturation": "improving slightly"
+      },
+      "eta": "2 minutes"
+    }
+  },
+  {
+    "timestamp": "00:05:25",
+    "event_type": "communication",
+    "description": "Foothills ER confirms readiness for immediate patient handoff.",
+    "data": {
+      "sender": "Foothills ER",
+      "message": "ready for immediate handoff"
+    }
+  },
+  {
+    "timestamp": "00:05:35",
+    "event_type": "communication",
+    "description": "Unit 27 confirms arrival at Foothills ER.",
+    "data": {
+      "unit": "Unit 27",
+      "status": "arriving now"
+    }
+  }
+]
+```Acknowledged. The medical context from the transcripts has been extracted and saved to `medical_context_transcript1.json` and `medical_context_transcript2.json`.Acknowledged. The medical context has been successfully extracted and saved to the specified files. The task is complete.

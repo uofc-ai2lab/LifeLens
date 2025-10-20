@@ -1,0 +1,29 @@
+{
+    "medical_context": [
+        {
+            "start": 91.627,
+            "end": 94.211,
+            "event": "Instruction: Check connector and electrodes."
+        },
+        {
+            "start": 95.453,
+            "end": 95.894,
+            "event": "Observation: No gag reflex."
+        },
+        {
+            "start": 101.382,
+            "end": 106.39,
+            "event": "Instruction: Check connector and electrodes."
+        },
+        {
+            "start": 109.294,
+            "end": 113.421,
+            "event": "Instruction: Check connector and electrodes."
+        },
+        {
+            "start": 117.346,
+            "end": 120.96,
+            "event": "Question: Pre-charged (referring to medical equipment)?"
+        }
+    ]
+}

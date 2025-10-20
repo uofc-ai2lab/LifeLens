@@ -1,0 +1,7 @@
+google-generativeai
+pydantic
+python-dotenv
+autogen
+autogen-core
+autogen-agentchat
+ag2[gemini]
