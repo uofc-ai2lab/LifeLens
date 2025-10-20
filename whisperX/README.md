@@ -27,6 +27,8 @@ pip install whisperX
 
 You may optionally need to download ffmpeg, make sure you install **version 7.1.2** or **7.1.1**  for [mac]  (https://formulae.brew.sh/formula/ffmpeg#default) (NOTE: requires Homebrew to be installed) or [windows](https://github.com/GyanD/codexffmpeg/releases)
 
+If you're on **Mac** you will have to export to your path once downloaded. Ask @Sabayara82 for any further clarifications.
+
 ## 4. (Optional) Install CUDA for GPU Acceleration
 
 - Make sure you have a compatible NVIDIA GPU and CUDA drivers.
