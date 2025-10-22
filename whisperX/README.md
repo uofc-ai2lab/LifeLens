@@ -38,7 +38,7 @@ If you're on **Mac** you will have to export to your path once downloaded. Ask @
 
 1. Register at [Hugging Face](https://huggingface.co).
 2. Get your access token with READ permissions.
-3. Create `.env` file in this folder holding the hugging face token and the rest of the variables found in the `sample.env`:
+3. Create `.env` file in this folder holding the hugging face token and the rest of the variables found in the `sample.env` **Importantly set the AUDIO_FILE_PATH variable to the file you wish to transcribe.**:
 
     ```.env
  HUGGING_FACE_TOKEN=
