@@ -1,11 +1,11 @@
 import whisperx
 import os
 import dotenv
-import json
 import pandas as pd
 from datetime import datetime
 import gc
 import torch
+from pyannote.audio import Pipeline
 
 # class for printing in colour to terminal
 class bcolors:
@@ -39,6 +39,7 @@ print(bcolors.OKGREEN + f"Transcribing {audio_file}...\n" + bcolors.ENDC)
 transcribe_start_time = datetime.now()
 # 1. Transcribe with original whisper (batched)
 model = whisperx.load_model("large-v2", device, compute_type=compute_type)
+# audio is a np.ndarray containing the audio waveform in float32 dtype.
 audio = whisperx.load_audio(audio_file)
 result = model.transcribe(audio, batch_size=batch_size)
 
@@ -65,16 +66,58 @@ align_end_time = datetime.now()
 print(bcolors.OKGREEN + f"Alignment completed, took {align_end_time - transcribe_end_time}.\n" + bcolors.ENDC)
 print(bcolors.OKGREEN + "\nDiarizing with whisperX...\n" + bcolors.ENDC)
 HUGGING_FACE_TOKEN = os.getenv("HUGGING_FACE_TOKEN")
+
+
 # 3. Assign speaker labels
-# diarization can be slow since we have to use the CPU, and the model is online on huggingface
-# local model needs to be downloaded from https://huggingface.co/pyannote/speaker-diarization and then cached locally
-diarize_model = whisperx.diarize.DiarizationPipeline(use_auth_token=HUGGING_FACE_TOKEN, device=device)
+USE_OFFLINE_MODELS = int(os.getenv("USE_OFFLINE_MODELS", "0"))
 
-# add min/max number of speakers if known as arguments to diarize_model
-diarize_segments = diarize_model(audio)
+if USE_OFFLINE_MODELS:
+    print(bcolors.OKBLUE + "Using offline pyannote models for diarization.\n" + bcolors.ENDC)
+    pyannote_cache_dir = os.getenv("PYANNOTE_CACHE_DIR", "./pyannote_models")
+    
+    # Enable offline mode
+    os.environ['HF_HUB_OFFLINE'] = '1'
+    
+    # Load pipeline from local cache
+    diarize_model = Pipeline.from_pretrained(
+        "pyannote/speaker-diarization-3.1",
+        cache_dir=pyannote_cache_dir
+    )
+else:
+    print(bcolors.OKBLUE + "Using online pyannote models for diarization.\n" + bcolors.ENDC)
+    diarize_model = Pipeline.from_pretrained(
+        "pyannote/speaker-diarization-3.1",
+        use_auth_token=HUGGING_FACE_TOKEN
+    )
 
-# segments are now assigned with speaker labels
-result = whisperx.assign_word_speakers(diarize_segments, result)
+# Move to appropriate device
+if device == "cuda":
+    diarize_model.to(torch.device("cuda"))
+
+# Run diarization (add min/max speakers if known)
+# For known speaker counts: diarization = diarize_model(audio_file, num_speakers=2)
+# For range: diarization = diarize_model(audio_file, min_speakers=2, max_speakers=5)
+# Note: Pass the file path, not the loaded audio array
+diarization = diarize_model(audio_file)
+
+# Convert pyannote output to WhisperX-compatible format
+diarize_segments = []
+for turn, _, speaker in diarization.itertracks(yield_label=True):
+    diarize_segments.append({
+        'start': turn.start,
+        'end': turn.end,
+        'speaker': speaker
+    })
+
+# Segments are now assigned with speaker labels
+# whisperx.assign_word_speakers expects (diarization, aligned_transcript) where diarization is a DataFrame
+diarize_df = pd.DataFrame(diarize_segments)  # columns: start, end, speaker
+# Some versions of whisperx/pyannote expect a 'label' column; ensure both are present
+if 'label' not in diarize_df.columns:
+    diarize_df['label'] = diarize_df['speaker']
+
+# Pass the full aligned transcription result object (not just its "segments" list)
+result = whisperx.assign_word_speakers(diarize_df, result)
 
 diarize_end_time = datetime.now()
 print(bcolors.OKGREEN + "\nFinished diarization, exporting results...\n" + bcolors.ENDC)

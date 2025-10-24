@@ -41,17 +41,37 @@ If you're on **Mac** you will have to export to your path once downloaded. Ask @
 3. Create `.env` file in this folder holding the hugging face token and the rest of the variables found in the `sample.env` **Importantly set the AUDIO_FILE_PATH variable to the file you wish to transcribe.**:
 
     ```.env
- HUGGING_FACE_TOKEN=
+HUGGING_FACE_TOKEN=
 CHUNK_LENGTH=10 # in minutes
 CHUNK_OVERLAP=0.5 # in minutes
 DEVICE=cpu # or cuda for NVIDIA GPU
 AUDIO_FILE_PATH=
 OUTPUT_DIR=./output
+
+# using offline models for pyannote
+PYANNOTE_CACHE_DIR=./pyannote_models
+USE_OFFLINE_MODELS = 0
     ```
+
+## 5.1 Download Pyannote Locally
+
+We want to run diarization locally to speed up our transcription times, and maintain privacy laws. **We still need the authentication token to first download the model**.
+```sh
+    cd WhisperX
+    python download_pyannote.py
+```        `
+
+Once the model is downloaded successfully, set the environment variable ```USE_OFFLINE_MODELS=1``.
+### Timings BEFORE locally downloaded model
+![Model timing when Pyannote was modelled online](images/online_model_times.png)
+### Timings AFTER locally downloaded model
+![Model timing when Pyannote was modelled locally](images/local_model_times.png)
+
 
 ## 6. Running whisper.py to Transcribe Audio on Base WhisperX Model
 Run the whisper.py file found in `whisperX`:
 ```sh
+    cd WhisperX
     python whisper.py
 ```
 
