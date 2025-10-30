@@ -1,4 +1,66 @@
-start,end,phrase,reason
-187.596,187.957,"Yep, yep, shot it.",phonetic match: shot
-187.977,188.257,"Alright, shot.",phonetic match: shot
-233.21,262.018,30 more seconds of compression until next pulse check.,fuzzy match: compression
+0
+"```json
+[
+  {
+    ""start"": 1430.0,
+    ""end"": 1430.0,
+    ""phrase"": ""alright, dsi, scene safe."",
+    ""reason"": ""describes the start time of the scenario.""
+  },
+  {
+    ""start"": 1430.5,
+    ""end"": 1430.5,
+    ""phrase"": ""90 over 40."",
+    ""reason"": ""states blood pressure reading which implies a time of measurement.""
+  },
+  {
+    ""start"": 1430.6,
+    ""end"": 1430.6,
+    ""phrase"": ""125."",
+    ""reason"": ""states heart rate reading which implies a time of measurement.""
+  },
+  {
+    ""start"": 1431.0,
+    ""end"": 1431.0,
+    ""phrase"": ""alright, the syringes we have are the right pneumo which has been something."",
+    ""reason"": ""describes the start of an intervention that implies a dosage and therefore a start time.""
+  }
+]
+```"
+"```json
+[
+  {
+    ""start"": 57.28,
+    ""end"": 61.43,
+    ""phrase"": ""i'm going to give them a right-sided pneumo"",
+    ""reason"": ""mentions procedure or intervention""
+  },
+  {
+    ""start"": 74.89,
+    ""end"": 79.53,
+    ""phrase"": ""i'm going to grab you the needle out of the bag there"",
+    ""reason"": ""mentions procedure or intervention""
+  },
+  {
+    ""start"": 83.16,
+    ""end"": 88.64,
+    ""phrase"": ""i'm going to need a little chest"",
+    ""reason"": ""mentions procedure or intervention""
+  },
+  {
+    ""start"": 92.28,
+    ""end"": 96.71,
+    ""phrase"": ""i'm going to do a second intercostal space, mid-tellicular"",
+    ""reason"": ""mentions procedure or intervention""
+  },
+  {
+    ""start"": 98.31,
+    ""end"": 101.38,
+    ""phrase"": ""just above the rib"",
+    ""reason"": ""mentions procedure or intervention""
+  }
+]
+```"
+"{'start': 187.596, 'end': 187.957, 'phrase': 'Yep, yep, shot it.', 'reason': 'phonetic match: shot'}"
+"{'start': 187.977, 'end': 188.257, 'phrase': 'Alright, shot.', 'reason': 'phonetic match: shot'}"
+"{'start': 233.21, 'end': 262.018, 'phrase': '30 more seconds of compression until next pulse check.', 'reason': 'nlp entity: compression'}"
