@@ -2,6 +2,7 @@
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
 from presidio_anonymizer.entities import OperatorConfig
+import json
 
 # --- 1. Setup the Engines ---
 analyzer = AnalyzerEngine()
@@ -40,6 +41,16 @@ anonymized_result = anonymizer.anonymize(
 )
 
 # --- 5. Output ---
-print("\n--- Anonymized Text ---")
-# The final output: 'Hello, my name is <NAME>, and my phone number is 212-***-****. <REDACTED>.'
-print(anonymized_result.text)
+# Save anonymized items to a json file (needed for decryption -> this tells us where
+# in the transcript the anonymized texts are in the code)
+# I personally do not like this as that means the transcript outputted must be the exact same
+# one read in since we're going by char position
+print(anonymized_result.items)
+print(type(anonymized_result.items[0]))
+
+# with open("Presidio_Anonymized_Items.json", 'w') as f:
+#     json.dump(anonymized_result.items, f, indent=4) # indent=4 for pretty-printing
+
+# Saving the anonymized text to a file output
+with open('Presidio_Simple_Output.txt', 'w') as file:
+    file.write(anonymized_result.text)
