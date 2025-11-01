@@ -1,0 +1,801 @@
+```json
+[
+  {
+    "timestamp": "00:01:31",
+    "action": "check connector and electrodes"
+  },
+  {
+    "timestamp": "00:01:35",
+    "action": "no gag reflex observed"
+  },
+  {
+    "timestamp": "00:01:41",
+    "action": "check connector and electrodes"
+  },
+  {
+    "timestamp": "00:01:49",
+    "action": "check connector and electrodes"
+  },
+  {
+    "timestamp": "00:01:57",
+    "action": "checked for pre-charged status (defibrillator/cardioverter)"
+  },
+  {
+    "timestamp": "00:00:00",
+    "action": "trauma patient, male, approximately thirty-two years old"
+  },
+  {
+    "timestamp": "00:00:00",
+    "action": "mechanism of injury: high-speed head-on collision with a transport truck"
+  },
+  {
+    "timestamp": "00:00:00",
+    "action": "patient found restrained in driver’s seat"
+  },
+  {
+    "timestamp": "00:00:00",
+    "action": "airbags deployed"
+  },
+  {
+    "timestamp": "00:00:17",
+    "action": "patient semi-conscious"
+  },
+  {
+    "timestamp": "00:00:17",
+    "action": "GCS ten"
+  },
+  {
+    "timestamp": "00:00:17",
+    "action": "patient responds to painful stimuli only"
+  },
+  {
+    "timestamp": "00:00:17",
+    "action": "airway patent but gurgling respirations noted"
+  },
+  {
+    "timestamp": "00:00:17",
+    "action": "suctioning performed on scene"
+  },
+  {
+    "timestamp": "00:00:30",
+    "action": "cervical collar applied"
+  },
+  {
+    "timestamp": "00:00:30",
+    "action": "full spinal precautions maintained"
+  },
+  {
+    "timestamp": "00:00:30",
+    "action": "oxygen via non-rebreather mask at fifteen liters per minute"
+  },
+  {
+    "timestamp": "00:00:30",
+    "action": "initial SpO₂ eighty-nine"
+  },
+  {
+    "timestamp": "00:00:30",
+    "action": "SpO₂ ninety-four"
+  },
+  {
+    "timestamp": "00:00:45",
+    "action": "blood pressure eighty-eight over fifty-six"
+  },
+  {
+    "timestamp": "00:00:45",
+    "action": "heart rate one-thirty-two"
+  },
+  {
+    "timestamp": "00:00:45",
+    "action": "respirations twenty-six"
+  },
+  {
+    "timestamp": "00:00:45",
+    "action": "skin pale and diaphoretic"
+  },
+  {
+    "timestamp": "00:00:45",
+    "action": "abdomen firm, distended"
+  },
+  {
+    "timestamp": "00:00:45",
+    "action": "possible internal bleeding"
+  },
+  {
+    "timestamp": "00:01:02",
+    "action": "two large-bore IVs established"
+  },
+  {
+    "timestamp": "00:01:02",
+    "action": "sixteen gauge IV established in left antecubital"
+  },
+  {
+    "timestamp": "00:01:02",
+    "action": "eighteen gauge IV established in right hand"
+  },
+  {
+    "timestamp": "00:01:02",
+    "action": "five hundred milliliters normal saline bolus administered"
+  },
+  {
+    "timestamp": "00:01:02",
+    "action": "IV fluids running wide open"
+  },
+  {
+    "timestamp": "00:01:18",
+    "action": "minor scalp wound observed"
+  },
+  {
+    "timestamp": "00:01:18",
+    "action": "superficial laceration to right forearm observed"
+  },
+  {
+    "timestamp": "00:01:18",
+    "action": "bleeding controlled with direct pressure and dressing"
+  },
+  {
+    "timestamp": "00:01:32",
+    "action": "chest assessment: equal breath sounds"
+  },
+  {
+    "timestamp": "00:01:32",
+    "action": "chest assessment: slightly diminished breath sounds on left"
+  },
+  {
+    "timestamp": "00:01:32",
+    "action": "no tracheal deviation"
+  },
+  {
+    "timestamp": "00:01:32",
+    "action": "no JVD"
+  },
+  {
+    "timestamp": "00:01:32",
+    "action": "possible pulmonary contusion"
+  },
+  {
+    "timestamp": "00:01:48",
+    "action": "pelvis unstable on compression"
+  },
+  {
+    "timestamp": "00:01:48",
+    "action": "pelvic binder applied"
+  },
+  {
+    "timestamp": "00:01:48",
+    "action": "no movement in lower limbs"
+  },
+  {
+    "timestamp": "00:01:48",
+    "action": "possible spinal involvement"
+  },
+  {
+    "timestamp": "00:02:05",
+    "action": "two milligrams morphine given slow IV push for pain"
+  },
+  {
+    "timestamp": "00:02:05",
+    "action": "no adverse reaction to morphine observed"
+  },
+  {
+    "timestamp": "00:02:05",
+    "action": "patient drifting in and out of consciousness"
+  },
+  {
+    "timestamp": "00:02:05",
+    "action": "GCS now eight"
+  },
+  {
+    "timestamp": "00:02:25",
+    "action": "preparing for rapid transport"
+  },
+  {
+    "timestamp": "00:02:25",
+    "action": "current heart rate one-twenty-eight"
+  },
+  {
+    "timestamp": "00:02:25",
+    "action": "current blood pressure eighty-four over fifty-two"
+  },
+  {
+    "timestamp": "00:02:25",
+    "action": "current SpO₂ ninety-three on oxygen"
+  },
+  {
+    "timestamp": "00:02:25",
+    "action": "current respirations twenty-four"
+  },
+  {
+    "timestamp": "00:02:25",
+    "action": "ETA nine minutes"
+  },
+  {
+    "timestamp": "00:02:45",
+    "action": "reporting critical trauma patient inbound"
+  },
+  {
+    "timestamp": "00:02:45",
+    "action": "patient is thirty-two-year-old male"
+  },
+  {
+    "timestamp": "00:02:45",
+    "action": "mechanism of injury: high-speed MVC"
+  },
+  {
+    "timestamp": "00:02:45",
+    "action": "patient is hypotensive"
+  },
+  {
+    "timestamp": "00:02:45",
+    "action": "possible internal bleed reported"
+  },
+  {
+    "timestamp": "00:02:45",
+    "action": "pelvic fracture reported"
+  },
+  {
+    "timestamp": "00:02:45",
+    "action": "two IVs established reported"
+  },
+  {
+    "timestamp": "00:02:45",
+    "action": "fluids running reported"
+  },
+  {
+    "timestamp": "00:02:45",
+    "action": "morphine administered reported"
+  },
+  {
+    "timestamp": "00:02:45",
+    "action": "airway maintained reported"
+  },
+  {
+    "timestamp": "00:02:45",
+    "action": "ETA nine minutes reported"
+  },
+  {
+    "timestamp": "00:03:15",
+    "action": "instruction to continue fluids"
+  },
+  {
+    "timestamp": "00:03:15",
+    "action": "instruction to monitor airway"
+  },
+  {
+    "timestamp": "00:03:15",
+    "action": "instruction to notify if vitals deteriorate"
+  },
+  {
+    "timestamp": "00:03:28",
+    "action": "blood pressure dropping to seventy-eight over fifty"
+  },
+  {
+    "timestamp": "00:03:28",
+    "action": "heart rate one-thirty-six"
+  },
+  {
+    "timestamp": "00:03:28",
+    "action": "switching to pressure infusion"
+  },
+  {
+    "timestamp": "00:03:28",
+    "action": "preparing for airway intervention"
+  },
+  {
+    "timestamp": "00:03:45",
+    "action": "patient cyanotic"
+  },
+  {
+    "timestamp": "00:03:45",
+    "action": "SpO₂ eighty-eight"
+  },
+  {
+    "timestamp": "00:03:45",
+    "action": "beginning assisted ventilations with BVM"
+  },
+  {
+    "timestamp": "00:03:45",
+    "action": "suctioning performed again"
+  },
+  {
+    "timestamp": "00:03:45",
+    "action": "significant blood in oropharynx observed"
+  },
+  {
+    "timestamp": "00:04:02",
+    "action": "airway adjunct inserted"
+  },
+  {
+    "timestamp": "00:04:02",
+    "action": "oropharyngeal airway in place"
+  },
+  {
+    "timestamp": "00:04:02",
+    "action": "continuing bag-valve-mask ventilations"
+  },
+  {
+    "timestamp": "00:04:02",
+    "action": "chest rise present but shallow"
+  },
+  {
+    "timestamp": "00:04:02",
+    "action": "blood pressure improving slightly to eighty-two over fifty-four"
+  },
+  {
+    "timestamp": "00:04:20",
+    "action": "instruction to maintain airway support"
+  },
+  {
+    "timestamp": "00:04:20",
+    "action": "ETA five minutes"
+  },
+  {
+    "timestamp": "00:04:20",
+    "action": "notify trauma bay: probable massive transfusion required"
+  },
+  {
+    "timestamp": "00:04:35",
+    "action": "abdomen remains rigid"
+  },
+  {
+    "timestamp": "00:04:35",
+    "action": "no new external bleeding observed"
+  },
+  {
+    "timestamp": "00:04:35",
+    "action": "IV fluids wide open"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: thirty-two-year-old male"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: polytrauma"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: suspected internal hemorrhage"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: pelvic instability"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: possible spinal injury"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: airway supported with OPA and BVM"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: received five hundred milliliters normal saline IV"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: received two milligrams morphine IV"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: current BP eighty-two over fifty-four"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: current HR one-thirty"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: assisted respirations at eighteen per minute"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: current SpO₂ ninety-one"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: ETA two minutes"
+  }
+]
+``````json
+[
+  {
+    "timestamp": "00:00:00",
+    "action": "trauma patient, male, approximately thirty-two years old"
+  },
+  {
+    "timestamp": "00:00:00",
+    "action": "mechanism of injury: high-speed head-on collision with a transport truck"
+  },
+  {
+    "timestamp": "00:00:00",
+    "action": "patient found restrained in driver’s seat"
+  },
+  {
+    "timestamp": "00:00:00",
+    "action": "airbags deployed"
+  },
+  {
+    "timestamp": "00:00:17",
+    "action": "patient semi-conscious"
+  },
+  {
+    "timestamp": "00:00:17",
+    "action": "GCS ten"
+  },
+  {
+    "timestamp": "00:00:17",
+    "action": "patient responds to painful stimuli only"
+  },
+  {
+    "timestamp": "00:00:17",
+    "action": "airway patent but gurgling respirations noted"
+  },
+  {
+    "timestamp": "00:00:17",
+    "action": "suctioning performed on scene"
+  },
+  {
+    "timestamp": "00:00:30",
+    "action": "cervical collar applied"
+  },
+  {
+    "timestamp": "00:00:30",
+    "action": "full spinal precautions maintained"
+  },
+  {
+    "timestamp": "00:00:30",
+    "action": "oxygen via non-rebreather mask at fifteen liters per minute"
+  },
+  {
+    "timestamp": "00:00:30",
+    "action": "initial SpO₂ eighty-nine"
+  },
+  {
+    "timestamp": "00:00:30",
+    "action": "SpO₂ ninety-four"
+  },
+  {
+    "timestamp": "00:00:45",
+    "action": "blood pressure eighty-eight over fifty-six"
+  },
+  {
+    "timestamp": "00:00:45",
+    "action": "heart rate one-thirty-two"
+  },
+  {
+    "timestamp": "00:00:45",
+    "action": "respirations twenty-six"
+  },
+  {
+    "timestamp": "00:00:45",
+    "action": "skin pale and diaphoretic"
+  },
+  {
+    "timestamp": "00:00:45",
+    "action": "abdomen firm, distended"
+  },
+  {
+    "timestamp": "00:00:45",
+    "action": "possible internal bleeding"
+  },
+  {
+    "timestamp": "00:01:02",
+    "action": "two large-bore IVs established"
+  },
+  {
+    "timestamp": "00:01:02",
+    "action": "sixteen gauge IV established in left antecubital"
+  },
+  {
+    "timestamp": "00:01:02",
+    "action": "eighteen gauge IV established in right hand"
+  },
+  {
+    "timestamp": "00:01:02",
+    "action": "five hundred milliliters normal saline bolus administered"
+  },
+  {
+    "timestamp": "00:01:02",
+    "action": "IV fluids running wide open"
+  },
+  {
+    "timestamp": "00:01:18",
+    "action": "minor scalp wound observed"
+  },
+  {
+    "timestamp": "00:01:18",
+    "action": "superficial laceration to right forearm observed"
+  },
+  {
+    "timestamp": "00:01:18",
+    "action": "bleeding controlled with direct pressure and dressing"
+  },
+  {
+    "timestamp": "00:01:29",
+    "action": "check connector and electrodes"
+  },
+  {
+    "timestamp": "00:01:32",
+    "action": "chest assessment: equal breath sounds"
+  },
+  {
+    "timestamp": "00:01:32",
+    "action": "chest assessment: slightly diminished breath sounds on left"
+  },
+  {
+    "timestamp": "00:01:32",
+    "action": "no tracheal deviation"
+  },
+  {
+    "timestamp": "00:01:32",
+    "action": "no JVD"
+  },
+  {
+    "timestamp": "00:01:32",
+    "action": "possible pulmonary contusion"
+  },
+  {
+    "timestamp": "00:01:35",
+    "action": "no gag reflex observed"
+  },
+  {
+    "timestamp": "00:01:41",
+    "action": "check connector and electrodes"
+  },
+  {
+    "timestamp": "00:01:48",
+    "action": "pelvis unstable on compression"
+  },
+  {
+    "timestamp": "00:01:48",
+    "action": "pelvic binder applied"
+  },
+  {
+    "timestamp": "00:01:48",
+    "action": "no movement in lower limbs"
+  },
+  {
+    "timestamp": "00:01:48",
+    "action": "possible spinal involvement"
+  },
+  {
+    "timestamp": "00:01:49",
+    "action": "check connector and electrodes"
+  },
+  {
+    "timestamp": "00:01:57",
+    "action": "checked for pre-charged status (defibrillator/cardioverter)"
+  },
+  {
+    "timestamp": "00:02:05",
+    "action": "two milligrams morphine given slow IV push for pain"
+  },
+  {
+    "timestamp": "00:02:05",
+    "action": "no adverse reaction to morphine observed"
+  },
+  {
+    "timestamp": "00:02:05",
+    "action": "patient drifting in and out of consciousness"
+  },
+  {
+    "timestamp": "00:02:05",
+    "action": "GCS now eight"
+  },
+  {
+    "timestamp": "00:02:25",
+    "action": "preparing for rapid transport"
+  },
+  {
+    "timestamp": "00:02:25",
+    "action": "current heart rate one-twenty-eight"
+  },
+  {
+    "timestamp": "00:02:25",
+    "action": "current blood pressure eighty-four over fifty-two"
+  },
+  {
+    "timestamp": "00:02:25",
+    "action": "current SpO₂ ninety-three on oxygen"
+  },
+  {
+    "timestamp": "00:02:25",
+    "action": "current respirations twenty-four"
+  },
+  {
+    "timestamp": "00:02:25",
+    "action": "ETA nine minutes"
+  },
+  {
+    "timestamp": "00:02:45",
+    "action": "reporting critical trauma patient inbound"
+  },
+  {
+    "timestamp": "00:02:45",
+    "action": "patient is thirty-two-year-old male"
+  },
+  {
+    "timestamp": "00:02:45",
+    "action": "mechanism of injury: high-speed MVC"
+  },
+  {
+    "timestamp": "00:02:45",
+    "action": "patient is hypotensive"
+  },
+  {
+    "timestamp": "00:02:45",
+    "action": "possible internal bleed reported"
+  },
+  {
+    "timestamp": "00:02:45",
+    "action": "pelvic fracture reported"
+  },
+  {
+    "timestamp": "00:02:45",
+    "action": "two IVs established reported"
+  },
+  {
+    "timestamp": "00:02:45",
+    "action": "fluids running reported"
+  },
+  {
+    "timestamp": "00:02:45",
+    "action": "morphine administered reported"
+  },
+  {
+    "timestamp": "00:02:45",
+    "action": "airway maintained reported"
+  },
+  {
+    "timestamp": "00:02:45",
+    "action": "ETA nine minutes reported"
+  },
+  {
+    "timestamp": "00:03:15",
+    "action": "instruction to continue fluids"
+  },
+  {
+    "timestamp": "00:03:15",
+    "action": "instruction to monitor airway"
+  },
+  {
+    "timestamp": "00:03:15",
+    "action": "instruction to notify if vitals deteriorate"
+  },
+  {
+    "timestamp": "00:03:28",
+    "action": "blood pressure dropping to seventy-eight over fifty"
+  },
+  {
+    "timestamp": "00:03:28",
+    "action": "heart rate one-thirty-six"
+  },
+  {
+    "timestamp": "00:03:28",
+    "action": "switching to pressure infusion"
+  },
+  {
+    "timestamp": "00:03:28",
+    "action": "preparing for airway intervention"
+  },
+  {
+    "timestamp": "00:03:45",
+    "action": "patient cyanotic"
+  },
+  {
+    "timestamp": "00:03:45",
+    "action": "SpO₂ eighty-eight"
+  },
+  {
+    "timestamp": "00:03:45",
+    "action": "beginning assisted ventilations with BVM"
+  },
+  {
+    "timestamp": "00:03:45",
+    "action": "suctioning performed again"
+  },
+  {
+    "timestamp": "00:03:45",
+    "action": "significant blood in oropharynx observed"
+  },
+  {
+    "timestamp": "00:04:02",
+    "action": "airway adjunct inserted"
+  },
+  {
+    "timestamp": "00:04:02",
+    "action": "oropharyngeal airway in place"
+  },
+  {
+    "timestamp": "00:04:02",
+    "action": "continuing bag-valve-mask ventilations"
+  },
+  {
+    "timestamp": "00:04:02",
+    "action": "chest rise present but shallow"
+  },
+  {
+    "timestamp": "00:04:02",
+    "action": "blood pressure improving slightly to eighty-two over fifty-four"
+  },
+  {
+    "timestamp": "00:04:20",
+    "action": "instruction to maintain airway support"
+  },
+  {
+    "timestamp": "00:04:20",
+    "action": "ETA five minutes"
+  },
+  {
+    "timestamp": "00:04:20",
+    "action": "notify trauma bay: probable massive transfusion required"
+  },
+  {
+    "timestamp": "00:04:35",
+    "action": "abdomen remains rigid"
+  },
+  {
+    "timestamp": "00:04:35",
+    "action": "no new external bleeding observed"
+  },
+  {
+    "timestamp": "00:04:35",
+    "action": "IV fluids wide open"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: thirty-two-year-old male"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: polytrauma"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: suspected internal hemorrhage"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: pelvic instability"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: possible spinal injury"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: airway supported with OPA and BVM"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: received five hundred milliliters normal saline IV"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: received two milligrams morphine IV"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: current BP eighty-two over fifty-four"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: current HR one-thirty"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: assisted respirations at eighteen per minute"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: current SpO₂ ninety-one"
+  },
+  {
+    "timestamp": "00:04:52",
+    "action": "final report: ETA two minutes"
+  }
+]
+```Understood. I have noted that all medical context has been extracted and saved to `transcript1_medical_context.json` and `transcript2_medical_context.json`.
+
+I am ready for your next task.Thank you for confirming. I am ready for your next instruction.

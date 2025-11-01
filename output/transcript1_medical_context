@@ -1,0 +1,70 @@
+{
+  "transcript_id": "transcript1.json",
+  "medical_context": [
+    {
+      "category": "Equipment Checks/Observations",
+      "entries": [
+        {
+          "start": 91.627,
+          "end": 94.211,
+          "text": "Check connector and electrodes."
+        },
+        {
+          "start": 95.453,
+          "end": 95.894,
+          "text": "No gag."
+        },
+        {
+          "start": 101.382,
+          "end": 106.39,
+          "text": "Check connector and electrodes."
+        },
+        {
+          "start": 109.294,
+          "end": 113.421,
+          "text": "Check connector and electrodes."
+        },
+        {
+          "start": 117.346,
+          "end": 120.96,
+          "text": "You got pre-charged and all that?"
+        }
+      ]
+    },
+    {
+      "category": "Instructions/Commands",
+      "entries": [
+        {
+          "start": 89.063,
+          "end": 91.607,
+          "text": "Go ahead, man."
+        },
+        {
+          "start": 96.855,
+          "end": 99.539,
+          "text": "OK, read this for me."
+        },
+        {
+          "start": 99.78,
+          "end": 99.92,
+          "text": "Ready?"
+        },
+        {
+          "start": 99.94,
+          "end": 100.441,
+          "text": "Ready, ready."
+        },
+        {
+          "start": 100.541,
+          "end": 101.082,
+          "text": "One, two, three."
+        },
+        {
+          "start": 113.501,
+          "end": 116.826,
+          "text": "If you open it in a minute, then we'll do it."
+        }
+      ]
+    }
+  ]
+}
