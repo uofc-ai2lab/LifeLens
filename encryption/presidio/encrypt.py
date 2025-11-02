@@ -45,11 +45,10 @@ anonymized_result = anonymizer.anonymize(
 # in the transcript the anonymized texts are in the code)
 # I personally do not like this as that means the transcript outputted must be the exact same
 # one read in since we're going by char position
-print(anonymized_result.items)
-print(type(anonymized_result.items[0]))
-
-# with open("Presidio_Anonymized_Items.json", 'w') as f:
-#     json.dump(anonymized_result.items, f, indent=4) # indent=4 for pretty-printing
+results_as_dicts = [item.to_dict() for item in anonymized_result.items] # converts items in analyzer object into dicts so we can save into a json file 
+print(results_as_dicts)
+with open("Presidio_Anonymized_Items.json", 'w') as f:
+    json.dump(results_as_dicts, f, indent=4) # indent=4 for pretty-printing
 
 # Saving the anonymized text to a file output
 with open('Presidio_Simple_Output.txt', 'w') as file:

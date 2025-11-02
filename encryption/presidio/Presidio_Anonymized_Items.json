@@ -1,2 +1,149 @@
 [
-    
+    {
+        "start": 17024,
+        "end": 17068,
+        "entity_type": "PERSON",
+        "text": "ImNh0KYzcSGj7oNCj2IZqtzJBL5ISs0QrkdPqp6PbPY=",
+        "operator": "encrypt"
+    },
+    {
+        "start": 16252,
+        "end": 16296,
+        "entity_type": "PERSON",
+        "text": "O6kMmENs0_JbgI7IOULyxpMix-uCWOua2_wJ5XZCV4I=",
+        "operator": "encrypt"
+    },
+    {
+        "start": 16118,
+        "end": 16162,
+        "entity_type": "PERSON",
+        "text": "5hemheezFR5d2KdDWSKTIhcLw2AmqtGMOV688XUKQM4=",
+        "operator": "encrypt"
+    },
+    {
+        "start": 16027,
+        "end": 16071,
+        "entity_type": "PERSON",
+        "text": "GHoyIjr_nCho6Qz7NjHnNapDlk2oAHwRdh8nj5JFoEk=",
+        "operator": "encrypt"
+    },
+    {
+        "start": 15322,
+        "end": 15366,
+        "entity_type": "PERSON",
+        "text": "x_yHnw7xPHWsRUiv7LM_PKt88MdlW-Xm3jJc3UhvjvY=",
+        "operator": "encrypt"
+    },
+    {
+        "start": 14165,
+        "end": 14209,
+        "entity_type": "PERSON",
+        "text": "DLNlHD48Ldgl3WKzApnyh-AEiMeH1lBKP_H4CsnlG-Q=",
+        "operator": "encrypt"
+    },
+    {
+        "start": 13570,
+        "end": 13614,
+        "entity_type": "PERSON",
+        "text": "FWRkkIkh828gZ2b20bmIU-9XOx9XDkBT_s7ID9ayLvY=",
+        "operator": "encrypt"
+    },
+    {
+        "start": 11818,
+        "end": 11862,
+        "entity_type": "PERSON",
+        "text": "7EwzDXxdg8SF_ltkFz6Go6es4cjIqGRlEpXJDMQi_CQ=",
+        "operator": "encrypt"
+    },
+    {
+        "start": 10474,
+        "end": 10518,
+        "entity_type": "PERSON",
+        "text": "laufy2LnWQfQ8pl0YCPGPgKyHZJN7k9DPtnlnjTqlt8=",
+        "operator": "encrypt"
+    },
+    {
+        "start": 10398,
+        "end": 10442,
+        "entity_type": "PERSON",
+        "text": "Hjb9hIoTCG80u5Hivnpzg7fy9452-qxduK7MtC1Hq20=",
+        "operator": "encrypt"
+    },
+    {
+        "start": 9733,
+        "end": 9777,
+        "entity_type": "PERSON",
+        "text": "Y6CC9Q98HGU-qk6abkSvBBQ1lVqkfmVhomyDoteM34E=",
+        "operator": "encrypt"
+    },
+    {
+        "start": 9399,
+        "end": 9443,
+        "entity_type": "PERSON",
+        "text": "6dpX6E15xF_jg3dMvxQ81wbpXl6i_xEArI1eY0Rmhck=",
+        "operator": "encrypt"
+    },
+    {
+        "start": 8566,
+        "end": 8610,
+        "entity_type": "PERSON",
+        "text": "wpvaTzojYYyshl1KfMJ1-mkg6-T9dpZqz_Pk_qSufzw=",
+        "operator": "encrypt"
+    },
+    {
+        "start": 8500,
+        "end": 8544,
+        "entity_type": "PERSON",
+        "text": "CvD1oJp6_38AsotTurWN1PhewX7_Nmg_sMNOmH9Obs4=",
+        "operator": "encrypt"
+    },
+    {
+        "start": 8276,
+        "end": 8320,
+        "entity_type": "PERSON",
+        "text": "C8TygjEoUhasgWteQhNXBPr9oILswY6Xt79XgUJunqE=",
+        "operator": "encrypt"
+    },
+    {
+        "start": 7161,
+        "end": 7205,
+        "entity_type": "PERSON",
+        "text": "y0m928LQ6wdQFnkOC25gtglYHfvDzMYWQ7MKOiL-QJ0=",
+        "operator": "encrypt"
+    },
+    {
+        "start": 5041,
+        "end": 5085,
+        "entity_type": "PERSON",
+        "text": "zko--6YxDMIhjJvlTEg0tgNpFT6e5VAAIv9052VegWQ=",
+        "operator": "encrypt"
+    },
+    {
+        "start": 2579,
+        "end": 2623,
+        "entity_type": "PERSON",
+        "text": "S7uVI47C5MbQP_Eig5q7qORg_H62rpAtdj_WACp_jk8=",
+        "operator": "encrypt"
+    },
+    {
+        "start": 2529,
+        "end": 2573,
+        "entity_type": "PERSON",
+        "text": "6h1y75ncTlcNhw0qCkVpRjvbfUW0StUv1t8ESRi0VVA=",
+        "operator": "encrypt"
+    },
+    {
+        "start": 2251,
+        "end": 2295,
+        "entity_type": "PERSON",
+        "text": "HU3p0KsHM_diik7F0raeQzhLW0wXmhAaiL9JerezgUY=",
+        "operator": "encrypt"
+    },
+    {
+        "start": 1939,
+        "end": 1983,
+        "entity_type": "PERSON",
+        "text": "HYxLEwIUa9-6c4omhwkwovsbefSFNDtiMiUIBPVtYZY=",
+        "operator": "encrypt"
+    }
+]
