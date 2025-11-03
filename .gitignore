@@ -1,3 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Python packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+
+# Experiments and checkpoints
+/experiments/checkpoints/
+*.pt
+*.pth
+
+# IDE/editor
+.vscode/
+.idea/
+
 .DS_Store
 
 # Byte-compiled / optimized / DLL files
