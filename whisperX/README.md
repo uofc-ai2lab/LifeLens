@@ -83,18 +83,9 @@ Run the whisper.py file found in `whisperX`:
     cd WhisperX
     python whisper.py
 ```
-
-# OR 
-
-## 7. Running Inference
-
-```sh
-python whisper.py --audio_file /path/to/audio.wav --model_dir /path/to/save/model
-```
-
 ---
 
-## 8. (optional) Download pip WhisperX package
+## 7. (optional) Download pip WhisperX package
 
 NOTE: Make sure you're in the python venv environment before doing any pip installs.
 
