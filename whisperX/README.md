@@ -86,21 +86,6 @@ Run the whisper.py file found in `whisperX`:
 
 # OR 
 
-## 6. Fine-Tuning WhisperX
-
-- Prepare your dataset (see [WhisperX docs](https://github.com/m-bain/whisperx#fine-tuning)).
-- Run fine-tuning:
-
-    ```sh
-    python whisper.py --train --data_dir /path/to/your/data --output_dir /path/to/save/model
-    ```
-
-- For more options:
-
-    ```sh
-    python whisper.py --help
-    ```
-
 ## 7. Running Inference
 
 ```sh
