@@ -131,14 +131,17 @@ def export_results(result, output_dir="output", filename="transcript"):
     # Export start/end as seconds relative to start of the audio (no absolute anchoring).
     # Use 3 decimal places for milliseconds precision.
     for seg in result["segments"]:
+        speaker = seg.get("speaker", "UNKNOWN")  # <- avoids KeyError
         start_time = format_timestamp_vtt(seg["start"])
         end_time = format_timestamp_vtt(seg["end"])
-        df_data.append({
-            "start": start_time,
-            "end": end_time,
-            "text": seg["text"].strip(),
-            "speaker": seg["speaker"]
-        })
+        df_data.append(
+            {
+                "start": start_time,
+                "end": end_time,
+                "text": seg["text"].strip(),
+                "speaker": speaker,
+            }
+        )
     pd.DataFrame(df_data).to_csv(csv_path, index=False)
 
     print(bcolors.OKCYAN + f"\nResults exported to '{output_dir}/' directory:" + bcolors.ENDC)
