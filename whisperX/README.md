@@ -57,6 +57,14 @@ USE_OFFLINE_MODELS = 0
 ## 5.1 Download Pyannote Locally
 
 We want to run diarization locally to speed up our transcription times, and maintain privacy laws. **We still need the authentication token to first download the model**.
+
+Ensure you have enough disk space (~3.5GB) and the authentication token from Hugging Face.
+Instructions:
+1. Accept user conditions at. University is "University of Caglgary" and the webiste can be the UofC default website "https://ucalgary.ca/":
+   - https://huggingface.co/pyannote/speaker-diarization-3.1
+   - https://huggingface.co/pyannote/segmentation-3.0
+2. Get your token from: https://huggingface.co/settings/tokens
+3. Run: python download_pyannote.py:
 ```sh
     cd WhisperX
     python download_pyannote.py
