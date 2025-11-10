@@ -1,3 +1,5 @@
+.DS_Store
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -138,6 +140,7 @@ celerybeat.pid
 .env
 .envrc
 .venv
+venv311/
 env/
 venv/
 ENV/
@@ -205,3 +208,14 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# local audio db
+Synthetic-Medical-Audio/cv-corpus-audio/
+
+# python venv folder anywhere in the project
+**/venv311/
+**/venv/
+**/.venv/
+
+# whisperX huggingface models
+whisperX/pyannote_models/

@@ -1,0 +1,95 @@
+start,end,text,speaker
+00:00:00.237,00:00:02.798,So we are going to facilitate a trauma scenario now.,SPEAKER_00
+00:00:03.298,00:00:05.878,So you can see we have a mannequin on the floor with blankets.,SPEAKER_00
+00:00:06.259,00:00:07.860,The blankets are supposed to be snow.,SPEAKER_00
+00:00:07.879,00:00:15.041,"It's not really snow, but we're hoping it's just enough to get our participants in that mindset to go with it.",SPEAKER_00
+00:00:15.061,00:00:17.603,"Okay, so these are the vital signs.",SPEAKER_00
+00:00:18.222,00:00:24.986,"And really the point of this scenario is for our responders to respond to the scene, perform an assessment.",SPEAKER_00
+00:00:25.466,00:00:28.146,And what they're going to find is that the patient has a pneumo.,SPEAKER_00
+00:00:29.413,00:00:30.053,I'll show you that again.,SPEAKER_00
+00:00:30.112,00:00:36.296,"Clicking on the lungs, and then clicking on pneumothorax, I can then choose which side.",SPEAKER_00
+00:00:36.317,00:00:39.418,"So I'm going to give them a right-sided pneumo, and then activate.",SPEAKER_00
+00:00:40.499,00:00:44.121,There might be some other injuries that are hard to simulate using the mannequin.,SPEAKER_00
+00:00:44.161,00:00:52.026,"So as the facilitator, I will be verbalizing what those are if the participants actually assess them or look for those things.",SPEAKER_00
+00:00:53.106,00:00:53.406,OK.,SPEAKER_00
+00:00:54.246,00:00:54.448,Chart 53.,SPEAKER_00
+00:00:56.374,00:01:00.296,"27-year-old male, ATV rollover, no helmet, County Road 1643.",SPEAKER_00
+00:01:00.337,00:01:00.896,"Time now, 1430.",SPEAKER_00
+00:01:01.317,00:01:03.658,"Roger that, we're on it.",SPEAKER_00
+00:01:03.738,00:01:03.978,Hello!,SPEAKER_00
+00:01:04.078,00:01:13.305,"Alright, DSI, scene safe.",SPEAKER_00
+00:01:14.525,00:01:17.608,Looks like we have a 27-year-old male.,SPEAKER_01
+00:01:25.849,00:01:26.570,Unresponsive.,SPEAKER_01
+00:01:26.611,00:01:27.290,"Sir, can you hear me?",SPEAKER_01
+00:01:27.311,00:01:28.852,My name is Hans with the ambulance service.,SPEAKER_01
+00:01:28.871,00:01:29.593,"My partner, Ted.",SPEAKER_01
+00:01:29.612,00:01:30.293,"Can you hear me, sir?",SPEAKER_00
+00:01:30.313,00:01:32.635,Can you hear me?,SPEAKER_01
+00:01:33.174,00:01:33.615,Unresponsive.,SPEAKER_01
+00:01:33.635,00:01:34.495,Let's get to the vitals here.,SPEAKER_01
+00:01:34.555,00:01:36.037,I'm going to start checking for any injuries.,SPEAKER_01
+00:01:38.578,00:01:40.721,"My pen light, shiny eyes.",SPEAKER_01
+00:01:41.001,00:01:41.861,Pupils react to light?,SPEAKER_01
+00:01:42.242,00:01:43.942,Pupils are reactive to light.,SPEAKER_00
+00:01:44.603,00:01:48.286,"Checking for any decapital loss in the head, eye injuries, mouth, nose.",SPEAKER_01
+00:01:48.305,00:01:49.087,Negative.,SPEAKER_01
+00:01:49.406,00:01:50.787,"JVD, tracheal deviation.",SPEAKER_01
+00:01:50.808,00:01:51.308,Negative.,SPEAKER_01
+00:01:51.909,00:01:52.870,Any clavicle injuries?,SPEAKER_01
+00:01:53.875,00:01:54.094,Negative.,SPEAKER_01
+00:01:54.114,00:01:55.977,I'm going to also take the lung sounds here.,SPEAKER_01
+00:01:55.996,00:02:06.486,"Okay, no lung sounds on the right.",SPEAKER_01
+00:02:06.506,00:02:07.307,That's correct.,SPEAKER_01
+00:02:07.466,00:02:08.427,I'm going to confirm that.,SPEAKER_01
+00:02:08.448,00:02:10.128,I only have the chest wires on the left.,SPEAKER_01
+00:02:11.229,00:02:11.890,"That's correct, yep.",SPEAKER_01
+00:02:11.911,00:02:13.611,"Okay, so we have a possible tension pneumo.",SPEAKER_01
+00:02:13.632,00:02:17.836,"I'm going to stop right there and we're going to actually, I'm going to grab you the needle out of the bag there.",SPEAKER_01
+00:02:17.855,00:02:19.578,We're going to needle the chest here.,SPEAKER_01
+00:02:20.150,00:02:25.793,"I'm going to do a second intercostal space, mid-tellicular, just above the rib.",SPEAKER_01
+00:02:25.893,00:02:32.918,I'm actually going to need a little chest because that's expensive.,SPEAKER_01
+00:02:34.038,00:02:35.618,"Okay, need a little chest.",SPEAKER_01
+00:02:36.219,00:02:38.241,Do I hear any type of... You do.,SPEAKER_01
+00:02:38.260,00:02:42.743,"Okay, so I'm going to reconfer and I do have chest rise on the right side now.",SPEAKER_01
+00:02:42.883,00:02:43.144,You do.,SPEAKER_00
+00:02:43.183,00:02:43.723,Abdominal area.,SPEAKER_01
+00:02:43.743,00:02:44.245,Abdomen's soft.,SPEAKER_01
+00:02:44.324,00:02:45.185,Okay.,SPEAKER_01
+00:02:45.245,00:02:45.444,Pelvis.,SPEAKER_01
+00:02:48.593,00:02:49.354,Some instability.,SPEAKER_00
+00:02:49.375,00:02:51.056,"Okay, so notice I'm going to stop there.",SPEAKER_01
+00:02:51.096,00:02:53.157,I'm going to put a pelvic binder on my partner and my arm.,SPEAKER_01
+00:03:04.568,00:03:07.831,"Okay, see you partner.",SPEAKER_01
+00:03:11.155,00:03:12.376,The woman first when we were levitating.,SPEAKER_01
+00:03:21.727,00:03:23.127,A little higher.,SPEAKER_01
+00:03:23.147,00:03:23.527,"Perfect, okay.",SPEAKER_01
+00:03:23.548,00:03:32.450,"Okay, hold down.",SPEAKER_01
+00:03:32.471,00:03:33.591,"Okay, pelvic stabilized.",SPEAKER_01
+00:03:33.610,00:03:35.891,Now down on the left leg here.,SPEAKER_01
+00:03:35.912,00:03:37.592,Checking for any injuries.,SPEAKER_01
+00:03:37.812,00:03:38.193,Negative.,SPEAKER_00
+00:03:38.492,00:03:38.973,Pulses?,SPEAKER_01
+00:03:39.393,00:03:40.193,Pulses are intact.,SPEAKER_01
+00:03:40.272,00:03:40.473,Okay.,SPEAKER_01
+00:03:40.873,00:03:41.873,Circuitry with your toes?,SPEAKER_01
+00:03:41.933,00:03:42.193,No response.,SPEAKER_01
+00:03:42.213,00:03:42.794,No response.,SPEAKER_01
+00:03:43.193,00:03:44.694,"Okay, down on the other leg here.",SPEAKER_01
+00:03:44.715,00:03:45.514,Negative.,SPEAKER_00
+00:03:45.534,00:03:46.034,Okay.,SPEAKER_00
+00:03:46.515,00:03:47.895,Start blood pressure.,SPEAKER_01
+00:03:48.575,00:03:49.256,Don't prep pulse.,SPEAKER_01
+00:03:49.597,00:03:50.356,Pulse is intact.,SPEAKER_00
+00:03:50.377,00:03:50.616,Okay.,SPEAKER_00
+00:03:51.478,00:03:53.239,"Left arm, same pulse.",SPEAKER_01
+00:03:53.718,00:03:54.439,Pulse is intact.,SPEAKER_00
+00:03:54.659,00:03:58.421,No response.,SPEAKER_00
+00:03:58.461,00:03:59.542,Right arm pulses.,SPEAKER_01
+00:04:00.042,00:04:00.962,Pulse is intact.,SPEAKER_01
+00:04:01.342,00:04:04.104,Blood pressure is 90 over 40.,SPEAKER_01
+00:04:04.144,00:04:05.324,Heart rate is 125.,SPEAKER_00
+00:04:05.444,00:04:15.490,"Alright, the syringes we have are the right pneumo which has been something.",SPEAKER_01
+00:04:15.509,00:04:17.571,It's been fixed.,SPEAKER_01
+00:04:18.011,00:04:19.851,We'll keep an eye on the right side in case it reinflates.,SPEAKER_01
+00:04:19.932,00:04:20.992,Pelvis is stabilized.,SPEAKER_01
+00:04:21.377,00:04:24.187,Let's go ahead and get him on a longboard and we'll get out of here.,SPEAKER_01
