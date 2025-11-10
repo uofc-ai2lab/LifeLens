@@ -9,7 +9,7 @@ async def main():
     parser.add_argument(
         "service",
         type=str,
-        choices=["whisperx"],  # Add other services as needed
+        choices=["whisperx", "nlp"],  # Add other services as needed
         help="The microservice to run",
     )
     args = parser.parse_args()
@@ -17,6 +17,9 @@ async def main():
     if args.service == "whisperx":
         from whisperX.whisper import run_whisperx
         await run_whisperx()
+    elif args.service == "nlp":
+        from nlpPipeline.nlp_pipeline import run_nlp
+        await run_nlp()
     else:
         print(f"Service {args.service} not recognized.")
     
