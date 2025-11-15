@@ -1,0 +1,11 @@
+Folder Containing Different Encryption/Decryption Techniques Explored
+
+## Encrypt.py
+This script uses Microsoft Presidio to detect PERSON entities in the text loaded from inputExample1.txt, then anonymizes those spans by encrypting them with a symmetric key (and redacting everything else by default). It prints the analysis results, writes the anonymized text to Presidio_Simple_Output.txt, and saves the anonymization metadata (location, length, operator info) as JSON in Presidio_Anonymized_Items.json so the exact positions of the encrypted spans can be used later for deanonymization. In this example we only looked for PERSOM entities but we can look for other entities (all of which are defined here: https://microsoft.github.io/presidio/supported_entities/). We can also create our own custom entities to look for as well. 
+
+## Decrypt.py
+This script reads the encrypted transcript from Presidio_Simple_Output.txt and the saved anonymization metadata from Presidio_Anonymized_Items.json, reconstructs Presidio OperatorResult objects, and uses Presidio’s DeanonymizeEngine with the same symmetric key to replace the encrypted spans back to their original values; the final deanonymized text is printed. The anonymization metadata comes from the anonymization we did in `encrypt.py`. This is one 'poor' part of this entire set up as we need to save this info and store it as well. What I was hoping to find was a technique to anonmyze and deanonymize such that the technique of going to anonymization and from anonymization is known on both sender and reciever. This way, only the actual anonymizaed text is what will be sent and the reciever can decrypt the information individually. I will be exploring this further once we have our first prototype complete. 
+
+- To run code please activate the virtual environment 'env' first, as all packages are installed in here.
+## Running the Code
+Please install packages in `requirements.txt` inside an venv (however you make your virtual env in Python), then you can run `encrypt.py` to see how the anonymized output gets generated. All files are already stored in the directory, so running the code will just overwrite the files already saved. `decrypt.py` takes the anonymized file and json file of anonymized positions to recreate the original transcript.
