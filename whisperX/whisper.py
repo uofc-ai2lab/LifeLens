@@ -1,6 +1,6 @@
 import whisperx
 import os
-import dotenv
+from dotenv import load_dotenv
 import pandas as pd
 import numpy
 from datetime import datetime
@@ -21,27 +21,34 @@ class bcolors:
     UNDERLINE = '\033[4m'
 
 def load_env() -> tuple:
-    dotenv.load_dotenv()  # take environment variables
-
-    device = os.getenv("DEVICE", "cpu")
+    """Load environment variables from .env file"""
+    load_dotenv()
+    
+    device = os.getenv("DEVICE", "cuda")
     audio_from_env = os.getenv("AUDIO_FILE_PATH")
     audio_file_list = audio_from_env.split("/") if audio_from_env else []
-    print(f"Audio file path from env: {audio_file_list} from {audio_from_env}")
     audio_file = os.path.join(*audio_file_list)
-    batch_size = 4 # reduce if low on GPU mem
-    compute_type = "int8" if device == "cpu" else "float16"
-
-    print(bcolors.HEADER +
-        f"Using device {device} with compute type {compute_type} for whisperX.\n\n" + bcolors.ENDC
+    
+    model_size = os.getenv("MODEL_SIZE", "base")
+    compute_type = os.getenv("COMPUTE_TYPE", "float16")  # float16 or int8
+    output_dir = os.getenv("OUTPUT_DIR", "./output")
+    
+    use_offline_models = int(os.getenv("USE_OFFLINE_MODELS", "0"))
+    hugging_face_token = os.getenv("HUGGING_FACE_TOKEN", "")
+    
+    print(bcolors.HEADER + 
+        f"Using device {device} with compute type {compute_type} for faster-whisper.\n" +
+        f"Model: {model_size}\n\n" + bcolors.ENDC
     )
-
+    
     print(bcolors.OKGREEN + f"Transcribing {audio_file}...\n" + bcolors.ENDC)
-    return device, audio_file, batch_size, compute_type
+    
+    return device, audio_file, model_size, compute_type, output_dir, use_offline_models, hugging_face_token
 
 
-async def transcribe_audio(device: str, audio_file: str, batch_size: int, compute_type: str):
+async def transcribe_audio(device: str, audio_file: str, batch_size: int, compute_type: str, model_size: str):
     # 1. Transcribe with original whisper (batched)
-    model = whisperx.load_model("large-v2", device, compute_type=compute_type)
+    model = whisperx.load_model(model_size, device, compute_type=compute_type)
     # audio is a np.ndarray containing the audio waveform in float32 dtype.
     audio = whisperx.load_audio(audio_file)
     result = model.transcribe(audio, batch_size=batch_size)
@@ -152,11 +159,11 @@ def format_timestamp_vtt(seconds):
 # main runner function
 async def run_whisperx():
     # load vars
-    device, audio_file, batch_size, compute_type = load_env()
+    device, audio_file, batch_size, compute_type, model_size = load_env()
     # track time taken in total for loading transcription, alignment, diarization and exporting and total time
     transcribe_start_time = datetime.now()
     # run transcription
-    transcription_result, audio = await transcribe_audio(device, audio_file, batch_size, compute_type)
+    transcription_result, audio = await transcribe_audio(device, audio_file, batch_size, compute_type, model_size)
     transcribe_end_time = datetime.now()
     print(bcolors.OKGREEN + f"Transcription completed, took {transcribe_end_time - transcribe_start_time}.\n" + bcolors.ENDC)
     print(bcolors.OKGREEN + "\nAligning with whisperX...\n" + bcolors.ENDC)
