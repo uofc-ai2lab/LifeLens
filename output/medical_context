@@ -1,0 +1,53 @@
+
+{
+  "scenario_setup": {
+    "description": "Trauma scenario with a mannequin on the floor, covered in blankets representing snow. The main injury is a pneumothorax.",
+    "patient_age": "27-year-old male",
+    "incident_type": "ATV rollover, no helmet",
+    "location": "County Road 1643",
+    "time_of_incident": "14:30"
+  },
+  "initial_assessment": {
+    "patient_responsiveness": "Unresponsive",
+    "pupil_reaction": "Reactive to light",
+    "head_neck_injuries": "Negative for decapital loss, eye injuries, mouth, nose, JVD, tracheal deviation, clavicle injuries.",
+    "lung_sounds": "No lung sounds on the right side initially, confirmed by SPEAKER_01."
+  },
+  "interventions": {
+    "pneumothorax_treatment": {
+      "action": "Needle decompression of the chest",
+      "location": "Second intercostal space, mid-clavicular, just above the rib",
+      "outcome": "Chest rise on the right side now, indicating resolution of pneumothorax."
+    },
+    "pelvic_injury_treatment": {
+      "finding": "Pelvic instability",
+      "action": "Application of a pelvic binder",
+      "outcome": "Pelvis stabilized."
+    }
+  },
+  "vitals_after_intervention": {
+    "blood_pressure": "90 over 40",
+    "heart_rate": "125"
+  },
+  "limbs_assessment": {
+    "left_leg": {
+      "injuries": "Negative",
+      "pulses": "Intact",
+      "response_to_toe_wiggling": "No response"
+    },
+    "right_leg": {
+      "injuries": "Negative",
+      "pulses": "Intact",
+      "response_to_toe_wiggling": "No response"
+    },
+    "left_arm": {
+      "pulses": "Intact",
+      "response": "No response"
+    },
+    "right_arm": {
+      "pulses": "Intact",
+      "response": "No response"
+    }
+  },
+  "next_steps": "Get the patient on a longboard and transport."
+}

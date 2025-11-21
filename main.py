@@ -7,6 +7,8 @@ from skills.save_text_output import save_text_output, TextOutputFields
 from config.settings import USER_PROXY_CONFIG
 from config.agent_config import create_agents, create_groupchat, create_manager
 import time
+import csv
+from typing import List, Dict, Union
 
 # Start time
 time_start = time.time()
@@ -16,12 +18,14 @@ time_end = time_start
 # Config
 # ----------------------------
 TRANSCRIPT_DIR = "input"
-TRANSCRIPT_FILES = ["transcript1.json", "transcript2.json"]
+# TRANSCRIPT_FILES = ["transcript1.json", "transcript2.json", "transcript.csv"]
+TRANSCRIPT_FILES = ["transcript.csv"]
+
 
 # ----------------------------
 # Load transcripts
 # ----------------------------
-def load_transcripts(transcript_dir: str, transcript_files: List[str]) -> Dict[str, dict]:
+def load_transcripts(transcript_dir: str, transcript_files: List[str]) -> Dict[str, Union[dict, list]]:
     transcripts = {}
 
     if not os.path.isdir(transcript_dir):
@@ -29,20 +33,37 @@ def load_transcripts(transcript_dir: str, transcript_files: List[str]) -> Dict[s
 
     for transcript_file in transcript_files:
         file_path = os.path.join(transcript_dir, transcript_file)
-        if not transcript_file.lower().endswith(".json"):
-            print(f"Skipping non-JSON file '{transcript_file}'")
+        file_lower = transcript_file.lower()
+
+        # Skip unsupported formats
+        if not (file_lower.endswith(".json") or file_lower.endswith(".csv")):
+            print(f"Skipping unsupported file '{transcript_file}'")
             continue
+
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read().strip()
-                if content:
-                    transcripts[transcript_file] = json.loads(content)
-                else:
-                    print(f"Warning: File '{transcript_file}' is empty.")
+            # JSON files
+            if file_lower.endswith(".json"):
+                with open(file_path, "r", encoding="utf-8") as f:
+                    content = f.read().strip()
+                    if content:
+                        transcripts[transcript_file] = json.loads(content)
+                    else:
+                        print(f"Warning: File '{transcript_file}' is empty.")
+
+            # CSV files
+            elif file_lower.endswith(".csv"):
+                with open(file_path, "r", encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    rows = list(reader)
+                    if rows:
+                        transcripts[transcript_file] = rows
+                    else:
+                        print(f"Warning: CSV file '{transcript_file}' is empty or has no rows.")
+
         except Exception as e:
             print(f"Error reading '{transcript_file}': {e}")
-    return transcripts
 
+    return transcripts
 # ----------------------------
 # User Proxy Message Handler
 # ----------------------------

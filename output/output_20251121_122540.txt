@@ -1,0 +1,588 @@
+```json
+[
+  {
+    "timestamp": "00:00:56.374",
+    "action": "patient is a 27-year-old male, ATV rollover, no helmet"
+  },
+  {
+    "timestamp": "00:01:04.078",
+    "action": "scene safe"
+  },
+  {
+    "timestamp": "00:01:14.525",
+    "action": "27-year-old male observed"
+  },
+  {
+    "timestamp": "00:01:25.849",
+    "action": "patient unresponsive"
+  },
+  {
+    "timestamp": "00:01:34.555",
+    "action": "checking for injuries"
+  },
+  {
+    "timestamp": "00:01:41.001",
+    "action": "checking pupil reactivity"
+  },
+  {
+    "timestamp": "00:01:42.242",
+    "action": "pupils reactive to light"
+  },
+  {
+    "timestamp": "00:01:44.603",
+    "action": "checking head for injuries"
+  },
+  {
+    "timestamp": "00:01:48.305",
+    "action": "no head injuries observed"
+  },
+  {
+    "timestamp": "00:01:49.406",
+    "action": "checking for JVD and tracheal deviation"
+  },
+  {
+    "timestamp": "00:01:50.808",
+    "action": "no JVD or tracheal deviation observed"
+  },
+  {
+    "timestamp": "00:01:51.909",
+    "action": "checking for clavicle injuries"
+  },
+  {
+    "timestamp": "00:01:53.875",
+    "action": "no clavicle injuries observed"
+  },
+  {
+    "timestamp": "00:01:54.114",
+    "action": "auscultating lung sounds"
+  },
+  {
+    "timestamp": "00:01:55.996",
+    "action": "no lung sounds on the right observed"
+  },
+  {
+    "timestamp": "00:02:08.448",
+    "action": "lung sounds only on left observed"
+  },
+  {
+    "timestamp": "00:02:11.911",
+    "action": "possible tension pneumothorax diagnosed"
+  },
+  {
+    "timestamp": "00:02:17.855",
+    "action": "preparing for needle decompression"
+  },
+  {
+    "timestamp": "00:02:20.150",
+    "action": "needle decompression site identified (second intercostal space, mid-clavicular, above rib)"
+  },
+  {
+    "timestamp": "00:02:25.893",
+    "action": "performing needle decompression"
+  },
+  {
+    "timestamp": "00:02:35.618",
+    "action": "needle decompression performed"
+  },
+  {
+    "timestamp": "00:02:38.260",
+    "action": "right-sided chest rise observed post-decompression"
+  },
+  {
+    "timestamp": "00:02:43.743",
+    "action": "abdomen soft"
+  },
+  {
+    "timestamp": "00:02:45.245",
+    "action": "assessing pelvis"
+  },
+  {
+    "timestamp": "00:02:48.593",
+    "action": "pelvic instability observed"
+  },
+  {
+    "timestamp": "00:02:51.096",
+    "action": "applying pelvic binder"
+  },
+  {
+    "timestamp": "00:03:32.471",
+    "action": "pelvis stabilized"
+  },
+  {
+    "timestamp": "00:03:33.610",
+    "action": "assessing left leg for injuries"
+  },
+  {
+    "timestamp": "00:03:37.812",
+    "action": "no left leg injuries observed"
+  },
+  {
+    "timestamp": "00:03:38.492",
+    "action": "checking left leg pulses"
+  },
+  {
+    "timestamp": "00:03:39.393",
+    "action": "left leg pulses intact"
+  },
+  {
+    "timestamp": "00:03:40.873",
+    "action": "checking left foot sensation/movement"
+  },
+  {
+    "timestamp": "00:03:41.933",
+    "action": "no response from left toes"
+  },
+  {
+    "timestamp": "00:03:43.193",
+    "action": "assessing right leg for injuries"
+  },
+  {
+    "timestamp": "00:03:44.715",
+    "action": "no right leg injuries observed"
+  },
+  {
+    "timestamp": "00:03:46.515",
+    "action": "starting blood pressure measurement"
+  },
+  {
+    "timestamp": "00:03:48.575",
+    "action": "checking pulse"
+  },
+  {
+    "timestamp": "00:03:49.597",
+    "action": "pulse intact"
+  },
+  {
+    "timestamp": "00:03:51.478",
+    "action": "checking left arm pulse"
+  },
+  {
+    "timestamp": "00:03:53.718",
+    "action": "left arm pulse intact"
+  },
+  {
+    "timestamp": "00:03:58.461",
+    "action": "checking right arm pulses"
+  },
+  {
+    "timestamp": "00:04:00.042",
+    "action": "right arm pulse intact"
+  },
+  {
+    "timestamp": "00:04:01.342",
+    "action": "blood pressure 90/40"
+  },
+  {
+    "timestamp": "00:04:04.144",
+    "action": "heart rate 125"
+  },
+  {
+    "timestamp": "00:04:15.509",
+    "action": "right pneumothorax resolved"
+  },
+  {
+    "timestamp": "00:04:19.932",
+    "action": "pelvis stabilized"
+  },
+  {
+    "timestamp": "00:04:21.377",
+    "action": "preparing for longboard and transport"
+  }
+]
+``````json
+[
+  {
+    "timestamp": "00:00:56.374",
+    "action": "patient is a 27-year-old male, ATV rollover, no helmet"
+  },
+  {
+    "timestamp": "00:01:04.078",
+    "action": "scene safe"
+  },
+  {
+    "timestamp": "00:01:14.525",
+    "action": "27-year-old male observed"
+  },
+  {
+    "timestamp": "00:01:25.849",
+    "action": "patient unresponsive"
+  },
+  {
+    "timestamp": "00:01:33.174",
+    "action": "patient unresponsive"
+  },
+  {
+    "timestamp": "00:01:34.555",
+    "action": "checking for injuries"
+  },
+  {
+    "timestamp": "00:01:41.001",
+    "action": "checking pupil reactivity"
+  },
+  {
+    "timestamp": "00:01:42.242",
+    "action": "pupils reactive to light"
+  },
+  {
+    "timestamp": "00:01:44.603",
+    "action": "checking head for injuries"
+  },
+  {
+    "timestamp": "00:01:48.305",
+    "action": "no head injuries observed"
+  },
+  {
+    "timestamp": "00:01:49.406",
+    "action": "checking for JVD and tracheal deviation"
+  },
+  {
+    "timestamp": "00:01:50.808",
+    "action": "no JVD or tracheal deviation observed"
+  },
+  {
+    "timestamp": "00:01:51.909",
+    "action": "checking for clavicle injuries"
+  },
+  {
+    "timestamp": "00:01:53.875",
+    "action": "no clavicle injuries observed"
+  },
+  {
+    "timestamp": "00:01:54.114",
+    "action": "auscultating lung sounds"
+  },
+  {
+    "timestamp": "00:01:55.996",
+    "action": "no lung sounds on the right observed"
+  },
+  {
+    "timestamp": "00:02:08.448",
+    "action": "lung sounds only on left observed"
+  },
+  {
+    "timestamp": "00:02:11.911",
+    "action": "possible tension pneumothorax diagnosed"
+  },
+  {
+    "timestamp": "00:02:17.836",
+    "action": "preparing for needle decompression"
+  },
+  {
+    "timestamp": "00:02:20.150",
+    "action": "needle decompression site identified (second intercostal space, mid-clavicular, just above the rib)"
+  },
+  {
+    "timestamp": "00:02:25.893",
+    "action": "performing needle decompression"
+  },
+  {
+    "timestamp": "00:02:34.038",
+    "action": "needle decompression performed"
+  },
+  {
+    "timestamp": "00:02:38.260",
+    "action": "right-sided chest rise observed post-decompression"
+  },
+  {
+    "timestamp": "00:02:43.743",
+    "action": "abdomen soft"
+  },
+  {
+    "timestamp": "00:02:45.245",
+    "action": "assessing pelvis"
+  },
+  {
+    "timestamp": "00:02:48.593",
+    "action": "pelvic instability observed"
+  },
+  {
+    "timestamp": "00:02:51.096",
+    "action": "applying pelvic binder"
+  },
+  {
+    "timestamp": "00:03:32.471",
+    "action": "pelvis stabilized"
+  },
+  {
+    "timestamp": "00:03:33.610",
+    "action": "assessing left leg for injuries"
+  },
+  {
+    "timestamp": "00:03:37.812",
+    "action": "no left leg injuries observed"
+  },
+  {
+    "timestamp": "00:03:38.492",
+    "action": "checking left leg pulses"
+  },
+  {
+    "timestamp": "00:03:39.393",
+    "action": "left leg pulses intact"
+  },
+  {
+    "timestamp": "00:03:40.873",
+    "action": "checking left foot sensation/movement"
+  },
+  {
+    "timestamp": "00:03:41.933",
+    "action": "no response from left toes"
+  },
+  {
+    "timestamp": "00:03:43.193",
+    "action": "assessing right leg for injuries"
+  },
+  {
+    "timestamp": "00:03:44.715",
+    "action": "no right leg injuries observed"
+  },
+  {
+    "timestamp": "00:03:46.515",
+    "action": "starting blood pressure measurement"
+  },
+  {
+    "timestamp": "00:03:48.575",
+    "action": "checking pulse"
+  },
+  {
+    "timestamp": "00:03:49.597",
+    "action": "pulse intact"
+  },
+  {
+    "timestamp": "00:03:51.478",
+    "action": "checking left arm pulse"
+  },
+  {
+    "timestamp": "00:03:53.718",
+    "action": "left arm pulse intact"
+  },
+  {
+    "timestamp": "00:03:58.461",
+    "action": "checking right arm pulses"
+  },
+  {
+    "timestamp": "00:04:00.042",
+    "action": "right arm pulse intact"
+  },
+  {
+    "timestamp": "00:04:01.342",
+    "action": "blood pressure 90/40"
+  },
+  {
+    "timestamp": "00:04:04.144",
+    "action": "heart rate 125"
+  },
+  {
+    "timestamp": "00:04:15.509",
+    "action": "right pneumothorax resolved"
+  },
+  {
+    "timestamp": "00:04:19.932",
+    "action": "pelvis stabilized"
+  },
+  {
+    "timestamp": "00:04:21.377",
+    "action": "preparing for longboard and transport"
+  }
+]
+``````json
+[
+  {
+    "timestamp": "00:00:56.374",
+    "action": "patient identified as 27-year-old male, ATV rollover, no helmet"
+  },
+  {
+    "timestamp": "00:01:04.078",
+    "action": "scene safe"
+  },
+  {
+    "timestamp": "00:01:14.525",
+    "action": "patient observed as 27-year-old male"
+  },
+  {
+    "timestamp": "00:01:25.849",
+    "action": "patient unresponsive"
+  },
+  {
+    "timestamp": "00:01:33.174",
+    "action": "patient unresponsive confirmed"
+  },
+  {
+    "timestamp": "00:01:34.555",
+    "action": "checking for injuries"
+  },
+  {
+    "timestamp": "00:01:38.578",
+    "action": "using penlight to check eyes"
+  },
+  {
+    "timestamp": "00:01:42.242",
+    "action": "pupils reactive to light"
+  },
+  {
+    "timestamp": "00:01:44.603",
+    "action": "checking head for injuries (decapital loss, eye injuries, mouth, nose)"
+  },
+  {
+    "timestamp": "00:01:48.305",
+    "action": "no head injuries observed"
+  },
+  {
+    "timestamp": "00:01:49.406",
+    "action": "checking for JVD and tracheal deviation"
+  },
+  {
+    "timestamp": "00:01:50.808",
+    "action": "no JVD or tracheal deviation observed"
+  },
+  {
+    "timestamp": "00:01:51.909",
+    "action": "checking for clavicle injuries"
+  },
+  {
+    "timestamp": "00:01:53.875",
+    "action": "no clavicle injuries observed"
+  },
+  {
+    "timestamp": "00:01:54.114",
+    "action": "auscultating lung sounds"
+  },
+  {
+    "timestamp": "00:01:55.996",
+    "action": "no lung sounds on the right side observed"
+  },
+  {
+    "timestamp": "00:02:08.448",
+    "action": "lung sounds only on the left side observed"
+  },
+  {
+    "timestamp": "00:02:11.911",
+    "action": "possible tension pneumothorax diagnosed"
+  },
+  {
+    "timestamp": "00:02:17.855",
+    "action": "preparing to needle decompress the chest"
+  },
+  {
+    "timestamp": "00:02:20.150",
+    "action": "identifying needle decompression site: second intercostal space, mid-clavicular, just above the rib"
+  },
+  {
+    "timestamp": "00:02:25.893",
+    "action": "performing needle decompression"
+  },
+  {
+    "timestamp": "00:02:34.038",
+    "action": "needle decompression performed"
+  },
+  {
+    "timestamp": "00:02:38.260",
+    "action": "chest rise on the right side observed post-decompression"
+  },
+  {
+    "timestamp": "00:02:43.743",
+    "action": "abdomen is soft"
+  },
+  {
+    "timestamp": "00:02:45.245",
+    "action": "assessing pelvis"
+  },
+  {
+    "timestamp": "00:02:48.593",
+    "action": "pelvic instability observed"
+  },
+  {
+    "timestamp": "00:02:51.096",
+    "action": "applying a pelvic binder"
+  },
+  {
+    "timestamp": "00:03:32.471",
+    "action": "pelvis stabilized"
+  },
+  {
+    "timestamp": "00:03:33.610",
+    "action": "checking left leg for injuries"
+  },
+  {
+    "timestamp": "00:03:37.812",
+    "action": "no left leg injuries observed"
+  },
+  {
+    "timestamp": "00:03:38.492",
+    "action": "checking left leg pulses"
+  },
+  {
+    "timestamp": "00:03:39.393",
+    "action": "left leg pulses intact"
+  },
+  {
+    "timestamp": "00:03:40.873",
+    "action": "checking left foot sensation/movement (toes)"
+  },
+  {
+    "timestamp": "00:03:41.933",
+    "action": "no response from left toes"
+  },
+  {
+    "timestamp": "00:03:43.193",
+    "action": "checking right leg for injuries"
+  },
+  {
+    "timestamp": "00:03:44.715",
+    "action": "no right leg injuries observed"
+  },
+  {
+    "timestamp": "00:03:46.515",
+    "action": "starting blood pressure measurement"
+  },
+  {
+    "timestamp": "00:03:49.597",
+    "action": "pulse intact (unspecified limb, likely right arm for BP)"
+  },
+  {
+    "timestamp": "00:03:51.478",
+    "action": "checking left arm pulse"
+  },
+  {
+    "timestamp": "00:03:53.718",
+    "action": "left arm pulse intact"
+  },
+  {
+    "timestamp": "00:03:54.659",
+    "action": "no response from left arm (sensation/movement)"
+  },
+  {
+    "timestamp": "00:03:58.461",
+    "action": "checking right arm pulses"
+  },
+  {
+    "timestamp": "00:04:00.042",
+    "action": "right arm pulse intact"
+  },
+  {
+    "timestamp": "00:04:01.342",
+    "action": "blood pressure is 90/40"
+  },
+  {
+    "timestamp": "00:04:04.144",
+    "action": "heart rate is 125"
+  },
+  {
+    "timestamp": "00:04:15.509",
+    "action": "right pneumothorax resolved"
+  },
+  {
+    "timestamp": "00:04:18.011",
+    "action": "monitoring right side for re-inflation"
+  },
+  {
+    "timestamp": "00:04:19.932",
+    "action": "pelvis is stabilized"
+  },
+  {
+    "timestamp": "00:04:21.377",
+    "action": "preparing to place patient on longboard for transport"
+  }
+]
+```Great! I'm glad to hear you've successfully extracted the medical context and saved it.
+
+I'm ready for your next transcript whenever you are.
