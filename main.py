@@ -17,6 +17,9 @@ async def main():
     if args.service == "whisperx":
         from whisperX.whisper import run_whisperx
         await run_whisperx()
+    elif args.service == "faster-whisper":
+        from Faster_Whisper.transcribe_faster import run_faster_whisper
+        await run_faster_whisper()
     else:
         print(f"Service {args.service} not recognized.")
     

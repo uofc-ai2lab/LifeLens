@@ -219,3 +219,5 @@ Synthetic-Medical-Audio/cv-corpus-audio/
 
 # whisperX huggingface models
 whisperX/pyannote_models/
+
+# faster whisper jetson-containers
