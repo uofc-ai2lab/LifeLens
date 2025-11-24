@@ -1,6 +1,7 @@
 import spacy
 import pandas as pd
 import os
+import json
 from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
 
 # 1. Load transcript CSV
@@ -19,11 +20,12 @@ ner_pipeline = pipeline("ner", model=ner_model, tokenizer=tokenizer, aggregation
 
 def process_nlp():
     """NLP pipeline: SpaCy + BioClinicalBERT NER."""
-    df = load_transcript_csv()
+    df = load_transcript_csv("trauma_scene_transcript.csv")
     processed_data = []
 
     for _, row in df.iterrows():
         doc = nlp(row["text"])
+        segment_time = f"{row['start']} - {row['end']}"
 
         # SpaCy features
         tokens = []
@@ -43,20 +45,22 @@ def process_nlp():
 
         # BioClinicalBERT NER
         ner_results = ner_pipeline(row["text"])
-        entities = [{"entity": e["entity_group"], "text": e["word"], "score": round(e["score"], 3)} for e in ner_results]
+        entities = [{"entity": e["entity_group"], "text": e["word"], "score": round(float(e["score"]), 3)} for e in ner_results]
 
         processed_data.append({
             "speaker": row["speaker"],
+            "original_text": row["text"],
+            "segment_time": segment_time,
             "tokens": tokens,
             "dependencies": dependencies,
-            "entities": entities  # Added NER results
+            "entities": entities,  # Added NER results
         })
+        
+    with open("nlpOutput.json", "w") as f:
+        json.dump(processed_data, f, indent=4)
     return processed_data
 
 def run_nlp():
     print("Running full NLP pipeline...")
     data = process_nlp()
-    for item in data:
-        print(item)
-
 run_nlp()
