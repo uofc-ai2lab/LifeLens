@@ -1,4 +1,74 @@
-# Python
+# OS / Editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyd
+*.pyo
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Logs
+*.log
+
+# Generic output folders (keep code clean)
+**/outputs/**
+runs/
+
+# Ultralytics default runs directory sometimes created at repo root
+**/runs/**
+
+# ObjectDetection artifacts (all under VisualProcessing)
+VisualProcessing/ObjectDetection/outputs/
+VisualProcessing/ObjectDetection/outputs/**
+VisualProcessing/ObjectDetection/Priv_personpart/Json_Annos/
+VisualProcessing/ObjectDetection/Priv_personpart/Annotations/*
+VisualProcessing/ObjectDetection/Priv_personpart/ImageSets/*
+VisualProcessing/ObjectDetection/Priv_personpart/Images/*
+
+
+# Large datasets - keep only small curated samples
+# Place any small demo images under a "samples/" folder to include them.
+VisualProcessing/Classification/ImageData/images/*
+!VisualProcessing/Classification/ImageData/images/samples/
+!VisualProcessing/Classification/ImageData/images/samples/**
+
+
+# Classification experiment artifacts
+VisualProcessing/Classification/experiments/checkpoints/
+VisualProcessing/Classification/experiments/**/checkpoints/
+VisualProcessing/Classification/experiments/previews/
+
+# WhisperX generated data
+whisperX/output/
+whisperX/output/**
+
+# Caches
+.cache/
+**/.cache/**
+
+# Env files
+*.env
+!whisperX/sample.env
+
+# Windows PowerShell transient
+*.ps1.tmp# Python
 __pycache__/
 *.py[cod]
 *.pyo
@@ -241,6 +311,8 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+
 
 # Marimo
 marimo/_static/
