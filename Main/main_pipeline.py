@@ -15,7 +15,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from VisualProcessing.ObjectDetection.detect_body_parts import run_detection, detect_and_train_classification
+from VisualProcessing.ObjectDetection.detect_body_parts import run_detection
+from VisualProcessing.Classification.ClassificationModels.simple_train_swin_tiny import train_swin_tiny
 
 # ----------------------- CONFIG (edit as needed) -----------------------
 # Source images directory (use the provided ImageSamples subset for quick iteration)
@@ -25,7 +26,8 @@ PIPELINE_ROOT = "Main/PipelineOutputs"
 # Subfolders for detection and classification stage outputs
 DETECTION_OUTPUT = f"{PIPELINE_ROOT}/DetectionOutput"
 CLASSIFICATION_OUTPUT = f"{PIPELINE_ROOT}/ClassificationOutput"
-CLASSIFICATION_EXPORT = f"{CLASSIFICATION_OUTPUT}/parts_dataset"
+CLASSIFICATION_EXPORT = f"{CLASSIFICATION_OUTPUT}/parts_dataset"  # legacy ImageFolder export (not needed when parsing filenames)
+USE_DETECTION_CROPS_FOR_TRAINING = True  # train directly from detection crops filenames
 # Detection parameters
 DETECTION_MODEL = "MnLgt/yolo-human-parse"  # or local .pt
 MAX_IMAGES = 200            # set <=0 to use all
@@ -68,27 +70,33 @@ def main():
         debug=DEBUG,
         alpha_png=ALPHA_PNG,
         max_images=MAX_IMAGES,
-        classification_export_dir=CLASSIFICATION_EXPORT,
+        classification_export_dir=(None if USE_DETECTION_CROPS_FOR_TRAINING else CLASSIFICATION_EXPORT),
     )
-    export_dir = detection_summary.get("classification_export_dir")
-    if not export_dir:
-        print("[pipeline] No classification export directory produced; skipping classification stage.")
+    crops_root = Path(DETECTION_OUTPUT) / "crops"
+    if not crops_root.exists():
+        print(f"[pipeline] No crops directory found at {crops_root}; aborting classification.")
+        return
+    # Count crops
+    crop_count = sum(1 for _ in crops_root.rglob("*.jpg"))
+    if crop_count == 0:
+        print(f"[pipeline] No crop images found under {crops_root}; cannot train.")
         return
 
-    # Ensure export dir exists (run_detection should have created it)
-    Path(export_dir).mkdir(parents=True, exist_ok=True)
-
-    print("[pipeline] Detection complete. Starting classification phase...")
-    cls_result = detect_and_train_classification(
-        detection_export_dir=export_dir,
-        classification_epochs=CLS_EPOCHS,
-        classification_batch_size=CLS_BATCH_SIZE,
-        classification_img_size=CLS_IMG_SIZE,
-        classification_val_ratio=CLS_VAL_RATIO,
-        classification_test_ratio=CLS_TEST_RATIO,
-        classification_lr=CLS_LR,
-        classification_split_seed=CLS_SPLIT_SEED,
+    print("[pipeline] Detection complete. Starting classification phase from detection crops...")
+    cls_result = train_swin_tiny(
+        data_dir=None,
+        from_detection_crops=True,
+        detection_crops_root=str(crops_root),
+        detection_label_position=-2,  # part token in <stem>_<part>_<idx>
+        epochs=CLS_EPOCHS,
+        batch_size=CLS_BATCH_SIZE,
+        img_size=CLS_IMG_SIZE,
+        val_ratio=CLS_VAL_RATIO,
+        test_ratio=CLS_TEST_RATIO,
+        lr=CLS_LR,
+        split_seed=CLS_SPLIT_SEED,
         freeze_backbone=CLS_FREEZE_BACKBONE,
+        save_root=str(Path("experiments/checkpoints/parts_from_detection")),
     )
 
     print("[pipeline] Classification complete.")
@@ -96,8 +104,8 @@ def main():
     print({
         "pipeline_root": PIPELINE_ROOT,
         "detection_output": detection_summary["output"],
-        "classification_output_root": CLASSIFICATION_OUTPUT,
-        "classification_export_dataset": export_dir,
+        "crops_used": str(crops_root),
+        "crop_count": crop_count,
         "best_val_accuracy": cls_result.get("best_val_accuracy"),
         "val_metrics": cls_result.get("val_metrics"),
         "checkpoint_path": cls_result.get("checkpoint_path"),

@@ -4,7 +4,7 @@ Handles split, training loop, metrics, checkpoint and confusion matrix.
 
 import argparse
 import os
-from typing import Tuple, Optional, Dict, Any
+from typing import Tuple, Optional, Dict, Any, List
 
 import time
 import torch
@@ -12,6 +12,7 @@ import torch.nn as nn
 from torch.optim import AdamW
 from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms
+import time
 import timm
 import numpy as np
 from sklearn.metrics import (
@@ -54,6 +55,7 @@ def build_dataloaders_from_folder(
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
+
 
     train_dataset = datasets.ImageFolder(root=data_root, transform=train_transforms)
     val_dataset = datasets.ImageFolder(root=data_root, transform=val_transforms)
@@ -101,6 +103,114 @@ def build_dataloaders_from_folder(
             pin_memory = pin_memory,
         )
     return train_loader, val_loader, test_loader, train_dataset.classes
+
+
+def build_dataloaders_from_detection_crops(
+    crops_root: str,
+    image_size: int = 224,
+    batch_size: int = 32,
+    num_workers: int = 0,
+    validation_ratio: float = 0.2,
+    test_ratio: float = 0.0,
+    split_seed: int | None = None,
+    pin_memory: bool = False,
+    filename_delimiter: str = "_",
+    label_position: int = -2,
+) -> Tuple[DataLoader, DataLoader, Optional[DataLoader], List[str]]:
+    """Create dataloaders from detection crop directory structure.
+
+    Expects files named like: <origstem>_<part>_<idx>.jpg (default pattern)
+    label_position chooses which token from split(filename_without_ext) is treated as class label.
+    label_position = -2 matches the part token in pattern above.
+
+    Args:
+        crops_root: Path to detection output 'crops' directory.
+        image_size: Target resize/crop size.
+        batch_size: Batch size.
+        validation_ratio: Fraction for validation.
+        test_ratio: Fraction for optional test set.
+        split_seed: Random seed for splitting.
+        filename_delimiter: Delimiter used in crop filenames.
+        label_position: Index of token to extract class label.
+    Returns:
+        (train_loader, val_loader, test_loader, class_names)
+    """
+    train_transforms = transforms.Compose([
+        transforms.Resize(int(image_size * 1.15)),
+        transforms.RandomResizedCrop(image_size, scale=(0.7, 1.0)),
+        transforms.RandomHorizontalFlip(p=0.5),
+        transforms.RandomVerticalFlip(p=0.2),
+        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.02),
+        transforms.RandomGrayscale(p=0.1),
+        transforms.RandomAutocontrast(p=0.2),
+        transforms.RandomAdjustSharpness(sharpness_factor=1.5, p=0.2),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        transforms.RandomErasing(p=0.1, scale=(0.02, 0.2), value=0),
+    ])
+    val_transforms = transforms.Compose([
+        transforms.Resize(int(image_size * 1.15)),
+        transforms.CenterCrop(image_size),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+
+    exts = {".jpg", ".jpeg", ".png"}
+    all_files: List[str] = []
+    for root, _, files in os.walk(crops_root):
+        for f in files:
+            p = os.path.join(root, f)
+            if os.path.splitext(f)[1].lower() in exts:
+                all_files.append(p)
+    if not all_files:
+        raise RuntimeError(f"No crop images found under {crops_root}")
+    labels: List[str] = []
+    for f in all_files:
+        name = os.path.splitext(os.path.basename(f))[0]
+        tokens = name.split(filename_delimiter)
+        if len(tokens) < abs(label_position):
+            continue
+        label = tokens[label_position]
+        labels.append(label)
+    class_names = sorted(set(labels))
+    class_to_idx = {c: i for i, c in enumerate(class_names)}
+    samples = [(fp, class_to_idx[os.path.splitext(os.path.basename(fp))[0].split(filename_delimiter)[label_position]]) for fp in all_files if os.path.splitext(os.path.basename(fp))[0].split(filename_delimiter)[label_position] in class_to_idx]
+    if not samples:
+        raise RuntimeError("No labeled samples extracted from crop filenames")
+
+    _split_seed = split_seed if split_seed is not None else int(time.time() * 1000) % (2**32)
+    g = torch.Generator().manual_seed(_split_seed)
+    perm = torch.randperm(len(samples), generator=g).tolist()
+    num_val = int(len(samples) * validation_ratio)
+    num_test = int(len(samples) * test_ratio)
+    val_idx = perm[:num_val]
+    test_idx = perm[num_val:num_val+num_test]
+    train_idx = perm[num_val+num_test:]
+
+    class CropDataset(torch.utils.data.Dataset):
+        def __init__(self, items: List[Tuple[str,int]], transform):
+            self.items = items
+            self.transform = transform
+        def __len__(self):
+            return len(self.items)
+        def __getitem__(self, i):
+            path, label = self.items[i]
+            from PIL import Image
+            img = Image.open(path).convert("RGB")
+            if self.transform:
+                img = self.transform(img)
+            return img, label
+
+    train_ds = CropDataset([samples[i] for i in train_idx], train_transforms)
+    val_ds = CropDataset([samples[i] for i in val_idx], val_transforms)
+    test_ds = CropDataset([samples[i] for i in test_idx], val_transforms) if num_test > 0 else None
+
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=pin_memory)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
+    test_loader = None
+    if test_ds is not None:
+        test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
+    return train_loader, val_loader, test_loader, class_names
 
 
 def create_model(num_classes: int, pretrained: bool = True) -> nn.Module:
@@ -237,34 +347,59 @@ def plot_confusion_matrix_image(
     print(f"Saved confusion matrix image to {save_path}")
 
 
-def main():
-    """CLI entry point."""
-    parser = argparse.ArgumentParser(description="Simple training using folder structure (single-label) - Swin-Tiny")
-    parser.add_argument("--data-dir", type=str, default="VisualProcessing/Classification/ImageData/images/Wound_dataset", help="Folder with class subfolders (e.g., VisualProcessing/Classification/ImageData/images/Wound_dataset)")
-    parser.add_argument("--epochs", type=int, default=5)
-    parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--img-size", type=int, default=224)
-    parser.add_argument("--num-workers", type=int, default=0)
-    parser.add_argument("--val-ratio", type=float, default=0.2, help="Fraction of data for validation (default 0.2)")
-    parser.add_argument("--test-ratio", type=float, default=0.0, help="Fraction of data for test (default 0.0 - disabled)")
-    parser.add_argument("--lr", type=float, default=3e-4)
-    parser.add_argument("--split-seed", type=int, default=None, help="Seed for train/val split. Default: random each run")
-    parser.add_argument("--freeze-backbone", action="store_true", help="Freeze all but the final classifier (if supported)")
-    args = parser.parse_args()
+def train_swin_tiny(
+    data_dir: Optional[str] = None,
+    epochs: int = 5,
+    batch_size: int = 32,
+    img_size: int = 224,
+    val_ratio: float = 0.2,
+    test_ratio: float = 0.0,
+    lr: float = 3e-4,
+    split_seed: int | None = None,
+    freeze_backbone: bool = False,
+    num_workers: int = 0,
+    device: Optional[torch.device] = None,
+    save_root: str = "experiments/checkpoints/simple",
+    make_confusion_matrices: bool = True,
+    from_detection_crops: bool = False,
+    detection_crops_root: Optional[str] = None,
+    detection_label_position: int = -2,
+) -> Dict[str, Any]:
+    """Train Swin Tiny on an ImageFolder dataset and return metrics.
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+    Minimal callable entrypoint so other scripts (e.g. detection pipeline) can import and invoke
+    without depending on CLI argument parsing.
+    """
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     pin_memory = (device.type == "cuda")
-    train_loader, val_loader, test_loader, class_names = build_dataloaders_from_folder(
-        data_root=data_dir,
-        image_size=img_size,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        validation_ratio=val_ratio,
-        test_ratio=test_ratio,
-        split_seed=split_seed,
-        pin_memory=pin_memory,
-    )
+    if from_detection_crops:
+        if not detection_crops_root:
+            raise ValueError("detection_crops_root must be provided when from_detection_crops=True")
+        train_loader, val_loader, test_loader, class_names = build_dataloaders_from_detection_crops(
+            crops_root=detection_crops_root,
+            image_size=img_size,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            validation_ratio=val_ratio,
+            test_ratio=test_ratio,
+            split_seed=split_seed,
+            pin_memory=pin_memory,
+            label_position=detection_label_position,
+        )
+    else:
+        if not data_dir:
+            raise ValueError("data_dir must be provided when from_detection_crops=False")
+        train_loader, val_loader, test_loader, class_names = build_dataloaders_from_folder(
+            data_root=data_dir,
+            image_size=img_size,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            validation_ratio=val_ratio,
+            test_ratio=test_ratio,
+            split_seed=split_seed,
+            pin_memory=pin_memory,
+        )
     num_classes = len(class_names)
     model = create_model(num_classes=num_classes, pretrained=True).to(device)
     if freeze_backbone:
