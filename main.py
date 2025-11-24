@@ -9,7 +9,7 @@ async def main():
     parser.add_argument(
         "service",
         type=str,
-        choices=["whisperx"],  # Add other services as needed
+        choices=["whisperx", "faster_whisper", "whispertrt"],  # Add other services as needed
         help="The microservice to run",
     )
     args = parser.parse_args()
