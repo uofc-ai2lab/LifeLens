@@ -216,7 +216,7 @@ Synthetic-Medical-Audio/cv-corpus-audio/
 **/venv311/
 **/venv/
 **/.venv/
-**/.venv_nlp/
+**/venv_nlp/
 
 # whisperX huggingface models
 whisperX/pyannote_models/

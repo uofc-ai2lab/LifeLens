@@ -13,10 +13,10 @@ Here’s a **concise README snippet** for your project:
 ## Setup
 
 1. **Create and activate a Python virtual environment**:
-* Until we havae a unified venv for the project with percise versions we will need to create separate ones.
+* Until we have a unified venv for the project with percise versions we will need to create separate ones.
 
 ```bash
-python3 -m venv venv_nlp
+python3.11 -m venv venv_nlp
 source venv_nlp/bin/activate
 ```
 
@@ -29,8 +29,14 @@ python -m spacy download en_core_web_sm
 
 3. **Download required models and data**:
 
+* How to install wget for bellow MedCAT model: 
+  - Windows  :  winget install GnuWin32.Wget or use Git Bash (comes with wget)
+  - Mac  :  brew install wget
+
+
+* cd nlpPipeline
 ```bash
-cd nlpPipeline
+cd ..
 mkdir -p data_p3.2
 DATA_DIR="./data_p3.2/"
 
