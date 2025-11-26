@@ -6,6 +6,8 @@ from pyannote.audio import Pipeline
 import pandas as pd
 import torch
 
+PYANNOTE_MODEL = "pyannote/speaker-diarization-3.1"
+
 class bcolors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -32,6 +34,8 @@ def load_env() -> tuple:
     
     use_offline_models = int(os.getenv("USE_OFFLINE_MODELS", "0"))
     hugging_face_token = os.getenv("HUGGING_FACE_TOKEN", "")
+
+    pyannote_cache_dir = os.getenv("PYANNOTE_CACHE_DIR", "./pyannote_models")
     
     print(bcolors.HEADER + 
         f"Using device {device} with compute type {compute_type} for faster-whisper.\n" +
@@ -40,7 +44,7 @@ def load_env() -> tuple:
     
     print(bcolors.OKGREEN + f"Transcribing {audio_file}...\n" + bcolors.ENDC)
     
-    return device, audio_file, model_size, compute_type, output_dir, use_offline_models, hugging_face_token
+    return device, audio_file, model_size, compute_type, output_dir, use_offline_models, hugging_face_token, pyannote_cache_dir
 
 async def transcribe_audio(device: str, audio_file: str, model_size: str, compute_type: str):
     """Transcribe audio using faster-whisper"""
@@ -83,18 +87,16 @@ async def transcribe_audio(device: str, audio_file: str, model_size: str, comput
     
     return result
 
-async def assign_speakers(device: str, audio_file: str, result: dict, use_offline_models: int, hugging_face_token: str):
+async def assign_speakers(device: str, audio_file: str, result: dict, use_offline_models: int, hugging_face_token: str, pyannote_cache_dir: str):
     """Assign speakers using pyannote"""
     print(bcolors.OKBLUE + "Running diarization...\n" + bcolors.ENDC)
     diarize_start = datetime.now()
     
     if use_offline_models:
         print(bcolors.OKBLUE + "Using offline pyannote models for diarization.\n" + bcolors.ENDC)
-        pyannote_cache_dir = os.getenv("PYANNOTE_CACHE_DIR", "./pyannote_models")
-        os.environ['HF_HUB_OFFLINE'] = '1'
         
         diarize_model = Pipeline.from_pretrained(
-            "pyannote/speaker-diarization-3.1",
+            PYANNOTE_MODEL,
             cache_dir=pyannote_cache_dir
         )
     else:
@@ -171,7 +173,7 @@ def format_timestamp(seconds: float) -> str:
 async def run_faster_whisper():
     """Main runner function for faster-whisper transcription with diarization"""
     # Load environment variables
-    device, audio_file, model_size, compute_type, output_dir, use_offline_models, hugging_face_token = load_env()
+    device, audio_file, model_size, compute_type, output_dir, use_offline_models, hugging_face_token, pyannote_cache_dir = load_env()
     
     # Track total time
     total_start = datetime.now()
@@ -184,7 +186,7 @@ async def run_faster_whisper():
     # Diarization
     print(bcolors.OKGREEN + "\nDiarizing with pyannote...\n" + bcolors.ENDC)
     diarize_start = datetime.now()
-    result = await assign_speakers(device, audio_file, result, use_offline_models, hugging_face_token)
+    result = await assign_speakers(device, audio_file, result, use_offline_models, hugging_face_token, pyannote_cache_dir)
     diarize_end = datetime.now()
     
     # Export
