@@ -13,37 +13,6 @@ bash install.sh
 source ~/.bashrc
 ```
 
-# create .env
-Create a `.env` file in your project directory:
-```properties
-#### faster-whisper Configuration ####
-
-# Hugging Face Token (get from: https://huggingface.co/settings/tokens)
-# Required for speaker diarization
-HUGGING_FACE_TOKEN=hf_your_token_here
-
-# Device: cuda (GPU) or cpu
-DEVICE=cuda
-
-# Model: tiny, base, small, medium, large-v2, large-v3
-# Recommended: base (good balance of speed/accuracy)
-MODEL_SIZE=base
-
-# Compute Type: float16 (better quality) or int8 (faster)
-COMPUTE_TYPE=float16
-
-# Audio file path (relative to .env file, use forward slashes)
-AUDIO_FILE_PATH=./audio_data/your_audio.mp3
-
-# Output directory
-OUTPUT_DIR=./output
-
-# Pyannote cache directory (for offline diarization models)
-PYANNOTE_CACHE_DIR=./pyannote_models
-
-# Use offline models: 0 (download from internet) or 1 (use cached)
-USE_OFFLINE_MODELS=0
-```
 
 ### Environment Variables Explained
 
