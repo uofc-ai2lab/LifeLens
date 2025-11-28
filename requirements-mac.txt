@@ -16,3 +16,5 @@ protobuf<=3.20.1
 pathlib; python_version < "3.4"
 pyqt5<5.13; extra == "spyder"
 pyqtwebengine<5.13; extra == "spyder"
+spacy>=3.7.0
+en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0.tar.gz
