@@ -1,18 +1,32 @@
-Data layout
+Image data layout
 
-- Put all your images under `data/images/` (you can also add subfolders; paths in CSV can be relative to this root or absolute).
-- Create two CSV files: `data/train.csv` and `data/val.csv` with the following columns:
-  - `image_path`: Path to the image file (relative like `images/foo.jpg` or absolute `C:/.../foo.jpg`).
-  - `labels`: Semicolon-separated class names (e.g., `Bruise;Laceration`). Use exact class spellings from `experiments/config.yaml`.
+The Swin-Tiny trainer performs its own train/val (and optional test) split directly from an ImageFolder structure.
 
-Example rows:
+Directory structure:
+```
+VisualProcessing/Classification/ImageData/images/Wound_dataset/
+  Abrasion/
+    img001.jpg
+    ...
+  Bruise/
+  Burn/
+  Cut/
+  Laceration/
+  Stab_wound/
+  Normal skin/
+```
 
-image_path,labels
-images/001.jpg,Bruise
-images/002.jpg,Laceration;Bruise
-images/003.jpg,Normal skin
+Run:
+```bash
+python VisualProcessing/Classification/ClassificationModels/simple_train_swin_tiny.py \
+  --data-dir VisualProcessing/Classification/ImageData/images/Wound_dataset \
+  --epochs 5 --val-ratio 0.2 --split-seed 42
+```
 
-images sources:
+Flags:
+- `--test-ratio` adds a held-out test subset.
+- `--split-seed` makes the split reproducible.
+
+Image source:
 https://www.kaggle.com/datasets/yasinpratomo/wound-dataset?resource=download
 
-If you're not sure how to split your 400 images, you can use the helper script `scripts/make_csv_from_folder.py` to auto-split and generate CSVs.

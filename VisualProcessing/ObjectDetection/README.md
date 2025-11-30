@@ -19,19 +19,14 @@ Dataset Assets (Priv_personpart):
 Pipeline Phase 1 (current):
 1. Load YOLO segmentation model.
 2. Run inference on an image or folder.
-3. For selected part classes, derive bounding rectangle from mask, expand by margin, crop, and save.
+3. For selected part classes, the code will derive bounding rectangle from mask, expand by margin, crop, and save.
 4. Produce a visualization image (original + mask overlays + box).
 
 Future Phase: Feed each crop into wound classification model; aggregate predictions.
 
-Jetson Nano Considerations:
-- Prefer smallest viable weights (if original model is large, consider re-exporting or fine-tuning YOLOv8n-seg on Human-Parts dataset).
-- Use `device='cpu'` or `device=0` depending on Nano CUDA availability; keep batch size = 1.
-- Avoid large image sizes: resize input to 640 or similar.
-
 Quick Usage (after installing ultralytics):
 ```bash
-python ObjectDetection/detect_body_parts.py --source ImageData/images/Wound_dataset/Abrasions --output ObjectDetection/outputs --model MnLgt/yolo-human-parse --classes arm hand leg foot face --margin 0.12 --max-images 2000
+python ObjectDetection/detect_body_parts.py --source ImageData/images/Wound_dataset/Abrasions --output ObjectDetection/outputs --model MnLgt/yolo-human-parse --classes arm hand leg foot face --margin 0.12 --max-images 200
 ```
 
 To run on the internal dataset images (ignoring annotations):
@@ -58,9 +53,3 @@ Notes:
 Outputs:
 - `outputs/vis/<image_stem>.jpg` annotated visualization.
 - `outputs/crops/<image_stem>/<part_class>_<idx>.jpg` cropped part regions.
-- `outputs/records.csv` (optional future) manifest linking original to crops.
-
-Next Steps:
-- Integrate classification handoff script.
-- Add performance benchmarking.
-- Optional: stratified selection / filtering heuristics (e.g., minimum area threshold).

@@ -1,3 +1,9 @@
+"""Swin-Tiny trainer for ImageFolder classification.
+Handles split, training loop, metrics, checkpoint and confusion matrix.
+"""
+
+# TODO: might swap constants and arg parameters with a config file later
+
 import argparse
 import os
 from typing import Tuple, Optional
@@ -32,6 +38,7 @@ def build_dataloaders_from_folder(
     split_seed: int | None = None,
     pin_memory: bool = False,
 ) -> Tuple[DataLoader, DataLoader, Optional[DataLoader], list[str]]:
+    """Create train/val(/test) loaders using a shuffled index split."""
     train_transforms = transforms.Compose([
         transforms.Resize(int(image_size * 1.15)),
         transforms.RandomResizedCrop(image_size, scale=(0.7, 1.0)),
@@ -76,36 +83,39 @@ def build_dataloaders_from_folder(
 
     train_loader = DataLoader(
         train_subset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
+        batch_size = batch_size,
+        shuffle = True,
+        num_workers = num_workers,
+        pin_memory = pin_memory,
     )
     val_loader = DataLoader(
         val_subset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
+        batch_size = batch_size,
+        shuffle = False,
+        num_workers = num_workers,
+        pin_memory = pin_memory,
     )
+    # basically if we dont include a test flag in the cmd line, we return None here
     test_loader = None
     if test_subset is not None:
         test_loader = DataLoader(
             test_subset,
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=num_workers,
-            pin_memory=pin_memory,
+            batch_size = batch_size,
+            shuffle = False,
+            num_workers = num_workers,
+            pin_memory = pin_memory,
         )
     return train_loader, val_loader, test_loader, train_dataset.classes
 
 
 def create_model(num_classes: int, pretrained: bool = True) -> nn.Module:
+    """Build Swin-Tiny model for given class count."""
     model = timm.create_model("swin_tiny_patch4_window7_224", pretrained=pretrained, num_classes=num_classes)
     return model
 
 
 def train_one_epoch(model, data_loader, device, optimizer, criterion) -> float:
+    """One epoch of supervised training."""
     model.train()
     running_loss = 0.0
     for images, targets in data_loader:
@@ -121,6 +131,7 @@ def train_one_epoch(model, data_loader, device, optimizer, criterion) -> float:
 
 
 def validate(model, data_loader, device, criterion, num_classes: int) -> Tuple[float, float, dict]:
+    """Evaluate and return loss, accuracy and a metrics dict (ROC/PR if possible)."""
     model.eval()
     total = 0
     correct = 0
@@ -232,6 +243,7 @@ def plot_confusion_matrix_image(
 
 
 def main():
+    """CLI entry point."""
     parser = argparse.ArgumentParser(description="Simple training using folder structure (single-label) - Swin-Tiny")
     parser.add_argument("--data-dir", type=str, default="ImageData/images/Wound_dataset", help="Folder with class subfolders (e.g., ImageData/images/Wound_dataset)")
     parser.add_argument("--epochs", type=int, default=5)

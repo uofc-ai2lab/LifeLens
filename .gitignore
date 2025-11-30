@@ -1,3 +1,4 @@
+.gitignore
 # OS / Editor
 .DS_Store
 Thumbs.db
@@ -54,6 +55,10 @@ VisualProcessing/Classification/ImageData/images/*
 VisualProcessing/Classification/experiments/checkpoints/
 VisualProcessing/Classification/experiments/**/checkpoints/
 VisualProcessing/Classification/experiments/previews/
+
+# Ignore legacy dataset CSV helper scripts (internal splitting now handled in trainer)
+VisualProcessing/Classification/scripts/make_csv_from_folder.py
+VisualProcessing/Classification/scripts/make_multilabel_csv_from_subfolders.py
 
 # WhisperX generated data
 whisperX/output/

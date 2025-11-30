@@ -243,6 +243,7 @@ def iterate_source(model, source: Path, output: Path, classes: List[str], margin
 def parse_args():
     p = argparse.ArgumentParser(description="Body part segmentation + crop extraction (YOLO)")
     p.add_argument("--model", type=str, default="MnLgt/yolo-human-parse", help="Model path or HF repo name")
+    # Change this to match your path for imageSamples!
     p.add_argument("--source", type=str, default="ObjectDetection/Priv_personpart/Images", help="Image file or directory (default internal dataset Priv_personpart/Images)")
     p.add_argument("--output", type=str, default="ObjectDetection/outputs", help="Output root directory")
     p.add_argument("--classes", nargs="*", default=PART_DEFAULT, help="Subset of classes to crop (default face arm hand leg foot neck torso head; head is composite; torso may later split into chest/abdomen/pelvis)")
