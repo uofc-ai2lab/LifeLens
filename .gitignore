@@ -219,7 +219,7 @@ Synthetic-Medical-Audio/cv-corpus-audio/
 **/venv_nlp/
 
 # whisperX huggingface models
-whisperX/pyannote_models/
+pyannote_models/
 
 #MedCat models
 nlpPipeline/data_p3.2

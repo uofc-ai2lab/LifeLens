@@ -177,7 +177,8 @@ async def run_whisperx():
     print(bcolors.OKGREEN + "\nFinished diarization, exporting results...\n" + bcolors.ENDC)
 
     output = os.getenv("OUTPUT_DIR", "output")
-    export_results(diarize_result, output_dir=output, filename="transcript")
+    output_file = os.getenv("OUTPUT_FILE", "transcript")
+    export_results(diarize_result, output_dir=output, filename=output_file)
     export_end_time = datetime.now()
 
     time_for_transcription = transcribe_end_time - transcribe_start_time
