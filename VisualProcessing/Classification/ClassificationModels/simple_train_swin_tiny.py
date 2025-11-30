@@ -245,7 +245,7 @@ def plot_confusion_matrix_image(
 def main():
     """CLI entry point."""
     parser = argparse.ArgumentParser(description="Simple training using folder structure (single-label) - Swin-Tiny")
-    parser.add_argument("--data-dir", type=str, default="ImageData/images/Wound_dataset", help="Folder with class subfolders (e.g., ImageData/images/Wound_dataset)")
+    parser.add_argument("--data-dir", type=str, default="VisualProcessing/Classification/ImageData/images/Wound_dataset", help="Folder with class subfolders (e.g., VisualProcessing/Classification/ImageData/images/Wound_dataset)")
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--img-size", type=int, default=224)
