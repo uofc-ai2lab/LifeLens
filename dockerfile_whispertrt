@@ -1,0 +1,171 @@
+################################################################################
+# 🐋 WHISPER TRT – Jetson Dockerfile (Transcription Only)
+#
+# 🎯 GOALS:
+#   1. Provide WhisperTRT for Jetson (JetPack 6.2)
+#   2. Use NVIDIA's official CUDA/cuDNN/PyTorch wheels (NO compiling from source)
+#   3. Fail FAST if CUDA/cuDNN aren't working
+#   4. Keep it simple - transcription only
+#
+# 📚 LESSONS LEARNED:
+#   ✅ JetPack 6.2 ships CUDA 12.6 + cuDNN 9.3 + TensorRT 10.3
+#   ✅ NVIDIA's L4T PyTorch wheels must match JetPack minor version (v61 for JP 6.1/6.2)
+#   ✅ cuSPARSELt must be installed separately via NVIDIA apt repo
+#   ✅ NumPy 2.x breaks ABI for PyTorch — pinned to <2.0
+#   ✅ torch.cuda.is_available() will be False during build (no GPU driver)
+################################################################################
+
+FROM nvcr.io/nvidia/l4t-jetpack:r36.4.0
+
+################################################################################
+# 1️⃣ BASE SYSTEM SETUP
+################################################################################
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # 🔧 Basic dev/build tools
+    git wget curl python3 python3-pip python3-dev python3-venv build-essential \
+    # 🔊 Audio + math libs (Whisper deps)
+    libopenblas-dev liblapack-dev libsndfile1 ffmpeg \
+    # 🤖 TensorRT dev libs (needed for WhisperTRT)
+    libnvinfer-dev libnvinfer-plugin-dev nvidia-cuda-toolkit \
+    # 🔑 Needed for adding NVIDIA apt repo
+    gnupg2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# ✅ Make sure CUDA path is consistent
+RUN ln -sf /usr/local/cuda-12.6 /usr/local/cuda
+
+# ✅ Set up CUDA env vars for all future stages
+ENV CUDA_HOME=/usr/local/cuda
+ENV PATH=$CUDA_HOME/bin:$PATH
+ENV LD_LIBRARY_PATH=/usr/lib/aarch64-linux-gnu:$CUDA_HOME/lib64:/usr/lib/aarch64-linux-gnu/tegra:${LD_LIBRARY_PATH}
+
+# ✅ Upgrade Python packaging tools early
+# ⚠️ Pin numpy<2 to avoid ABI breakages with PyTorch/WhisperTRT
+RUN pip3 install --upgrade pip setuptools wheel "numpy<2" packaging
+
+################################################################################
+# 2️⃣ INSTALL cuSPARSELt (runtime + dev headers)
+################################################################################
+# 📌 Rationale: JetPack base image doesn't ship cuSPARSELt. PyTorch/TensorRT require it.
+RUN echo "🔑 Adding NVIDIA CUDA apt repo..." && \
+    curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/sbsa/3bf863cc.pub | apt-key add - && \
+    echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/sbsa/ /" > /etc/apt/sources.list.d/cuda-sbsa.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    libcusparselt0 \
+    libcusparselt-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# ✅ Verify cuSPARSELt actually installed
+RUN test -f /usr/lib/aarch64-linux-gnu/libcusparseLt.so.0 || \
+    (echo "❌ cuSPARSELt runtime missing!" && exit 1)
+
+################################################################################
+# 3️⃣ PYTORCH (CUDA ENABLED)
+################################################################################
+# 🎯 Goal: Use NVIDIA's official prebuilt PyTorch wheel for JetPack (CUDA 12.6/cuDNN 9.3)
+# 📌 Rationale: Avoid compiling PyTorch from source — too heavy for Jetson.
+WORKDIR /tmp
+RUN wget -nv https://developer.download.nvidia.com/compute/redist/jp/v61/pytorch/torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl && \
+    pip3 install --no-cache-dir torch-2.5.0a0+872d972e41*.whl && \
+    rm -f torch-2.5.0a0+872d972e41*.whl
+
+# 🚨 FAIL FAST: verify Torch *build* has CUDA (but don't require GPU drivers in build)
+RUN python3 - <<EOF
+import torch
+print("🔥 Torch version:", torch.__version__)
+print("🔥 Reported CUDA version:", torch.version.cuda)
+print("🔥 cuDNN version:", torch.backends.cudnn.version())
+assert torch.version.cuda is not None, "❌ Torch was not compiled with CUDA support!"
+assert torch.backends.cudnn.version() >= 9000, f"❌ Expected cuDNN ≥9, got {torch.backends.cudnn.version()}"
+print("✅ PyTorch CUDA support verified!")
+EOF
+
+################################################################################
+# 4️⃣ TORCH2TRT (PyTorch to TensorRT converter)
+################################################################################
+WORKDIR /usr/src
+RUN git clone https://github.com/NVIDIA-AI-IOT/torch2trt.git
+WORKDIR /usr/src/torch2trt
+
+# 🩹 Patch: torch2trt setup.py imports TensorRT too early
+RUN sed -i 's/^import tensorrt/# import tensorrt/' setup.py && \
+    sed -i 's/version.parse(tensorrt.__version__)/version.parse("8")/' setup.py
+
+# 🛡 Temporarily comment CUDAExtension block so first install doesn't break
+RUN perl -pi -e 'if (/plugins_ext_module = CUDAExtension\(/../^\s*\)/) { s/^/#/ }' setup.py
+
+# ✅ First pass: skeleton install
+RUN python3 setup.py install
+
+# 🔨 Second pass: actually build CUDA plugins
+RUN CUDA_HOME=/usr/local/cuda PATH=$CUDA_HOME/bin:$PATH python3 setup.py build_ext --inplace && \
+    python3 setup.py install
+
+################################################################################
+# 5️⃣ WHISPER TRT (TensorRT-accelerated Whisper)
+################################################################################
+# 🎯 Install WhisperTRT from NVIDIA's official repo
+WORKDIR /usr/src
+RUN git clone https://github.com/NVIDIA-AI-IOT/whisper_trt.git
+
+# Install WhisperTRT dependencies with pinned versions
+RUN pip3 install --no-cache-dir \
+    'openai-whisper==20231117' \
+    'onnx==1.15.0' \
+    onnxruntime \
+    psutil \
+    'onnx-graphsurgeon==0.5.2'
+
+# Add WhisperTRT to Python path (avoid problematic setup.py installation)
+ENV PYTHONPATH=/usr/src/whisper_trt:${PYTHONPATH}
+
+# ✅ Add Tegra libraries to LD_LIBRARY_PATH for TensorRT
+ENV LD_LIBRARY_PATH=/usr/lib/aarch64-linux-gnu/tegra:/usr/lib/aarch64-linux-gnu:${LD_LIBRARY_PATH}
+
+################################################################################
+# 6️⃣ APPLICATION DEPENDENCIES
+################################################################################
+# Install remaining Python dependencies for your application
+RUN pip3 install --no-cache-dir \
+    python-dotenv \
+    pandas
+
+################################################################################
+# 7️⃣ APPLICATION CODE
+################################################################################
+WORKDIR /app
+
+# Create directory structure
+RUN mkdir -p /app/whisperTRT /app/audio_data /app/output /app/.cache/whisper_trt
+
+# Copy application files
+COPY main.py /app/
+COPY whisperTRT/ /app/whisperTRT/
+COPY audio_data/ /app/audio_data/
+COPY whispertrt.entrypoint.sh /app/entrypoint.sh
+
+# Make whisperTRT a proper Python package
+RUN touch /app/whisperTRT/__init__.py
+
+################################################################################
+# 8️⃣ RUNTIME CONFIG
+################################################################################
+# Set Python path
+ENV PYTHONPATH=/app:${PYTHONPATH}
+
+# Set WhisperTRT cache location
+ENV WHISPER_TRT_CACHE=/app/.cache/whisper_trt
+
+# Set working directory
+WORKDIR /app
+
+# Make entrypoint script executable
+RUN chmod +x /app/entrypoint.sh
+
+# ✅ Runtime health check: verify CUDA is usable once container runs on Jetson
+HEALTHCHECK --interval=2m --timeout=10s --retries=3 \
+    CMD python3 -c "import torch; assert torch.cuda.is_available(), '❌ CUDA not available at runtime'" || exit 1
+
+# Use entrypoint script
+ENTRYPOINT ["/app/entrypoint.sh"]

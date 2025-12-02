@@ -1,0 +1,39 @@
+services:
+  whispertrt:
+    build:
+      context: .
+      dockerfile: dockerfile_whispertrt
+    image: whispertrt-jetson:latest
+    container_name: whispertrt-diarization
+
+    # Use NVIDIA runtime for GPU access
+    runtime: nvidia
+
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
+
+    # Load environment variables from .env file
+    env_file:
+      - .env
+
+    # Mount volumes for data persistence
+    volumes:
+      # Output transcriptions
+      - ./output:/app/output
+
+      # Cache for WhisperTRT models (persists TensorRT engines)
+      - ./cache:/app/.cache/whisper_trt
+
+      # Pyannote models cache (if using offline models)
+      - ./pyannote_models:/app/pyannote_models
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
