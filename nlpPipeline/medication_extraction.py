@@ -164,64 +164,6 @@ def missed_medication_info(text):
     
     return matches
 
-def process_ner_extraction_and_add_more_info_plus_meaning(extracted_data):
-    """Process extracted medication data to add more context or meaning if needed."""
-    med_objects = []
-    
-    possible_routes = [
-        "iv", "intra-venous", "iv push", "ivp", "iv bolus", "ivb", "bolus",
-        "im", "intramuscular",
-        "po", "oral",
-        "pr", "rectal",
-        "subcutaneous", "sc", "sq",
-        "sl", "sublingual",
-        "io", "intraosseous",
-        "neb", "nebulized",
-        "inhaled",
-        "topical",
-    ]
-
-    for item in extracted_data:
-        medications = item.get("medications")
-        dosages = item.get("dosages")
-        text = item["original_sentence"].lower()
-        only_words = re.findall(r'\b\w+\b', text)
-
-        if medications and dosages:
-            if len(medications) == len(dosages):
-                for med in medications:
-                    med_index = only_words.index(med.lower())
-
-                    start = max(0, med_index - 3)
-                    end = min(len(only_words), med_index + 3)
-                    context_window = only_words[start:end]
-                    route = next((w for w in context_window if w in possible_routes), None)
-
-                    med_objects.append({
-                        "medication": med,
-                        "dosage": dosages[medications.index(med)],
-                        "route": route if route else None,
-                        "time": item["segment_time"]
-                    })
-
-        elif medications and not dosages:
-            for med in medications:
-                med_index = only_words.index(med.lower())
-
-                start = max(0, med_index - 3)
-                end = min(len(only_words), med_index + 3)
-                context_window = only_words[start:end]
-                route = next((w for w in context_window if w in possible_routes), None)
-
-                med_objects.append({
-                    "medication": med,
-                    "dosage": None,
-                    "route": route if route else None,
-                    "time": item["segment_time"]
-                })
-
-    return med_objects
-            
 ROUTES = {
     "iv", "intra-venous", "iv push", "ivp", "iv bolus", "ivb", "bolus",
     "im", "intramuscular",
@@ -238,14 +180,75 @@ ROUTES = {
 # still need to implement logic
 TIMES = {"hours", "seconds", "minutes"}
 
-#might not need. Leave here for now
-DOSAGES = {"mg", "ml", "g", "unit", "units", "mcg", "milligrams", "milliliters",
-"grams", "micrograms", "l", "liters", "litres", "litre", "liter",
-"mmol", "millimoles", "micron"}
+
+DOSAGES = {d.lower() for d in {
+    "mg", "ml", "g", "mg/ml", "mills", "unit", "units", "mcg",
+    "milligrams", "milliliters", "grams", "micrograms",
+    "l", "liters", "litres", "litre", "liter",
+    "cc", "cc's", "drops", "drop", "tablet", "tablets",
+    "puffs", "puff", "spray", "sprays", "inhaler",
+    "capsule", "capsules", "pills", "pill",
+    "inhalations", "mmol", "millimoles",
+    "micron", "iu", "iu's", "international units"
+}}
+
+TEXT_NUMBERS = {
+    "zero": 0,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "half": 0.5,
+    "quarter": 0.25
+}
+
+NUMBER_PATTERN = re.compile(r"\d+(?:\.\d+)?(?:/\d+)?")
+
+def fallback_dosage(sentence, med_start_idx):
+    text = sentence.lower()
+    after_med = text[med_start_idx:]
+
+    # Tokenize: numbers, hyphens, slashes, and alpha words
+    tokens = re.findall(r"\d+(?:\.\d+)?(?:/\d+)?|[a-z']+", after_med)
+
+    for i in range(len(tokens) - 1):
+        number_token = tokens[i]
+        unit_token = tokens[i + 1]
+
+        # Check numeric value
+        is_number = NUMBER_PATTERN.fullmatch(number_token)
+
+        # Check text-number (like "five")
+        if not is_number and number_token in TEXT_NUMBERS:
+            is_number = True
+
+        # Unit validation
+        if is_number and unit_token in DOSAGES:
+            return f"{number_token} {unit_token}"
+
+    return None
+
+def fallback_route(sentence, med_start_idx):
+    text = sentence.lower()
+    after_med = text[med_start_idx:]
+
+    # Tokenize words
+    tokens = re.findall(r"[a-z']+", after_med)
+
+    for token in tokens:
+        if token in ROUTES:
+            return token
+
+    return None
 
 def mean(scores):
     return sum(scores) / len(scores) if scores else None
-
 
 def extract_med_admins_with_confidence(segments):
     administrations = []
@@ -299,11 +302,29 @@ def extract_med_admins_with_confidence(segments):
                         continue
 
                     break
-
+                
+                # fallback dosage and route extraction from text if not found by NER
+                if not record["dosage"]:
+                    fallback_dose = fallback_dosage(
+                        segment["original_text"],
+                        ent["start"]
+                    )
+                    if fallback_dose:
+                        record["dosage"] = fallback_dose
+                        record["dosage_score"] = 0.5  # Indicate lower confidence for fallback
+                        
+                if not record["route"]:
+                    fallback_rte = fallback_route(
+                        segment["original_text"],
+                        ent["start"]
+                    )
+                    if fallback_rte:
+                        record["route"] = fallback_rte
+                        record["route_score"] = 0.5  # Indicate lower confidence for fallback
                 administrations.append(record)
             else:
                 i += 1
-
+    print(administrations)
     return administrations
 
 def write_med_csv(administrations, filename):
@@ -342,7 +363,7 @@ def write_med_csv(administrations, filename):
             ])
 
 
-def medication_extraction_pipeline(output_path="../output/mvc_trauma_transcript.csv"):
+def medication_extraction_pipeline(output_path="/workspaces/LifeLens/output/mvc_trauma_transcript.csv"):
     """Run the medication extraction and CSV creation pipeline."""
     transcript_data = []
     df = load_transcript_csv(output_path)
