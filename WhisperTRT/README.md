@@ -37,3 +37,13 @@ jetson-containers run -v $(pwd):/app -w /app $(autotag whisper_trt) python3 main
 ```
 
 To learn more about running on jetson containers check out the docs here: https://github.com/dusty-nv/jetson-containers/blob/master/docs/run.md
+
+# Outputs
+
+## small.en on Whisper
+
+![alt text](small.en.whisper.png)
+
+## tiny.en on WhisperTRT
+
+![alt text](tiny.en.whispertrt.png)
