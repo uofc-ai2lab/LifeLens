@@ -18,7 +18,7 @@ async def main():
         from whisperX.whisper import run_whisperx
         await run_whisperx()
     elif args.service == "nlp":
-        from nlpPipeline.nlp_pipeline import run_nlp
+        from nlpPipeline.intervention_extraction import run_nlp
         await run_nlp()
     else:
         print(f"Service {args.service} not recognized.")
