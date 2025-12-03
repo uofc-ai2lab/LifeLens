@@ -129,7 +129,8 @@ ENV LD_LIBRARY_PATH=/usr/lib/aarch64-linux-gnu/tegra:/usr/lib/aarch64-linux-gnu:
 # Install remaining Python dependencies for your application
 RUN pip3 install --no-cache-dir \
     python-dotenv \
-    pandas
+    pandas \
+    soundfile
 
 ################################################################################
 # 7️⃣ APPLICATION CODE
@@ -142,7 +143,6 @@ RUN mkdir -p /app/whisperTRT /app/audio_data /app/output /app/.cache/whisper_trt
 # Copy application files
 COPY main.py /app/
 COPY whisperTRT/ /app/whisperTRT/
-COPY audio_data/ /app/audio_data/
 COPY whispertrt.entrypoint.sh /app/entrypoint.sh
 
 # Make whisperTRT a proper Python package

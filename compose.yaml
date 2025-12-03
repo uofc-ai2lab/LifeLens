@@ -12,11 +12,7 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
-
-    # Load environment variables from .env file
-    env_file:
-      - .env
-
+      - MODEL_SIZE_TRT=small.en
     # Mount volumes for data persistence
     volumes:
       # Output transcriptions
@@ -28,6 +24,9 @@ services:
       # Pyannote models cache (if using offline models)
       - ./pyannote_models:/app/pyannote_models
 
+      # audio data
+      - ./audio_data:/app/audio_data # load env vars by mounting the file instead of using "ENVIRONMENT" since our entrypoint.sh file needs the files from here
+      - ./.env:/app/.env:ro
     # Restart policy
     restart: unless-stopped
 
