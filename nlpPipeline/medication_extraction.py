@@ -82,7 +82,7 @@ def extract_medication_info_from_ner(segmented_text):
 
 MEDICATIONS = {
     "Pressure Infuser": [],
-    "Normal Saline": ["NS"],
+    "Normal Saline": ["NS", "Electrolyte"],
     "Syringe": [],
     "ASA": ["ASA"],
     "Adenosine": ["Adeno"],
@@ -132,23 +132,21 @@ MEDICATIONS = {
     "Sterile Water": ["SW"]
 }
 
-def create_all_med_list():
+def create_all_med_list(med_list=MEDICATIONS):
     """Create a list of all medication terms including aliases."""
-    ALL_MEDICATION_TERMS = set()
-    for med, aliases in MEDICATIONS.items():
-        ALL_MEDICATION_TERMS.add(med.lower())
+    all_med_terms = set()
+    for med, aliases in med_list.items():
+        all_med_terms.add(med.lower())
         for alias in aliases:
-            ALL_MEDICATION_TERMS.add(alias.lower())
+            all_med_terms.add(alias.lower())
             
-    MEDICATION_TERMS_SORTED = sorted(ALL_MEDICATION_TERMS, key=len, reverse=True)
-    return MEDICATION_TERMS_SORTED
-
-MED_LIST_SORTED = create_all_med_list()
+    med_terms_sorted = sorted(all_med_terms, key=len, reverse=True)
+    return med_terms_sorted
         
         
-def missed_medication_info(text):
+def missed_medication_info(text, med_list):
     """Aim is to find any medication-related information that may have been missed by the NER model."""
-    pattern = r'\b(' + '|'.join(re.escape(term) for term in MED_LIST_SORTED) + r')\b'
+    pattern = r'\b(' + '|'.join(re.escape(term) for term in med_list) + r')\b'
     med_regex = re.compile(pattern, re.IGNORECASE)
     if not text:
             return []
@@ -164,8 +162,23 @@ def missed_medication_info(text):
     
     return matches
 
+def ensure_proper_medication_name(entities, sentence):
+    """Ensure that medication names are properly captured in full from the sentence."""
+    for ent in entities:
+        found_med = ent["word"]
+        tokens = re.findall(r"[\w'-]+", sentence)
+        if found_med not in tokens:
+            start = ent["start"]
+            end = start
+            while end < len(sentence) and not sentence[end].isspace():
+                end += 1
+            ent["word"] = sentence[start:end]
+            
+    return entities
+        
+
 ROUTES = {
-    "iv", "intra-venous", "iv push", "ivp", "iv bolus", "ivb", "bolus",
+    "infusion", "iv", "intra-venous", "iv push", "ivp", "iv bolus", "ivb", "bolus",
     "im", "intramuscular",
     "po", "oral",
     "pr", "rectal",
@@ -324,7 +337,6 @@ def extract_med_admins_with_confidence(segments):
                 administrations.append(record)
             else:
                 i += 1
-    print(administrations)
     return administrations
 
 def write_med_csv(administrations, filename):
@@ -344,15 +356,15 @@ def write_med_csv(administrations, filename):
         for a in administrations:
             med = (
                 f"{a['medication']} ({a['medication_score']:.3f})"
-                if a.get("medication") else ""
+                if a.get("medication") else "Not Found"
             )
             dose = (
                 f"{a['dosage']} ({a['dosage_score']:.3f})"
-                if a.get("dosage") else ""
+                if a.get("dosage") else "Not Found"
             )
             route = (
                 f"{a['route']} ({a['route_score']:.3f})"
-                if a.get("route") else ""
+                if a.get("route") else "Not Found"
             )
 
             writer.writerow([
@@ -363,14 +375,15 @@ def write_med_csv(administrations, filename):
             ])
 
 
-def medication_extraction_pipeline(output_path="/workspaces/LifeLens/output/mvc_trauma_transcript.csv"):
+def medication_extraction_pipeline(output_path="/workspaces/LifeLens/nlpPipeline/test_transcripts/intervention_test_transcript.csv"):
     """Run the medication extraction and CSV creation pipeline."""
     transcript_data = []
     df = load_transcript_csv(output_path)
     for _, row in df.iterrows():
         extracted_entities = extract_medication_info_from_ner(row["text"])
         already_found_meds = [e["word"] for e in extracted_entities if e["entity"] == "B-Medication"]
-        possible_missed_medications = missed_medication_info(row["text"].lower())
+        med_list = create_all_med_list()
+        possible_missed_medications = missed_medication_info(row["text"].lower(), med_list)
         if possible_missed_medications and extracted_entities:
             for med in possible_missed_medications:
                 if med["medication"] not in map(str.lower, already_found_meds):
@@ -381,7 +394,7 @@ def medication_extraction_pipeline(output_path="/workspaces/LifeLens/output/mvc_
                         "score": 1.0  # Since we found through exact match. (Want to implement fuzzy matching later which will likely have a proper score attached to it)
                     })
         extracted_entities.sort(key=lambda x: x["start"])
-        print(extracted_entities)
+        extracted_entities = ensure_proper_medication_name(extracted_entities, row["text"])
         nlp_data = {
             "original_text": row["text"],
             "segment_time": f"{row['start']} - {row['end']}",

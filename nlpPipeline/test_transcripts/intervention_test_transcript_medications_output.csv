@@ -1,0 +1,11 @@
+TIME,MEDICATION (CONFIDENCE SCORE),DOSAGE (CONFIDENCE SCORE),ROUTE (CONFIDENCE SCORE)
+01:31.9 - 01:34.4,"acetaminophen, (0.516)",650 milligrams (0.500),Not Found
+01:34.4 - 01:37.0,Medication (1.000),Not Found,Not Found
+01:37.0 - 01:38.8,"ondansetron, (0.998)",4 milligrams (0.500),Not Found
+01:37.0 - 01:38.8,ondansetron (1.000),4 milligrams (0.999),Not Found
+01:38.8 - 01:40.4,Ondansetron (1.000),Not Found,Not Found
+01:53.2 - 01:54.9,diphenhydramine (1.000),25 milligrams (1.000),Not Found
+01:54.9 - 01:56.3,Diphenhydramine (0.980),Not Found,Not Found
+02:03.3 - 02:04.9,"ibuprofen, (0.834)",400 milligrams (0.999),Not Found
+02:15.9 - 02:17.4,"albuterol, (0.976)",2 .5 5 milligrams (0.998),Not Found
+02:30.7 - 02:32.2,electrolyte (1.000),100 milliliters (0.500),infusion (0.500)
