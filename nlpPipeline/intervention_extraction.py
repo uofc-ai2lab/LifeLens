@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import spacy
+import re
 
 # MedCAT
 try:
@@ -9,7 +10,6 @@ except:
     print("ERROR: MedCAT not installed or environment broken.")
     exit()
 
-# Initialize SpaCy
 nlp = spacy.load("en_core_web_sm")
 
 # Paths
@@ -52,27 +52,58 @@ def normalize_text(text):
 
 
 def match_intervention(text_norm, entity_text):
-    """Match text to intervention category"""
+    """Match text to intervention category using word boundaries"""
     entity_lower = entity_text.lower()
     
     for intervention_type, keywords in INTERVENTIONS.items():
         for keyword in keywords:
-            if keyword in entity_lower or keyword in text_norm:
+            # word boundaries for short keywords
+            pattern = r'\b' + re.escape(keyword) + r'\b'
+            if re.search(pattern, entity_lower) or re.search(pattern, text_norm):
                 return intervention_type
     return None
+
+
+def has_intervention_keyword(text_norm):
+    """
+    Check if text contains ANY intervention keyword using word boundaries.
+    Returns: True if any keyword found, False otherwise
+    """
+    for intervention_type, keywords in INTERVENTIONS.items():
+        for keyword in keywords:
+            #  word boundaries to match whole words only
+            pattern = r'\b' + re.escape(keyword) + r'\b'
+            if re.search(pattern, text_norm):
+                return True
+    return False
 
 
 async def run_nlp(output_path="./output/interventions_extracted.csv"):
     """Main extraction pipeline for interventions only"""
     df = load_transcript_csv()
     
-    # Use dict to group by (start_time, intervention_type)
+    #  dict to group by start_time only (one row per start time)
     interventions_dict = {}
     
     for idx, row in df.iterrows():
         text = row["text"]
         text_norm = normalize_text(text)
-        key = (row["start"], text)  # Unique key per line
+        
+        if not has_intervention_keyword(text_norm):
+            continue 
+        
+        key = row["start"]  # One row per start time
+        
+        # Initialize entry
+        if key not in interventions_dict:
+            interventions_dict[key] = {
+                "start_time": row["start"],
+                "end_time": row["end"] if pd.notna(row["end"]) else "N/A",
+                "event_type": "intervention",
+                "event_categories": set(),
+                "entities_detected": [],
+                "full_text": row["text"],
+            }
         
         # MedCAT for entity extraction
         medcat_out = cat.get_entities(text_norm, only_cui=False)
@@ -83,42 +114,35 @@ async def run_nlp(output_path="./output/interventions_extracted.csv"):
             intervention_type = match_intervention(text_norm, entity_text)
             
             if intervention_type:
-                if key not in interventions_dict:
-                    interventions_dict[key] = {
-                        "start_time": row["start"],
-                        "end_time": row["end"] if pd.notna(row["end"]) else "N/A",
-                        "event_type": "intervention",
-                        "event_category": intervention_type,
-                        "entities_detected": [],
-                        "full_text": row["text"],
-                    }
-                # Add entity to list if not already there
+                interventions_dict[key]["event_categories"].add(intervention_type)
                 if entity_text not in interventions_dict[key]["entities_detected"]:
                     interventions_dict[key]["entities_detected"].append(entity_text)
         
-        # Keyword-search fallback
+        # Keyword-search fallback with word boundaries
         for intervention_type, keywords in INTERVENTIONS.items():
             for keyword in keywords:
-                if keyword in text_norm:
-                    if key not in interventions_dict:
-                        interventions_dict[key] = {
-                            "start_time": row["start"],
-                            "end_time": row["end"] if pd.notna(row["end"]) else "N/A",
-                            "event_type": "intervention",
-                            "event_category": intervention_type,
-                            "entities_detected": [],
-                            "full_text": row["text"],
-                        }
+                pattern = r'\b' + re.escape(keyword) + r'\b'
+                if re.search(pattern, text_norm):
+                    interventions_dict[key]["event_categories"].add(intervention_type)
                     if keyword not in interventions_dict[key]["entities_detected"]:
                         interventions_dict[key]["entities_detected"].append(keyword)
                     break
     
-    # Convert dict to list and join entities
+    # Convert dict to list and join entities/categories
     extracted_interventions = []
     for intervention_data in interventions_dict.values():
-        intervention_data["entity_detected"] = "; ".join(intervention_data["entities_detected"])
-        del intervention_data["entities_detected"]
-        extracted_interventions.append(intervention_data)
+        # Convert set to sorted, joined string
+        categories = "; ".join(sorted(intervention_data["event_categories"]))
+        entities = "; ".join(intervention_data["entities_detected"])
+        
+        extracted_interventions.append({
+            "start_time": intervention_data["start_time"],
+            "end_time": intervention_data["end_time"],
+            "event_type": intervention_data["event_type"],
+            "event_category": categories,
+            "entity_detected": entities,
+            "full_text": intervention_data["full_text"]
+        })
     
     # Output DataFrame
     if extracted_interventions:
