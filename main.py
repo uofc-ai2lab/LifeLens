@@ -9,14 +9,19 @@ async def main():
     parser.add_argument(
         "service",
         type=str,
-        choices=["whisperx", "nlp"],  # Add other services as needed
-        help="The microservice to run",
+        choices=["whisperx", "faster_whisper", "whispertrt", "nlp"],  # Add other services as needed
     )
     args = parser.parse_args()
 
     if args.service == "whisperx":
         from whisperX.whisper import run_whisperx
         await run_whisperx()
+    elif args.service == "faster_whisper":
+        from Faster_Whisper.transcribe_faster import run_faster_whisper
+        await run_faster_whisper()
+    elif args.service == "whispertrt":
+        from WhisperTRT.whispertrt import run_whispertrt
+        await run_whispertrt()
     elif args.service == "nlp":
         from nlpPipeline.nlp_pipeline import run_nlp
         await run_nlp()
