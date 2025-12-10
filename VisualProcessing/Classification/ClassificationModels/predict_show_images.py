@@ -70,8 +70,8 @@ def annotate_image(img_path: str, text: str, out_path: str):
 
 def main():
     parser = argparse.ArgumentParser(description="Save a few annotated predictions for visual inspection")
-    parser.add_argument("--data-dir", default = "VisualProcessing/Classification/ImageData/images/Wound_dataset", type=str, required=True, help="Folder with class subfolders (ImageFolder)")
-    parser.add_argument("--checkpoint", default = "experiments/checkpoints/simple/best_swin_tiny_patch4_window7_224.pt", type=str, required=True, help="Path to .pt checkpoint saved by simple trainers")
+    parser.add_argument("--data-dir", default = "VisualProcessing/Classification/ImageData/images/Wound_dataset", type=str, help="Folder with class subfolders (ImageFolder)")
+    parser.add_argument("--checkpoint", default = "experiments/checkpoints/simple/best_swin_tiny_patch4_window7_224.pt", type=str, help="Path to .pt checkpoint saved by simple trainers")
     parser.add_argument("--out-dir", type=str, default=os.path.join("experiments", "previews"))
     parser.add_argument("--count", type=int, default=12, help="Number of images to preview")
     parser.add_argument("--img-size", type=int, default=224)

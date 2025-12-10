@@ -103,7 +103,7 @@ dist/
 
 
 # Experiments and checkpoints
-/experiments/checkpoints/
+/experiments/
 *.pt
 *.pth
 
