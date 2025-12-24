@@ -4,13 +4,17 @@ import torch
 from transformers import AutoTokenizer, AutoModelForTokenClassification
 import os
 import pandas as pd
+import argparse
 
 
-def load_transcript_csv(file_path="../output/transcript.csv"):
+def load_transcript_csv(file_path):
     """Load diarized transcript CSV file."""
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"Transcript file not found at {file_path}")
-    return pd.read_csv(file_path)
+    try:
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"Transcript file not found at {file_path}")
+        return pd.read_csv(file_path)
+    except Exception as e:
+        raise IOError(f"Error loading transcript file: {e}")
 
 
 def extract_medication_info_from_ner(segmented_text):
@@ -341,44 +345,47 @@ def extract_med_admins_with_confidence(segments):
 
 def write_med_csv(administrations, filename):
     new_filename = filename.replace(".csv", "_medications_output.csv")
-    with open(new_filename, mode="w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
+    try:
+        with open(new_filename, mode="w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
 
-        # Header
-        writer.writerow([
-            "TIME",
-            "MEDICATION (CONFIDENCE SCORE)",
-            "DOSAGE (CONFIDENCE SCORE)",
-            "ROUTE (CONFIDENCE SCORE)"
-        ])
-
-        # Rows
-        for a in administrations:
-            med = (
-                f"{a['medication']} ({a['medication_score']:.3f})"
-                if a.get("medication") else "Not Found"
-            )
-            dose = (
-                f"{a['dosage']} ({a['dosage_score']:.3f})"
-                if a.get("dosage") else "Not Found"
-            )
-            route = (
-                f"{a['route']} ({a['route_score']:.3f})"
-                if a.get("route") else "Not Found"
-            )
-
+            # Header
             writer.writerow([
-                a.get("time", ""),
-                med,
-                dose,
-                route
+                "TIME",
+                "MEDICATION (CONFIDENCE SCORE)",
+                "DOSAGE (CONFIDENCE SCORE)",
+                "ROUTE (CONFIDENCE SCORE)"
             ])
 
+            # Rows
+            for a in administrations:
+                med = (
+                    f"{a['medication']} ({a['medication_score']:.3f})"
+                    if a.get("medication") else "Not Found"
+                )
+                dose = (
+                    f"{a['dosage']} ({a['dosage_score']:.3f})"
+                    if a.get("dosage") else "Not Found"
+                )
+                route = (
+                    f"{a['route']} ({a['route_score']:.3f})"
+                    if a.get("route") else "Not Found"
+                )
 
-def medication_extraction_pipeline(output_path="/workspaces/LifeLens/nlpPipeline/test_transcripts/intervention_test_transcript.csv"):
+                writer.writerow([
+                    a.get("time", ""),
+                    med,
+                    dose,
+                    route
+                ])
+    except Exception as e:
+        raise IOError(f"Error writing medication output file: {e}")
+
+
+def medication_extraction_pipeline(transcript_path):
     """Run the medication extraction and CSV creation pipeline."""
     transcript_data = []
-    df = load_transcript_csv(output_path)
+    df = load_transcript_csv(transcript_path)
     for _, row in df.iterrows():
         extracted_entities = extract_medication_info_from_ner(row["text"])
         already_found_meds = [e["word"] for e in extracted_entities if e["entity"] == "B-Medication"]
@@ -403,7 +410,10 @@ def medication_extraction_pipeline(output_path="/workspaces/LifeLens/nlpPipeline
         transcript_data.append(nlp_data)
     
     full_medication_info = extract_med_admins_with_confidence(transcript_data)
-    write_med_csv(full_medication_info, filename=output_path)
+    write_med_csv(full_medication_info, filename=transcript_path)
 
 if __name__ == "__main__":
-    medication_extraction_pipeline()
+    parser = argparse.ArgumentParser(description="Extract medication information from transcript CSV.")
+    parser.add_argument("transcript_path", help="Path to the input transcript CSV file.")
+    args = parser.parse_args()
+    medication_extraction_pipeline(args.transcript_path)
