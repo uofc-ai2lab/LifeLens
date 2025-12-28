@@ -5,6 +5,7 @@ from transformers import AutoTokenizer, AutoModelForTokenClassification
 import os
 import pandas as pd
 import argparse
+from medication_extraction_constants import ROUTES, DOSAGES, TEXT_NUMBERS, NUMBER_PATTERN, MEDICATIONS, LOW_CONFIDENCE_SCORE, HIGH_CONFIDENCE_SCORE
 
 
 def load_transcript_csv(file_path):
@@ -17,124 +18,73 @@ def load_transcript_csv(file_path):
         raise IOError(f"Error loading transcript file: {e}")
 
 
-def extract_medication_info_from_ner(segmented_text):
-    """Extract medication-related information from NER processed text segments."""
-    NER_MODEL = "d4data/biomedical-ner-all"
+class MedicationExtractor:
+    def __init__(self):
+        self.NER_MODEL = "d4data/biomedical-ner-all"
+        self.model = AutoModelForTokenClassification.from_pretrained(self.NER_MODEL)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.NER_MODEL, use_fast=True)
+        self.model.eval()
 
-    model = AutoModelForTokenClassification.from_pretrained(NER_MODEL)
-    tokenizer = AutoTokenizer.from_pretrained(NER_MODEL, use_fast=True)
-    model.eval()
+    def extract_medication_info_from_ner(self, segmented_text):
+        """Extract medication-related information from NER processed text segments."""
+        enc = self.tokenizer(
+            segmented_text,
+            return_offsets_mapping=True,
+            return_tensors="pt",
+            truncation=True
+        )
 
-    enc = tokenizer(
-        segmented_text,
-        return_offsets_mapping=True,
-        return_tensors="pt",
-        truncation=True
-    )
+        offsets = enc.pop("offset_mapping")[0]
+        word_ids = enc.word_ids()
 
-    offsets = enc.pop("offset_mapping")[0]
-    word_ids = enc.word_ids()
+        with torch.no_grad():
+            outputs = self.model(**enc)
 
-    with torch.no_grad():
-        outputs = model(**enc)
+        logits = outputs.logits[0]
+        probs = torch.softmax(logits, dim=-1)
 
-    logits = outputs.logits[0]
-    probs = torch.softmax(logits, dim=-1)
+        # Collect token predictions by word_id
+        word_groups = {}
 
-    # Collect token predictions by word_id
-    word_groups = {}
+        for i, word_id in enumerate(word_ids):
+            if word_id is None:
+                continue
 
-    for i, word_id in enumerate(word_ids):
-        if word_id is None:
-            continue
+            label_id = probs[i].argmax().item()
+            label = self.model.config.id2label[label_id]
+            score = probs[i, label_id].item()
+            start, end = offsets[i].tolist()
 
-        label_id = probs[i].argmax().item()
-        label = model.config.id2label[label_id]
-        score = probs[i, label_id].item()
-        start, end = offsets[i].tolist()
+            if label == "O":
+                continue
 
-        if label == "O":
-            continue
+            if word_id not in word_groups:
+                word_groups[word_id] = {
+                    "entity": label,
+                    "start": start,
+                    "end": end,
+                    "scores": [score]
+                }
+            else:
+                word_groups[word_id]["end"] = end
+                word_groups[word_id]["scores"].append(score)
 
-        if word_id not in word_groups:
-            word_groups[word_id] = {
-                "entity": label,
-                "start": start,
-                "end": end,
-                "scores": [score]
-            }
-        else:
-            word_groups[word_id]["end"] = end
-            word_groups[word_id]["scores"].append(score)
+        # Finalize entities
+        entities = []
+        for w in sorted(word_groups.keys()):
+            item = word_groups[w]
+            text_span = segmented_text[item["start"]: item["end"]]
+            scores = item.pop("scores")
 
-    # Finalize entities
-    entities = []
-    for w in sorted(word_groups.keys()):
-        item = word_groups[w]
-        text_span = segmented_text[item["start"]: item["end"]]
-        scores = item.pop("scores")
-
-        entities.append({
-            "entity": item["entity"],
-            "word": text_span,
-            "start": item["start"], 
-            # "end": item["end"], # I don't think we need this for now so commenting out
-            "score": sum(scores) / len(scores)
-        })
-        
-    return entities
-
-MEDICATIONS = {
-    "Pressure Infuser": [],
-    "Normal Saline": ["NS", "Electrolyte"],
-    "Syringe": [],
-    "ASA": ["ASA"],
-    "Adenosine": ["Adeno"],
-    "Amiodarone": ["Amio"],
-    "Atropine": ["Atropine"],
-    "Calcium Chloride": ["CaCl₂"],
-    "Carboprost": ["Hemabate"],
-    "Clopidogrel": ["Plavix"],
-    "D5W": ["D5W"],
-    "Dextrose": ["D50"],
-    "Epinephrine": ["Epi"],
-    "Furosemide": ["Lasix"],
-    "Isoproterenol": ["Iso", "Isuprel"],
-    "Labetalol": ["Labetalol"],
-    "Metoprolol": ["Metoprolol", "Lopressor"],
-    "Nitroglycerin": ["NTG"],
-    "Norepinephrine": ["Levo", "NE"],
-    "Phenylephrine": ["Neo", "Phenyl"],
-    "Sodium Bicarbonate": ["Bicarb"],
-    "Salbutamol": ["Salbutamol", "Ventolin"],
-    "Ipratropium": ["Ipratropium", "Atrovent"],
-    "Dimenhydrinate": ["Gravol"],
-    "Diphenhydramine": ["Benadryl"],
-    "Metoclopramide": ["Maxeran", "Reglan"],
-    "Loperamide": ["Imodium"],
-    "Ondansetron": ["Zofran"],
-    "Enoxaparin": ["Lovenox"],
-    "Heparin": ["Heparin"],
-    "Humulin R": ["Regular insulin", "R-insulin"],
-    "Magnesium sulfate": ["Mag sulfate", "MgSO₄"],
-    "Vitamin K": ["Phytonadione"],
-    "Misoprostol": ["Miso"],
-    "Oxytocin": ["Oxy", "Pitocin"],
-    "Propofol": ["Propofol", "Diprivan"],
-    "Lidocaine": ["Lido", "Lido oint"],
-    "Naloxone": ["Narcan"],
-    "Intralipid": ["Intralipid"],
-    "Dexamethasone": ["Dex", "Decadron"],
-    "Solu-Medrol": ["Solu-Medrol", "Methylpred"],
-    "Plavix": ["Plavix"],
-    "Ticagrelor": ["Brilinta"],
-    "TNKase": ["TNK"],
-    "Tranexamic Acid": ["TXA"],
-    "Indomethacin": ["Indomethacin", "Indocin"],
-    "Bug Spray": [],
-    "NS flush": ["NS flush"],
-    "Sterile Water": ["SW"]
-}
+            entities.append({
+                "entity": item["entity"],
+                "word": text_span,
+                "start": item["start"], 
+                # "end": item["end"], # I don't think we need this for now so commenting out
+                "score": sum(scores) / len(scores)
+            })
+            
+        return entities
 
 def create_all_med_list(med_list=MEDICATIONS):
     """Create a list of all medication terms including aliases."""
@@ -180,53 +130,6 @@ def ensure_proper_medication_name(entities, sentence):
             
     return entities
         
-
-ROUTES = {
-    "infusion", "iv", "intra-venous", "iv push", "ivp", "iv bolus", "ivb", "bolus",
-    "im", "intramuscular",
-    "po", "oral",
-    "pr", "rectal",
-    "subcutaneous", "sc", "sq",
-    "sl", "sublingual",
-    "io", "intraosseous",
-    "neb", "nebulized",
-    "inhaled",
-    "topical",
-}
-
-# still need to implement logic
-TIMES = {"hours", "seconds", "minutes"}
-
-
-DOSAGES = {d.lower() for d in {
-    "mg", "ml", "g", "mg/ml", "mills", "unit", "units", "mcg",
-    "milligrams", "milliliters", "grams", "micrograms",
-    "l", "liters", "litres", "litre", "liter",
-    "cc", "cc's", "drops", "drop", "tablet", "tablets",
-    "puffs", "puff", "spray", "sprays", "inhaler",
-    "capsule", "capsules", "pills", "pill",
-    "inhalations", "mmol", "millimoles",
-    "micron", "iu", "iu's", "international units"
-}}
-
-TEXT_NUMBERS = {
-    "zero": 0,
-    "one": 1,
-    "two": 2,
-    "three": 3,
-    "four": 4,
-    "five": 5,
-    "six": 6,
-    "seven": 7,
-    "eight": 8,
-    "nine": 9,
-    "ten": 10,
-    "half": 0.5,
-    "quarter": 0.25
-}
-
-NUMBER_PATTERN = re.compile(r"\d+(?:\.\d+)?(?:/\d+)?")
-
 def fallback_dosage(sentence, med_start_idx):
     text = sentence.lower()
     after_med = text[med_start_idx:]
@@ -328,7 +231,7 @@ def extract_med_admins_with_confidence(segments):
                     )
                     if fallback_dose:
                         record["dosage"] = fallback_dose
-                        record["dosage_score"] = 0.5  # Indicate lower confidence for fallback
+                        record["dosage_score"] = LOW_CONFIDENCE_SCORE  # Indicate lower confidence for fallback
                         
                 if not record["route"]:
                     fallback_rte = fallback_route(
@@ -337,7 +240,7 @@ def extract_med_admins_with_confidence(segments):
                     )
                     if fallback_rte:
                         record["route"] = fallback_rte
-                        record["route_score"] = 0.5  # Indicate lower confidence for fallback
+                        record["route_score"] = LOW_CONFIDENCE_SCORE  # Indicate lower confidence for fallback
                 administrations.append(record)
             else:
                 i += 1
@@ -382,12 +285,12 @@ def write_med_csv(administrations, filename):
         raise IOError(f"Error writing medication output file: {e}")
 
 
-def medication_extraction_pipeline(transcript_path):
+def medication_extraction_pipeline(transcript_path, extractor):
     """Run the medication extraction and CSV creation pipeline."""
     transcript_data = []
     df = load_transcript_csv(transcript_path)
     for _, row in df.iterrows():
-        extracted_entities = extract_medication_info_from_ner(row["text"])
+        extracted_entities = extractor.extract_medication_info_from_ner(row["text"])
         already_found_meds = [e["word"] for e in extracted_entities if e["entity"] == "B-Medication"]
         med_list = create_all_med_list()
         possible_missed_medications = missed_medication_info(row["text"].lower(), med_list)
@@ -398,7 +301,7 @@ def medication_extraction_pipeline(transcript_path):
                         "entity": "MEDICATION",
                         "word": med["medication"],
                         "start": med["start"],
-                        "score": 1.0  # Since we found through exact match. (Want to implement fuzzy matching later which will likely have a proper score attached to it)
+                        "score": HIGH_CONFIDENCE_SCORE  # Since we found through exact match. (Want to implement fuzzy matching later which will likely have a proper score attached to it)
                     })
         extracted_entities.sort(key=lambda x: x["start"])
         extracted_entities = ensure_proper_medication_name(extracted_entities, row["text"])
@@ -416,4 +319,5 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Extract medication information from transcript CSV.")
     parser.add_argument("transcript_path", help="Path to the input transcript CSV file.")
     args = parser.parse_args()
-    medication_extraction_pipeline(args.transcript_path)
+    extractor = MedicationExtractor()
+    medication_extraction_pipeline(args.transcript_path, extractor)
