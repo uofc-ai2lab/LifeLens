@@ -15,6 +15,7 @@ import cv2
 from deface import __version__
 from deface.centerface import CenterFace
 
+DEFAULT_BLUR_FACTOR = 2
 
 def scale_bb(x1, y1, x2, y2, mask_scale=1.0):
     s = mask_scale - 1.0
@@ -38,10 +39,10 @@ def draw_det(
     if replacewith == 'solid':
         cv2.rectangle(frame, (x1, y1), (x2, y2), ovcolor, -1)
     elif replacewith == 'blur':
-        bf = 2  # blur factor (number of pixels in each dimension that the face will be reduced to)
+        DEFAULT_BLUR_FACTOR = 2  # blur factor (number of pixels in each dimension that the face will be reduced to)
         blurred_box =  cv2.blur(
             frame[y1:y2, x1:x2],
-            (abs(x2 - x1) // bf, abs(y2 - y1) // bf)
+            (abs(x2 - x1) // DEFAULT_BLUR_FACTOR, abs(y2 - y1) // DEFAULT_BLUR_FACTOR)
         )
         if ellipse:
             roibox = frame[y1:y2, x1:x2]
@@ -126,7 +127,7 @@ def video_detect(
 
         meta = reader.get_meta_data()
         _ = meta['size']
-    except:
+    except(IOError, KeyError, ValueError) as e:
         if cam:
             print(f'Could not find video device {ipath}. Please set a valid input.')
         else:
@@ -169,11 +170,13 @@ def video_detect(
         if opath is not None:
             writer.append_data(frame)
 
-        if enable_preview:
-            cv2.imshow('Preview of anonymization results (quit by pressing Q or Escape)', frame[:, :, ::-1])  # RGB -> RGB
-            if cv2.waitKey(1) & 0xFF in [ord('q'), 27]:  # 27 is the escape key code
-                cv2.destroyAllWindows()
-                break
+        try:
+            if enable_preview:
+                cv2.imshow('Preview of anonymization results (quit by pressing Q or Escape)', frame[:, :, ::-1])  # RGB -> RGB
+                if cv2.waitKey(1) & 0xFF in [ord('q'), 27]:
+                    break
+        finally:
+            cv2.destroyAllWindows()
         bar.update()
     reader.close()
     if opath is not None:
@@ -221,9 +224,8 @@ def image_detect(
     if keep_metadata:
         # Save image with EXIF metadata
         imageio.imsave(opath, frame, exif=exif_dict)
-
-    # print(f'Output saved to {opath}')
-
+    else:
+        imageio.imsave(opath, frame)
 
 def get_file_type(path):
     if path.startswith('<video'):
@@ -247,7 +249,7 @@ def get_anonymized_image(frame,
                          ellipse: bool,
                          draw_scores: bool,
                          replaceimg = None
-                         ):
+                         ) -> None:
     """
     Method for getting an anonymized image without CLI
     returns frame
@@ -337,108 +339,140 @@ def parse_cli_args():
 
     return args
 
+def expand_input_paths(input_args: list[str]) -> list[str]:
+    ipaths: list[str] = []
 
-def main():
-    args = parse_cli_args()
-    ipaths = []
-
-    # add files in folders
-    for path in args.input:
+    for path in input_args:
         if os.path.isdir(path):
             for file in os.listdir(path):
-                ipaths.append(os.path.join(path,file))
+                ipaths.append(os.path.join(path, file))
         else:
-            # Either a path to a regular file, the special 'cam' shortcut
-            # or an invalid path. The latter two cases are handled below.
             ipaths.append(path)
 
-    
-    base_opath = args.output
-    replacewith = args.replacewith
-    enable_preview = args.preview
-    draw_scores = args.draw_scores
-    threshold = args.thresh
-    ellipse = not args.boxes
-    mask_scale = args.mask_scale
-    keep_audio = args.keep_audio
-    ffmpeg_config = args.ffmpeg_config
-    backend = args.backend
-    in_shape = args.scale
-    execution_provider = args.execution_provider
-    mosaicsize = args.mosaicsize
-    keep_metadata = args.keep_metadata
-    replaceimg = None
-    disable_progress_output = args.disable_progress_output
+    return ipaths
 
-    if in_shape is not None:
-        w, h = in_shape.split('x')
+def process_input(
+    ipath: str,
+    base_opath: str | None,
+    centerface: CenterFace,
+    *,
+    threshold,
+    replacewith,
+    mask_scale,
+    ellipse,
+    draw_scores,
+    enable_preview,
+    keep_audio,
+    ffmpeg_config,
+    keep_metadata,
+    replaceimg,
+    mosaicsize,
+    disable_progress_output,
+    nested: bool,
+):
+    if ipath == 'cam':
+        ipath = '<video0>'
+        enable_preview = True
+
+    filetype = get_file_type(ipath)
+    is_cam = filetype == 'cam'
+
+    opath = base_opath
+    if opath is None and not is_cam:
+        root, ext = os.path.splitext(ipath)
+        opath = f'{root}_anonymized{ext}'
+
+    print(f'Input:  {ipath}\nOutput: {opath}')
+
+    if opath is None and not enable_preview:
+        print('No output file is specified and the preview GUI is disabled. No output will be produced.')
+
+    if filetype == 'video' or is_cam:
+        video_detect(
+            ipath=ipath,
+            opath=opath,
+            centerface=centerface,
+            threshold=threshold,
+            cam=is_cam,
+            replacewith=replacewith,
+            mask_scale=mask_scale,
+            ellipse=ellipse,
+            draw_scores=draw_scores,
+            enable_preview=enable_preview,
+            nested=nested,
+            keep_audio=keep_audio,
+            ffmpeg_config=ffmpeg_config,
+            replaceimg=replaceimg,
+            mosaicsize=mosaicsize,
+            disable_progress_output=disable_progress_output,
+        )
+
+    elif filetype == 'image':
+        image_detect(
+            ipath=ipath,
+            opath=opath,
+            centerface=centerface,
+            threshold=threshold,
+            replacewith=replacewith,
+            mask_scale=mask_scale,
+            ellipse=ellipse,
+            draw_scores=draw_scores,
+            enable_preview=enable_preview,
+            keep_metadata=keep_metadata,
+            replaceimg=replaceimg,
+            mosaicsize=mosaicsize,
+        )
+
+    elif filetype == 'notfound':
+        print(f'File {ipath} not found. Skipping...')
+    else:
+        print(f'File {ipath} has an unknown type {filetype}. Skipping...')
+
+
+def main() -> None:
+    args = parse_cli_args()
+
+    ipaths = expand_input_paths(args.input)
+
+    in_shape = None
+    if args.scale is not None:
+        w, h = args.scale.split('x')
         in_shape = int(w), int(h)
-    if replacewith == "img":
+
+    replaceimg = None
+    if args.replacewith == "img":
         replaceimg = imageio.imread(args.replaceimg)
         print(f'After opening {args.replaceimg} shape: {replaceimg.shape}')
 
-
-    # TODO: scalar downscaling setting (-> in_shape), preserving aspect ratio
-    centerface = CenterFace(in_shape=in_shape, backend=backend, override_execution_provider=execution_provider)
+    centerface = CenterFace(
+        in_shape=in_shape,
+        backend=args.backend,
+        override_execution_provider=args.execution_provider,
+    )
 
     multi_file = len(ipaths) > 1
     if multi_file:
         ipaths = tqdm.tqdm(ipaths, position=0, dynamic_ncols=True, desc='Batch progress')
 
     for ipath in ipaths:
-        opath = base_opath
-        if ipath == 'cam':
-            ipath = '<video0>'
-            enable_preview = True
-        filetype = get_file_type(ipath)
-        is_cam = filetype == 'cam'
-        if opath is None and not is_cam:
-            root, ext = os.path.splitext(ipath)
-            opath = f'{root}_anonymized{ext}'
-        print(f'Input:  {ipath}\nOutput: {opath}')
-        if opath is None and not enable_preview:
-            print('No output file is specified and the preview GUI is disabled. No output will be produced.')
-        if filetype == 'video' or is_cam:
-            video_detect(
-                ipath=ipath,
-                opath=opath,
-                centerface=centerface,
-                threshold=threshold,
-                cam=is_cam,
-                replacewith=replacewith,
-                mask_scale=mask_scale,
-                ellipse=ellipse,
-                draw_scores=draw_scores,
-                enable_preview=enable_preview,
-                nested=multi_file,
-                keep_audio=keep_audio,
-                ffmpeg_config=ffmpeg_config,
-                replaceimg=replaceimg,
-                mosaicsize=mosaicsize,
-                disable_progress_output=disable_progress_output
-            )
-        elif filetype == 'image':
-            image_detect(
-                ipath=ipath,
-                opath=opath,
-                centerface=centerface,
-                threshold=threshold,
-                replacewith=replacewith,
-                mask_scale=mask_scale,
-                ellipse=ellipse,
-                draw_scores=draw_scores,
-                enable_preview=enable_preview,
-                keep_metadata=keep_metadata,
-                replaceimg=replaceimg,
-                mosaicsize=mosaicsize
-            )
-        elif filetype is None:
-            print(f'Can\'t determine file type of file {ipath}. Skipping...')
-        elif filetype == 'notfound':
-            print(f'File {ipath} not found. Skipping...')
-        else:
-            print(f'File {ipath} has an unknown type {filetype}. Skipping...')
-
+        process_input(
+            ipath=ipath,
+            base_opath=args.output,
+            centerface=centerface,
+            threshold=args.thresh,
+            replacewith=args.replacewith,
+            mask_scale=args.mask_scale,
+            ellipse=not args.boxes,
+            draw_scores=args.draw_scores,
+            enable_preview=args.preview,
+            keep_audio=args.keep_audio,
+            ffmpeg_config=args.ffmpeg_config,
+            keep_metadata=args.keep_metadata,
+            replaceimg=replaceimg,
+            mosaicsize=args.mosaicsize,
+            disable_progress_output=args.disable_progress_output,
+            nested=multi_file,
+        )
 
 if __name__ == '__main__':
     main()
