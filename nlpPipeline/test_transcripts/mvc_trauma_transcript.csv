@@ -1,0 +1,53 @@
+start,end,text
+00:00:01.000,00:00:02.500,Arrival now.
+00:00:02.500,00:00:04.800,Motor vehicle collision.
+00:00:04.800,00:00:07.300,"Approaching the scene, vehicle against pole, no fire present."
+00:00:07.300,00:00:09.800,"Hi, we're here to help. Stay still for me."
+00:00:09.800,00:00:12.200,Patient says trouble breathing and chest discomfort.
+00:00:12.200,00:00:14.800,Applying pressure to leg area for bleeding control.
+00:00:14.800,00:00:17.200,Bandage on left leg.
+00:00:17.200,00:00:19.500,Checking airway now.
+00:00:19.500,00:00:21.700,"Airway clear, breathing rapid."
+00:00:21.700,00:00:23.900,Placing cervical collar.
+00:00:23.900,00:00:26.300,Spinal motion restriction maintained.
+00:00:26.300,00:00:28.600,IV started left arm.
+00:00:28.600,00:00:30.800,Intravenous line running saline.
+00:00:30.800,00:00:33.100,Patient says dizziness worsening.
+00:00:33.100,00:00:35.600,Starting oxygen.
+00:00:35.600,00:00:38.100,Patient breathing easier with oxygen applied.
+00:00:38.100,00:00:40.400,"Chest rise uneven, assessing for pneumothorax."
+00:00:40.400,00:00:42.700,Possible pneumo left side.
+00:00:42.700,00:00:45.400,Performing needle decompression left chest.
+00:00:45.400,00:00:47.800,Chest decompression completed.
+00:00:47.800,00:00:50.300,Patient says breathing feels slightly better.
+00:00:50.300,00:00:52.800,Applying additional dressing to forehead.
+00:00:52.800,00:00:55.200,Bleeding control maintained.
+00:00:55.200,00:00:58.000,"Checking responsiveness, patient alert to voice."
+00:00:58.000,00:01:00.400,Airway stable but monitoring for obstruction.
+00:01:00.400,00:01:02.900,Preparing for movement.
+00:01:02.900,00:01:05.300,Sliding backboard underneath patient.
+00:01:05.300,00:01:07.900,"Backboard secure, spinal motion restriction active."
+00:01:07.900,00:01:10.600,Reassessing chest—uneven rise improving post-decompression.
+00:01:10.600,00:01:13.300,Patient denies chest pain now.
+00:01:13.300,00:01:15.700,"Giving acetaminophen, 650 milligrams."
+00:01:15.700,00:01:18.000,Medication administered.
+00:01:18.000,00:01:20.700,"Pressure maintained at leg wound, bleeding slowed."
+00:01:20.700,00:01:23.500,Tourniquet not required at this time.
+00:01:23.500,00:01:26.300,Patient says vision slightly blurry.
+00:01:26.300,00:01:29.200,Checking pulse and perfusion.
+00:01:29.200,00:01:31.900,"Intravenous flow steady, adjusting saline rate."
+00:01:31.900,00:01:34.400,Preparing to move patient from vehicle space.
+00:01:34.400,00:01:37.000,On lift—maintaining spinal alignment.
+00:01:37.000,00:01:39.500,Placing patient onto stretcher now.
+00:01:39.500,00:01:42.000,Securing straps.
+00:01:42.000,00:01:44.600,CPR not required; patient has strong pulse.
+00:01:44.600,00:01:47.300,"Rechecking airway—clear, no need for intubation."
+00:01:47.300,00:01:50.300,Monitoring chest sounds post-needle decompression.
+00:01:50.300,00:01:53.200,Applying secondary dressing for bleeding control.
+00:01:53.200,00:01:55.800,Patient says breathing continues to improve.
+00:01:55.800,00:01:58.300,Moving to ambulance.
+00:01:58.300,00:02:00.800,"Rolling smoothly, watching uneven ground."
+00:02:00.800,00:02:03.300,Loading patient.
+00:02:03.300,00:02:05.700,Stretcher locked in place.
+00:02:05.700,00:02:08.200,"Reassessing: airway clear, oxygen flowing, IV stable."
+00:02:08.200,00:02:10.700,Transport start.
