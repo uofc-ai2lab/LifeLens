@@ -1,11 +1,10 @@
-import csv
-import re
-import torch
+from pathlib import Path
+import csv, re, torch, os, argparse
 from transformers import AutoTokenizer, AutoModelForTokenClassification
-import os
 import pandas as pd
-import argparse
 from src.constants.medication_extraction_constants import ROUTES, DOSAGES, TEXT_NUMBERS, NUMBER_PATTERN, MEDICATIONS, LOW_CONFIDENCE_SCORE, HIGH_CONFIDENCE_SCORE
+from src.tools.export_to_csv import export_to_csv
+from config.settings import TRANSCRIPT_FILES_LIST, MEANING_DIR
 
 
 def load_transcript_csv(file_path):
@@ -16,8 +15,7 @@ def load_transcript_csv(file_path):
         return pd.read_csv(file_path)
     except Exception as e:
         raise IOError(f"Error loading transcript file: {e}")
-
-
+    
 class MedicationExtractor:
     def __init__(self):
         self.NER_MODEL = "d4data/biomedical-ner-all"
@@ -96,7 +94,6 @@ def create_all_med_list(med_list=MEDICATIONS):
             
     med_terms_sorted = sorted(all_med_terms, key=len, reverse=True)
     return med_terms_sorted
-        
         
 def missed_medication_info(text, med_list):
     """Aim is to find any medication-related information that may have been missed by the NER model."""
@@ -188,7 +185,8 @@ def extract_med_admins_with_confidence(segments):
                     "dosage_score": None,
                     "route": None,
                     "route_score": None,
-                    "time": segment.get("segment_time")
+                    "start": segment.get("start"),
+                    "end": segment.get("end")
                 }
 
                 i += 1
@@ -246,44 +244,28 @@ def extract_med_admins_with_confidence(segments):
                 i += 1
     return administrations
 
-def write_med_csv(administrations, filename):
-    new_filename = filename.replace(".csv", "_medications_output.csv")
-    try:
-        with open(new_filename, mode="w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
+def prepare_medication_rows(administrations):
+    rows = []
 
-            # Header
-            writer.writerow([
-                "TIME",
-                "MEDICATION (CONFIDENCE SCORE)",
-                "DOSAGE (CONFIDENCE SCORE)",
-                "ROUTE (CONFIDENCE SCORE)"
-            ])
+    for a in administrations:
+        rows.append({
+            "start": a.get("start",""),
+            "end": a.get("end",""),
+            "medication (confidence score)": (
+                f"{a['medication']} ({a['medication_score']:.3f})"
+                if a.get("medication") else "Not Found"
+            ),
+            "dosage (confidence score)": (
+                f"{a['dosage']} ({a['dosage_score']:.3f})"
+                if a.get("dosage") else "Not Found"
+            ),
+            "route (confidence score)": (
+                f"{a['route']} ({a['route_score']:.3f})"
+                if a.get("route") else "Not Found"
+            ),
+        })
 
-            # Rows
-            for a in administrations:
-                med = (
-                    f"{a['medication']} ({a['medication_score']:.3f})"
-                    if a.get("medication") else "Not Found"
-                )
-                dose = (
-                    f"{a['dosage']} ({a['dosage_score']:.3f})"
-                    if a.get("dosage") else "Not Found"
-                )
-                route = (
-                    f"{a['route']} ({a['route_score']:.3f})"
-                    if a.get("route") else "Not Found"
-                )
-
-                writer.writerow([
-                    a.get("time", ""),
-                    med,
-                    dose,
-                    route
-                ])
-    except Exception as e:
-        raise IOError(f"Error writing medication output file: {e}")
-
+    return rows
 
 def medication_extraction_pipeline(transcript_path, extractor):
     """Run the medication extraction and CSV creation pipeline."""
@@ -307,18 +289,33 @@ def medication_extraction_pipeline(transcript_path, extractor):
         extracted_entities = ensure_proper_medication_name(extracted_entities, row["text"])
         nlp_data = {
             "original_text": row["text"],
-            "segment_time": f"{row['start']} - {row['end']}",
+            "start": row['start'],
+            "end": row['end'],
             "entities": extracted_entities
         }
         transcript_data.append(nlp_data)
     
     full_medication_info = extract_med_admins_with_confidence(transcript_data)
-    write_med_csv(full_medication_info, filename=transcript_path)
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Extract medication information from transcript CSV.")
-    parser.add_argument("transcript_path", help="Path to the input transcript CSV file.")
-    args = parser.parse_args()
+    rows = prepare_medication_rows(full_medication_info)
+
+    export_to_csv(
+        data=rows,
+        output_path=MEANING_DIR,
+        input_filename=Path(transcript_path).stem,
+        service="medX",
+        columns=[
+            "start",
+            "end",
+            "medication (confidence score)",
+            "dosage (confidence score)",
+            "route (confidence score)"
+        ],
+        empty_ok=True,
+    )
+
+async def medication_extraction_service():
+    """Async wrapper to run the medication extraction pipeline."""
     extractor = MedicationExtractor()
-    medication_extraction_pipeline(args.transcript_path, extractor)
-    
+    path = TRANSCRIPT_FILES_LIST[0]
+    medication_extraction_pipeline(path, extractor)
