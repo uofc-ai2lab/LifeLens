@@ -1,16 +1,10 @@
 import os, csv
 import pandas as pd
 from typing import List, Dict, Callable, Optional, Union
-from src.constants.audio_to_transcript_constants import bcolors
+from src.constants.constants import bcolors
 from src.tools.generate_export_filename import generate_export_filename
+from src.tools.format_timestamp import format_timestamp
 
-def format_timestamp(seconds: float) -> str:
-    """Convert seconds to timestamp format"""
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-    millis = int((seconds % 1) * 1000)
-    return f"{hours:02d}:{minutes:02d}:{secs:02d}.{millis:03d}"
 
 def transform_row_fn(data, columns):
     # Apply default transformations
@@ -21,7 +15,12 @@ def transform_row_fn(data, columns):
             val = r.get(k, "")
             if k == "start" or k == "end":
                 try:
-                    val = format_timestamp(float(val))
+                    # Only format if numeric
+                    if isinstance(val, (int, float)):
+                        val = format_timestamp(val)
+                    else:
+                        # Already formatted → keep as-is
+                        val = str(val)
                 except Exception:
                     val = "00:00:00.000"
             elif k == "text":

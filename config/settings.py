@@ -38,10 +38,6 @@ if IS_JETSON:
 PYANNOTE_CACHE_DIR = os.getenv("PYANNOTE_CACHE_DIR", None)  # Optional custom cache path
 MODEL_CACHE_PATH = os.getenv("WHISPER_TRT_CACHE", None)  # Optional custom cache path
 USE_OFFLINE_MODELS = int(os.getenv("USE_OFFLINE_MODELS", "0"))
-OUTPUT_DIR = os.getenv("OUTPUT_DIR","")
-if OUTPUT_DIR == "":
-    OUTPUT_DIR = TRANSCRIPT_DIR
-
 
 _raw_audio_files = os.getenv("AUDIO_FILES")
 if _raw_audio_files:
@@ -50,18 +46,32 @@ if _raw_audio_files:
 else:
     # Default: take ALL files in audio_files directory
     AUDIO_FILES_LIST = [f for f in AUDIO_DIR.iterdir() if f.is_file()]
+   
+TRANSCRIPT_DIR_NEW = os.getenv("TRANSCRIPT_DIR","")
+if TRANSCRIPT_DIR_NEW != "":
+    TRANSCRIPT_DIR = TRANSCRIPT_DIR_NEW
     
 # -------------------------
 # NLP / Meaning extraction
 # -------------------------
-MIN_MEANING_CONFIDENCE = float(
-    os.getenv("MIN_MEANING_CONFIDENCE", 0.6)
-)
 
 ENABLE_SEMANTIC_FILTERING = (
     os.getenv("ENABLE_SEMANTIC_FILTERING", "true").lower() == "true"
 )
 
+_raw_transcript_files = os.getenv("TRANSCRIPT_FILES")
+if _raw_transcript_files:
+    # Explicit list provided via env var
+    TRANSCRIPT_FILES_LIST = [TRANSCRIPT_DIR / f.strip() for f in _raw_transcript_files.split(",") if f.strip()]
+else:
+    # Default: take ALL files in audio_files directory
+    TRANSCRIPT_FILES_LIST = [f for f in TRANSCRIPT_DIR.iterdir() if f.is_file()]
+   
+MEANING_DIR_NEW = os.getenv("MEANING_DIR","")
+if MEANING_DIR_NEW != "":
+    MEANING_DIR = MEANING_DIR_NEW
+    
+    
 # -------------------------
 # Encryption
 # -------------------------
