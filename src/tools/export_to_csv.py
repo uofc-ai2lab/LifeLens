@@ -2,6 +2,7 @@ import os, csv
 import pandas as pd
 from typing import List, Dict, Callable, Optional, Union
 from src.constants.audio_to_transcript_constants import bcolors
+from src.tools.generate_export_filename import generate_export_filename
 
 def format_timestamp(seconds: float) -> str:
     """Convert seconds to timestamp format"""
@@ -34,7 +35,8 @@ def transform_row_fn(data, columns):
 def export_to_csv(
     data: Union[List[Dict],pd.DataFrame],
     output_path: str,
-    filename: str,
+    input_filename: str,
+    service: str = "",
     columns: Optional[List[str]] = None,
     header: Optional[List[str]] = None,
     empty_ok: bool = True,
@@ -45,14 +47,16 @@ def export_to_csv(
     Parameters:
     - data: list[dict] or pandas DataFrame
     - output_path: output file path
-    - filename:  output file name
+    - input_filename:  input file name (used in output file's name)
+    - service: type of service exporting a csv
     - columns: ordered list of columns to include
     - header: optional custom header (for csv.writer style)
     - transform_row_fn: optional function to transform each row
     - empty_ok: whether to write empty CSV if data is empty
     """
-    
-    full_output_path=f"{output_path}/{filename}.csv"
+
+    full_output_name = generate_export_filename(input_filename, service)
+    full_output_path=f"{output_path}/{full_output_name}"
     os.makedirs(os.path.dirname(full_output_path), exist_ok=True)
     
     if data is None or (isinstance(data, list) and len(data) == 0):
