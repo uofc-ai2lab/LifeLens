@@ -1,0 +1,89 @@
+import os, csv
+import pandas as pd
+from typing import List, Dict, Callable, Optional, Union
+from src.constants.audio_to_transcript_constants import bcolors
+
+def format_timestamp(seconds: float) -> str:
+    """Convert seconds to timestamp format"""
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    millis = int((seconds % 1) * 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}.{millis:03d}"
+
+def transform_row_fn(data, columns):
+    # Apply default transformations
+    transformed_rows = []
+    for r in data:
+        transformed_row = {}
+        for k in (columns or r.keys()):
+            val = r.get(k, "")
+            if k == "start" or k == "end":
+                try:
+                    val = format_timestamp(float(val))
+                except Exception:
+                    val = "00:00:00.000"
+            elif k == "text":
+                val = str(val).strip()
+            elif k == "speaker":
+                val = val if val else "UNKNOWN"
+            transformed_row[k] = val
+        transformed_rows.append(transformed_row)
+    return transformed_rows
+    
+def export_to_csv(
+    data: Union[List[Dict],pd.DataFrame],
+    output_path: str,
+    filename: str,
+    columns: Optional[List[str]] = None,
+    header: Optional[List[str]] = None,
+    empty_ok: bool = True,
+):
+    """
+    Generic CSV exporter.
+
+    Parameters:
+    - data: list[dict] or pandas DataFrame
+    - output_path: output file path
+    - filename:  output file name
+    - columns: ordered list of columns to include
+    - header: optional custom header (for csv.writer style)
+    - transform_row_fn: optional function to transform each row
+    - empty_ok: whether to write empty CSV if data is empty
+    """
+    
+    full_output_path=f"{output_path}/{filename}.csv"
+    os.makedirs(os.path.dirname(full_output_path), exist_ok=True)
+    
+    if data is None or (isinstance(data, list) and len(data) == 0):
+        if not empty_ok:
+            print(bcolors.FAIL + "ERROR: No data to export." + bcolors.ENDC)
+            return
+        print(bcolors.WARNING + "WARNING: Exporting empty CSV." + bcolors.ENDC)
+    
+    try:
+        # Case 1: DataFrame
+        if isinstance(data, pd.DataFrame):
+            if columns: 
+                data = data[columns]
+            data.to_csv(full_output_path, index=False)
+            
+        # Case 2: List[Dict]
+        else:
+            rows = transform_row_fn(data, columns)
+            
+            if columns:
+                rows = [{k: r.get(k,"") for k in columns} for r in rows]
+            
+            with open(full_output_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                
+                if header:  writer.writerow(header)
+                elif rows:  writer.writerow(rows[0].keys())
+                
+                for row in rows:    writer.writerow(row.values())
+        print(bcolors.OKGREEN + f"CSV exported successfully -> {os.path.abspath(full_output_path)}"+bcolors.ENDC)
+        
+    except Exception as e:
+        print(bcolors.FAIL + f"ERROR exporting CSV: {e}" + bcolors.ENDC)
+        raise

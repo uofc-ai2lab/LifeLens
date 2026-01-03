@@ -5,7 +5,7 @@ from transformers import AutoTokenizer, AutoModelForTokenClassification
 import os
 import pandas as pd
 import argparse
-from medication_extraction_constants import ROUTES, DOSAGES, TEXT_NUMBERS, NUMBER_PATTERN, MEDICATIONS, LOW_CONFIDENCE_SCORE, HIGH_CONFIDENCE_SCORE
+from src.constants.medication_extraction_constants import ROUTES, DOSAGES, TEXT_NUMBERS, NUMBER_PATTERN, MEDICATIONS, LOW_CONFIDENCE_SCORE, HIGH_CONFIDENCE_SCORE
 
 
 def load_transcript_csv(file_path):
@@ -321,3 +321,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     extractor = MedicationExtractor()
     medication_extraction_pipeline(args.transcript_path, extractor)
+    
