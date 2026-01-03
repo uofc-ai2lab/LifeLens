@@ -4,7 +4,6 @@ from datetime import datetime
 import pandas as pd
 import soundfile as sf
 from src.constants.audio_to_transcript_constants import bcolors
-from src.tools.generate_export_filename import generate_export_filename
 from src.tools.export_to_csv import export_to_csv
 from config.settings import AUDIO_FILES_LIST, IS_JETSON, MODEL_SIZE, MODEL_CACHE_PATH, OUTPUT_DIR
 
@@ -164,14 +163,14 @@ async def run_transcription():
 
         # ==================== VERIFICATION STEP 5: CHECK EXPORT ====================
         export_start = datetime.now()
-        filename = generate_export_filename(Path(audio_file).stem)
         columns=["start", "end", "text", "speaker"]
         print_formatting("heading","STEP 5: EXPORTING RESULTS")
 
         export_to_csv(
             data=verified_result,
             output_path=OUTPUT_DIR,
-            filename=filename,
+            input_filename=Path(audio_file).stem,
+            service="transcript",
             columns=columns,
         )
         
