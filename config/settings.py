@@ -1,6 +1,7 @@
 from pathlib import Path
 import os, platform
 from dotenv import load_dotenv
+import google.generativeai as genai
 
 # Load environment variables from .env
 load_dotenv()
@@ -17,7 +18,6 @@ AUDIO_DIR = DATA_DIR / "audio_files"
 TRANSCRIPT_DIR = DATA_DIR / "transcript_files"
 MEANING_DIR = DATA_DIR / "meaning_files"
 TEST_DATA_DIR = DATA_DIR / "test_data"
-
 
 # -------------------------
 # Environment
@@ -54,11 +54,6 @@ if TRANSCRIPT_DIR_NEW != "":
 # -------------------------
 # NLP / Meaning extraction
 # -------------------------
-
-ENABLE_SEMANTIC_FILTERING = (
-    os.getenv("ENABLE_SEMANTIC_FILTERING", "true").lower() == "true"
-)
-
 _raw_transcript_files = os.getenv("TRANSCRIPT_FILES")
 if _raw_transcript_files:
     # Explicit list provided via env var
@@ -70,7 +65,17 @@ else:
 MEANING_DIR_NEW = os.getenv("MEANING_DIR","")
 if MEANING_DIR_NEW != "":
     MEANING_DIR = MEANING_DIR_NEW
-    
+
+ENABLE_SEMANTIC_FILTERING = int(os.getenv("ENABLE_SEMANTIC_FILTERING", "0"))
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", None)
+GENAI_MODEL = None
+
+if ENABLE_SEMANTIC_FILTERING:
+    if not GOOGLE_API_KEY:
+        print("Error: GOOGLE_API_KEY or GEMINI_API_KEY not found in environment variables.")
+    genai.configure(api_key=GOOGLE_API_KEY)
+
+    GENAI_MODEL = genai.GenerativeModel("gemini-flash-latest")
     
 # -------------------------
 # Encryption

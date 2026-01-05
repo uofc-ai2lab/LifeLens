@@ -1,0 +1,35 @@
+start,end,intervention
+00:01:32.000,00:01:38.000,checking for any injuries
+00:01:38.000,00:01:41.000,"Pupil check (pad light, trying to hide)"
+00:01:41.000,00:01:42.000,Pupils reacting to light
+00:01:42.000,00:01:44.000,Pupils eye reactant
+00:01:44.000,00:01:46.000,Assessment for D-capitalus in the head
+00:01:46.000,00:01:50.000,"Assessment for mouth, nose, G-V-D, triple deviation"
+00:01:54.000,00:01:56.000,Auscultation of lung sounds
+00:02:04.000,00:02:06.000,No lung sounds on the right (Assessment finding)
+00:02:08.000,00:02:10.000,Confirmed chest wire from the left (Auscultation finding)
+00:02:18.000,00:02:20.000,Needle chest (Needle Decompression command)
+00:02:20.000,00:02:24.000,"Needle chest placement (second intercostal space, mid-clavicular)"
+00:02:24.000,00:02:26.000,Needle chest placement (Just above the third rib)
+00:02:30.000,00:02:32.000,Needle chest performed
+00:02:34.000,00:02:36.000,Needle chest successful (Confirmed use)
+00:02:40.000,00:02:42.000,Confirmed chest rise on the right side now (Effectiveness check)
+00:02:46.000,00:02:48.000,Assessment of abdominal area
+00:02:48.000,00:02:50.000,Abdomen soft (Assessment finding)
+00:02:50.000,00:02:52.000,Assessment of pelvis
+00:02:52.000,00:02:54.000,Pelvic instability (Assessment finding)
+00:03:34.000,00:03:36.000,Pelvis stabilized
+00:03:36.000,00:03:38.000,Assessment of left leg
+00:03:38.000,00:03:40.000,Check pulse in left leg
+00:03:40.000,00:03:42.000,Check motor function (circular toes)
+00:03:42.000,00:03:44.000,No response (Motor function finding)
+00:03:44.000,00:03:46.000,Assessment of other leg
+00:03:50.000,00:03:52.000,Pulse is intact (Pulse check result)
+00:03:52.000,00:03:54.000,Assessment of left arm
+00:03:54.000,00:03:56.000,Check pulse in left arm
+00:03:56.000,00:03:58.000,Pulse is intact (Pulse check result)
+00:04:00.000,00:04:02.000,No response (Motor function finding)
+00:04:02.000,00:04:04.000,Check right arm pulses
+00:04:04.000,00:04:06.000,Pulse is intact (Pulse check result)
+00:04:22.000,00:04:24.000,Pelvis stabilization status confirmed
+00:04:24.000,00:04:26.000,Command to get patient on a long board
