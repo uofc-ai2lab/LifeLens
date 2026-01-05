@@ -1,6 +1,0 @@
-start,end,text,category,entity_text,entity_type
-00:00:25.466,00:00:28.146,And what they're going to find is that the patient has a pneumo.,"['Intervention', 'MedCat']",Pneumothorax,Disease or Syndrome
-00:00:36.317,00:00:39.418,"So I'm going to give them a right-sided pneumo, and then activate.","['Intervention', 'MedCat']",Pneumothorax,Disease or Syndrome
-00:02:11.911,00:02:13.611,"Okay, so we have a possible tension pneumo.","['Intervention', 'MedCat']",Pneumothorax,Disease or Syndrome
-00:02:51.096,00:02:53.157,I'm going to put a pelvic binder on my partner and my arm.,Medication,binder,Medication (BioNER)
-00:04:05.444,00:04:15.490,"Alright, the syringes we have are the right pneumo which has been something.","['Intervention', 'MedCat']",Pneumothorax,Disease or Syndrome
