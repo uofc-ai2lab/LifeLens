@@ -27,17 +27,17 @@ Once you have the expected output, create a **dedicated virtual environment**:
 
 Create venv:
 ```bash
-python3.11 -m venv venv311
+python3.11 -m venv .venv
 ```
 
 Activate on Windows:
 ```bash
-venv311\Scripts\activate
+.venv\Scripts\activate
 ```
 
 Activate on Mac/Linux:
 ```bash
-source venv311/bin/activate
+source .venv/bin/activate
 ```
 
 ### Step 3: Upgrade pip
@@ -96,7 +96,19 @@ Place your testing data in the `data/` directory using the following structure:
 - `data/meaning_files/` - Output files from transcript-to-meaning services (CSV format)
 
 
-## ▶️ Running Services
+## ▶️ Running Services (Pipeline)
+
+### Run All Services
+
+Run all services combined from the **root folder** using the following command (no arguments):
+
+```sh
+python -m src.main
+```
+
+This will run transcription -> medication extraction -> semantic filtering
+
+### Run Individual Services
 
 Run services from the **root folder** using the following command pattern:
 
@@ -108,11 +120,10 @@ python -m src.main <service_name>
 
 | Service Name     | Description                       |
 | ---------------- | --------------------------------- |
-| `whisperx`       | Run WhisperX transcription        |
-| `faster_whisper` | Run Faster Whisper transcription  |
 | `transcribe`     | Run audio-to-transcript service   |
 | `intervention`   | Run NLP intervention extraction   |
 | `meds`           | Run medication extraction service |
+| `sem`            | Run semantic filtering service |
 
 
 ### Examples
@@ -121,11 +132,8 @@ python -m src.main <service_name>
 # Run medication extraction
 python -m src.main meds
 
-# Run WhisperX
-python -m src.main whisperx
-
-# Run intervention extraction
-python -m src.main intervention
+# Run transcription
+python -m src.main transcribe
 ```
 
 ### Important Notes:
