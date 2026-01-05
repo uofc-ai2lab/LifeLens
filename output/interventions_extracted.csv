@@ -1,0 +1,27 @@
+start_time,end_time,event_type,event_category,entity_detected,full_text
+00:00:17.200,00:00:19.500,intervention,Hemorrhage Control,Apply; air pressure; Leg; Area; Hemorrhage; Control function; pressure,Applying pressure to leg area for bleeding control.
+00:00:19.500,00:00:21.700,intervention,Hemorrhage Control,Bandage; Left sided; Leg; bandage,Bandage on left leg.
+00:00:23.900,00:00:26.300,intervention,Airway Management,Airway structure; airway,Checking airway now.
+00:00:26.300,00:00:28.600,intervention,Airway Management,Airway structure; airway,"Airway clear, breathing rapid."
+00:00:28.600,00:00:30.800,intervention,Spinal Immobilization,Cervical; cervical collar,Placing cervical collar.
+00:00:30.800,00:00:33.100,intervention,Spinal Immobilization,spinal; Motion; Restricted; Maintenance; spinal motion restriction,Spinal motion restriction maintained.
+00:00:33.100,00:00:35.600,intervention,IV/Fluid Administration,Left upper arm structure; iv,IV started left arm.
+00:00:35.600,00:00:38.100,intervention,IV/Fluid Administration,Intravenous infusion procedures; Saline Solution; intravenous,Intravenous line running saline.
+00:00:47.800,00:00:50.300,intervention,Needle Decompression,Pneumothorax; pneumothorax,"Chest rise uneven, assessing for pneumothorax."
+00:00:50.300,00:00:52.800,intervention,Needle Decompression,Pneumothorax; Left; pneumothorax,Possible pneumo left side.
+00:00:52.800,00:00:55.200,intervention,Hemorrhage Control,Pressure - action; Respiration; pressure,"Sam, you might feel some pressure here—just keep breathing for us."
+00:00:55.200,00:00:58.000,intervention,Needle Decompression,operation performed; Needle device; Decompression; Left; Chest; needle decompression,Performing needle decompression left chest.
+00:00:58.000,00:01:00.400,intervention,Needle Decompression,decompression of spinal cord; chest decompression,Chest decompression completed.
+00:01:05.300,00:01:07.900,intervention,Hemorrhage Control,Apply; Additional; Medical dressing; Forehead; dressing,Applying additional dressing to forehead.
+00:01:07.900,00:01:10.600,intervention,Hemorrhage Control,Hemorrhage; Control function; Maintaining (action); bleeding control,Bleeding control maintained.
+00:01:13.300,00:01:15.700,intervention,Airway Management,Airway structure; Stable status; Monitoring - action; airway,Airway stable but monitoring for obstruction.
+00:01:20.700,00:01:23.500,intervention,Spinal Immobilization,Sliding; Patients; backboard,Sliding backboard underneath patient.
+00:01:23.500,00:01:26.300,intervention,Spinal Immobilization,qualitative; Vertebral column; Motion; spinal motion restriction,"Backboard secure, spinal motion restriction active."
+00:01:37.000,00:01:39.500,intervention,Hemorrhage Control,air pressure; Leg; Hemorrhage; pressure,"Pressure maintained at leg wound, bleeding slowed."
+00:01:39.500,00:01:42.000,intervention,Hemorrhage Control,tourniquet; Not Required; Time,Tourniquet not required at this time.
+00:01:50.300,00:01:53.200,intervention,IV/Fluid Administration,Intravenous; Blood flow; steady; qualitative; Saline Solution; Rate; intravenous,"Intravenous flow steady, adjusting saline rate."
+00:02:03.300,00:02:05.700,intervention,CPR,Cardiopulmonary Resuscitation; Finding; Physiologic pulse; cpr,CPR not required; patient has strong pulse.
+00:02:05.700,00:02:08.200,intervention,Airway Management,Airway structure; airway,"Rechecking airway—clear, no need for intubation."
+00:02:08.200,00:02:10.700,intervention,Needle Decompression,ENVIR MONITORING; post exercise; Needle device; decompression of spinal cord; needle decompression,Monitoring chest sounds post-needle decompression.
+00:02:10.700,00:02:13.300,intervention,Hemorrhage Control,Apply; Secondary to; Hemorrhage; Control function; bleeding control,Applying secondary dressing for bleeding control.
+00:02:28.200,00:02:30.700,intervention,Airway Management; IV/Fluid Administration,Assessed; Airway structure; Oxygen; Stable status; airway; iv,"Reassessing: airway clear, oxygen flowing, IV stable."

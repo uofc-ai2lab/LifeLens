@@ -23,7 +23,7 @@ async def main():
         from WhisperTRT.whispertrt import run_whispertrt
         await run_whispertrt()
     elif args.service == "nlp":
-        from nlpPipeline.nlp_pipeline import run_nlp
+        from nlpPipeline.intervention_extraction import run_nlp
         await run_nlp()
     else:
         print(f"Service {args.service} not recognized.")
