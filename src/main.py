@@ -8,8 +8,10 @@ async def main():
     parser = argparse.ArgumentParser(description="Run microservices")
     parser.add_argument(
         "service",
+        nargs="?",
         type=str,
-        choices=["whisperx", "faster_whisper", "transcribe", "ninterventionlp", "meds", "sem"],  # Add other services as needed
+        choices=["transcribe", "meds", "sem"],
+        default=None
     )
     args = parser.parse_args()
 
@@ -23,7 +25,12 @@ async def main():
         from src.services.semantic_filtering_service.semantic_filtering import run_semantic_filtering
         await run_semantic_filtering()
     else:
-        print(f"Service {args.service} not recognized.")
+        from src.services.transcription_service.transcription_whispertrt import run_transcription
+        await run_transcription()
+        from src.services.medication_extraction_service.medication_extraction import medication_extraction_service
+        await medication_extraction_service()
+        from src.services.semantic_filtering_service.semantic_filtering import run_semantic_filtering
+        await run_semantic_filtering()
     
 if __name__ == "__main__":
     import asyncio

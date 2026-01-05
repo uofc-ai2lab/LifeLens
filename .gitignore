@@ -112,7 +112,7 @@ pyannote_models/
 nlpPipeline/data_p3.2
 
 # Extra data files - remove when we need them
-data/temp/
+temp/
 
 
 # Byte-compiled / optimized / DLL files
