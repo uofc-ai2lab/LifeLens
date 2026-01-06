@@ -1,7 +1,7 @@
 from pathlib import Path
 import os, platform
 from dotenv import load_dotenv
-import google.genai as genai
+import google.generativeai as genai
 
 # Load environment variables from .env
 load_dotenv()
