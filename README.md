@@ -1,26 +1,50 @@
 # 🎙 Audio Processing Pipeline
 A complete audio-to-transcript and transcript-to-meaning pipeline with services for transcription, intervention extraction, and medication extraction.
 
-## 🔧 Environment Setup
-### Step 1: Verify Python Location
+**Note: Ensure you are running all of the following commands from the project root unless otherwise specified.**
 
-First, verify the Python location by running the following command:
+## 🔧 Environment Setup
+### Step 1: Verify Python Environment
+
+### Step 1: Verify Python Environment
+
+
+First, check which Python executable is currently active:
+
 ```bash
 which python
 ```
+or, if python is not available on your system:
 
-This should return:
-```
-.../current_working_directory/bin/python
-```
-
-If the output points to Anaconda, e.g.:
-```bash.../anaconda3/bin/python```
-
-then run:
 ```bash
+which python3
+```
+
+If the output points to Anaconda (❌ not desired):
+```
+.../anaconda3/bin/python
+```
+
+Deactivate Conda:
+```
 conda deactivate
 ```
+
+Then verify again:
+```bash
+which python
+```
+or:
+
+```bash
+which python3
+```
+
+At this point, one of the following is expected and OK:
+- No output (Python not currently on PATH)
+- A system Python location (e.g. `/usr/bin/python3`)
+
+You are now ready to create and activate a virtual environment.
 
 ### Step 2: Setup Virtual Environment
 Once you have the expected output, create a **dedicated virtual environment**:
@@ -42,11 +66,13 @@ source .venv/bin/activate
 
 ### Step 3: Upgrade pip
 ```sh
-python.exe -m pip install --upgrade pip
+python -m pip install --upgrade pip
 ```
 
 ## 📦 Install Dependencies
+***Note: run all of the following commands INSIDE your virtual environment***
 
+### Install Required Dependencies
 For all operating systems, run the following:
 ```sh
 pip install -r requirements.txt
@@ -55,6 +81,17 @@ pip install -r requirements.txt
 If operating on a jetson-nano, also install jetson-specific dependencies:
 ```sh
 pip install -r requirements-jetson.txt
+```
+
+###  Download MedCAT Model (One-Time Setup)
+To keep setup simple and cross-platform, we provide a Python script that:
+- Creates the required data directory
+- Downloads the MedCAT model
+- Downloads example clinical notes
+
+From the project root, run the setup script:
+```bash
+python -m scripts.setup_medcat
 ```
 
 ## 🔑.ENV Setup
@@ -121,8 +158,8 @@ python -m src.main <service_name>
 | Service Name     | Description                       |
 | ---------------- | --------------------------------- |
 | `transcribe`     | Run audio-to-transcript service   |
-| `intervention`   | Run NLP intervention extraction   |
 | `meds`           | Run medication extraction service |
+| `inter`          | Run NLP intervention extraction   |
 | `sem`            | Run semantic filtering service |
 
 

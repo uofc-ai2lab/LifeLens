@@ -181,7 +181,7 @@ def medication_extraction_pipeline(transcript_path: str, extractor: MedicationEx
         empty_ok=True,
     )
 
-async def medication_extraction_service():
+async def run_medication_extraction_service():
     """Async wrapper to run the medication extraction pipeline."""
     extractor = MedicationExtractor()
     for transcript in TRANSCRIPT_FILES_LIST:

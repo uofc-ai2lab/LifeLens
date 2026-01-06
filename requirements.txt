@@ -25,11 +25,12 @@ pyannote.audio>=3.1.0
 torch-audiomentations>=0.11.0
 
 # NLP
+medcat~=1.16.0
 spacy>=3.7.0
 en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0.tar.gz
 
 # LLM
-google-generativeai
+google-genai
 pydantic
 python-dotenv
 autogen
