@@ -59,10 +59,6 @@ class Pascal2coco(object):
             height = im.shape[0]
             width = im.shape[1]
 
-            # # xml's wight and height are wrong
-            # height = int(size.find('width').text)
-            # width = int(size.find('height').text)
-
             # images
             image = {'height': height, 'width': width, 'id': num + 1, 'file_name': filename}
             self.images.append(image)

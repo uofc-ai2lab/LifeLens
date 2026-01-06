@@ -137,7 +137,18 @@ def visualize(image: np.ndarray, boxes: List[tuple[int,int,int,int]], labels: Li
     img_pil.save(out_path)
 
 
-def process_image(model, image_path: Path, output_dir: Path, classes_filter: List[str], margin: float, min_area: int, add_head: bool, alpha_png: bool, save_annotated: bool = True):
+def process_image(
+    model,
+    image_path: Path,
+    output_dir: Path,
+    classes_filter: List[str],
+    margin: float,
+    min_area: int,
+    add_head: bool,
+    alpha_png: bool,
+    save_annotated: bool = True,
+    debug: bool = False,
+):
     image = Image.open(image_path).convert("RGB")  # load as RGB
     image_np = np.array(image)
     results = model(str(image_path))  # run inference
@@ -155,7 +166,7 @@ def process_image(model, image_path: Path, output_dir: Path, classes_filter: Lis
     composite_parts = {"hair": [], "face": [], "neck": []}
 
     for result in results:
-        if DEBUG_PRINT:
+        if debug:
             try:
                 mask_shape = None if getattr(result, "masks", None) is None else tuple(result.masks.data.shape)
                 print(f"[debug] image={image_path.name} boxes={len(result.boxes)} masks_shape={mask_shape}")
@@ -167,7 +178,7 @@ def process_image(model, image_path: Path, output_dir: Path, classes_filter: Lis
                 annotated_img = result.plot()  # numpy array with overlays
                 Image.fromarray(annotated_img).save((output_dir / "annotated" / image_path.name))
             except Exception as e:
-                if DEBUG_PRINT:
+                if debug:
                     print(f"[debug] failed to plot annotated image: {e}")
         names_map = result.names  # index -> class name
         # Boxes
@@ -226,18 +237,30 @@ def process_image(model, image_path: Path, output_dir: Path, classes_filter: Lis
     visualize(image_np, vis_boxes, vis_labels, vis_dir / f"{image_path.stem}.jpg")
 
 
-def iterate_source(model, source: Path, output: Path, classes: List[str], margin: float, min_area: int, add_head: bool, alpha_png: bool, max_images: int, save_annotated: bool = True):
+def iterate_source(
+    model,
+    source: Path,
+    output: Path,
+    classes: List[str],
+    margin: float,
+    min_area: int,
+    add_head: bool,
+    alpha_png: bool,
+    max_images: int,
+    save_annotated: bool = True,
+    debug: bool = False,
+):
     if source.is_file():
-        process_image(model, source, output, classes, margin, min_area, add_head, alpha_png, save_annotated)
+        process_image(model, source, output, classes, margin, min_area, add_head, alpha_png, save_annotated, debug=debug)
     else:
         exts = {".jpg", ".jpeg", ".png", ".bmp"}
         all_imgs = [p for p in sorted(source.rglob("*")) if p.suffix.lower() in exts]
         if (max_images is not None) and (max_images > 0):
             all_imgs = all_imgs[:max_images]
-            if DEBUG_PRINT:
+            if debug:
                 print(f"[debug] Limiting to first {len(all_imgs)} images")
         for img_path in all_imgs:
-            process_image(model, img_path, output, classes, margin, min_area, add_head, alpha_png, save_annotated)
+            process_image(model, img_path, output, classes, margin, min_area, add_head, alpha_png, save_annotated, debug=debug)
 
 
 def parse_args():
@@ -246,11 +269,15 @@ def parse_args():
     # Change this to match your path for imageSamples!
     p.add_argument("--source", type=str, default="ObjectDetection/Priv_personpart/Images", help="Image file or directory (default internal dataset Priv_personpart/Images)")
     p.add_argument("--output", type=str, default="ObjectDetection/outputs", help="Output root directory")
-    p.add_argument("--classes", nargs="*", default=PART_DEFAULT, help="Subset of classes to crop (default face arm hand leg foot neck torso head; head is composite; torso may later split into chest/abdomen/pelvis)")
+    p.add_argument("--classes", nargs="*", default=PART_DEFAULT, help="Subset of classes to crop (default face arm hand leg foot neck torso head; 'head' is composite; torso may later split into chest/abdomen/pelvis)")
     p.add_argument("--margin", type=float, default=0.10, help="Margin fraction to expand crop bounding box")
     p.add_argument("--min-area", type=int, default=250, help="Minimum mask pixel area to keep a crop (filter tiny artifacts)")
     p.add_argument("--device", type=str, default=None, help="Force device (e.g. 'cpu', '0'). If None, ultralytics auto-selects.")
-    p.add_argument("--add-head", action="store_true", help="Also generate composite 'head' crop (hair+face+upper neck)")
+    p.add_argument(
+        "--add-head",
+        action="store_true",
+        help="Generate composite 'head' crop (hair+face+upper neck). This is automatically enabled when 'head' is included in --classes.",
+    )
     p.add_argument("--debug", action="store_true", help="Print masks tensor shapes and box counts for inspection")
     p.add_argument("--alpha-png", action="store_true", help="Also save RGBA crops with transparent background (mask applied)")
     p.add_argument("--max-images", type=int, default=1000, help="Limit number of images processed (set <=0 for all)")
@@ -259,8 +286,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    global DEBUG_PRINT
-    DEBUG_PRINT = bool(args.debug)
+    debug = bool(args.debug)
     model = load_model(args.model)
     if args.device is not None:
         try:
@@ -270,10 +296,24 @@ def main():
     source_path = Path(args.source)
     output_path = Path(args.output)
     ensure_dir(output_path)
-    # Auto-enable composite head if user requested head in classes but did not pass --add-head
+    # Do not mutate args: derive the effective behavior from flags.
+    # If user requests the 'head' class, we interpret it as the composite head crop.
+    effective_add_head = bool(args.add_head or ("head" in args.classes))
     if ("head" in args.classes) and (not args.add_head):
-        args.add_head = True
-    iterate_source(model, source_path, output_path, args.classes, args.margin, args.min_area, args.add_head, args.alpha_png, args.max_images, save_annotated=True)
+        print("[info] 'head' is in --classes; enabling composite head crop.")
+    iterate_source(
+        model,
+        source_path,
+        output_path,
+        args.classes,
+        args.margin,
+        args.min_area,
+        effective_add_head,
+        args.alpha_png,
+        args.max_images,
+        save_annotated=True,
+        debug=debug,
+    )
     print(f"Done. Outputs in {output_path}")
 
 

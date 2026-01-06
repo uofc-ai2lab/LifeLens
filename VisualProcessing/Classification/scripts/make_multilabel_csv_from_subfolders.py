@@ -46,7 +46,7 @@ def main():
     parser.add_argument('--out_dir', type=str, default='ImageData', help='Directory to write train.csv and val.csv')
     parser.add_argument('--val_ratio', type=float, default=0.2, help='Validation ratio (0-1)')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for deterministic split')
-    parser.add_argument('--relative-to', type=str, default='.', help='Write image_path relative to this directory (default: repo root)')
+    parser.add_argument('--relative_to', type=str, default='.', help='Write image_path relative to this directory (default: repo root)')
     args = parser.parse_args()
 
     random.seed(args.seed)

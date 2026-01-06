@@ -31,6 +31,7 @@ ENV/
 # Generic output folders (keep code clean)
 **/outputs/**
 runs/
+Main/PipelineOutputs/
 
 # Ultralytics default runs directory sometimes created at repo root
 **/runs/**

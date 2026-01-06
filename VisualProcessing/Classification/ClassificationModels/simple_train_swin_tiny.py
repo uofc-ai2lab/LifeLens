@@ -2,12 +2,11 @@
 Handles split, training loop, metrics, checkpoint and confusion matrix.
 """
 
-# TODO: might swap constants and arg parameters with a config file later
-
 import argparse
 import os
 from typing import Tuple, Optional
 
+import time
 import torch
 import torch.nn as nn
 from torch.optim import AdamW
@@ -24,9 +23,6 @@ from sklearn.preprocessing import label_binarize
 from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 
-
-#   to run with test split: 
-#   run: python imageProccessing\simple_train_swin_tiny.py --test-ratio 0.1 --split-seed 42
 
 def build_dataloaders_from_folder(
     data_root: str,
@@ -62,7 +58,6 @@ def build_dataloaders_from_folder(
     train_dataset = datasets.ImageFolder(root=data_root, transform=train_transforms)
     val_dataset = datasets.ImageFolder(root=data_root, transform=val_transforms)
 
-    import time
     num_samples = len(train_dataset.samples)
     _split_seed = split_seed if split_seed is not None else int(time.time() * 1000) % (2**32)
     generator = torch.Generator().manual_seed(_split_seed)
@@ -177,7 +172,7 @@ def validate(model, data_loader, device, criterion, num_classes: int) -> Tuple[f
             if y_true_bin.shape[1] == y_prob.shape[1]:
                 metrics["roc_auc"] = float(roc_auc_score(y_true_bin, y_prob, average="macro", multi_class="ovr"))
                 metrics["pr_auc"] = float(average_precision_score(y_true_bin, y_prob, average="macro"))
-    except Exception:
+    except (ValueError, RuntimeError, TypeError):
         pass
 
     return running_loss / max(1, len(data_loader)), accuracy, metrics
@@ -283,16 +278,15 @@ def main():
             try:
                 for param in classifier.parameters():
                     param.requires_grad = True
-            except Exception:
+            except (AttributeError, TypeError):
                 pass
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = AdamW([parameter for parameter in model.parameters() if parameter.requires_grad], lr=args.lr)
 
     best_val_accuracy = -1.0
     os.makedirs("experiments/checkpoints/simple", exist_ok=True)
-    checkpoint_path = os.path.join("experiments/checkpoints/simple", f"best_swin_tiny_patch4_window7_224.pt")
-
+    checkpoint_path = os.path.join("experiments/checkpoints/simple", "best_swin_tiny_patch4_window7_224.pt")
+    optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
     best_metrics = None
     for epoch in range(args.epochs):
         train_loss = train_one_epoch(model, train_loader, device, optimizer, criterion)
@@ -339,7 +333,7 @@ def main():
         metrics_path = os.path.join("experiments", "checkpoints", "simple", "metrics_swin_tiny_patch4_window7_224.json")
         with open(metrics_path, "w", encoding="utf-8") as f:
             json.dump(metrics_out, f, indent=2)
-    except Exception:
+    except (ImportError, OSError, TypeError, ValueError, RuntimeError):
         pass
     print(f"Done. Best val acc: {best_val_accuracy:.4f}. Saved to {checkpoint_path}")
 
@@ -347,7 +341,7 @@ def main():
     try:
         out_png = os.path.join('experiments', 'checkpoints', 'simple', 'confusion_matrix_swin_tiny.png')
         plot_confusion_matrix_image(model, val_loader, device, class_names, out_png)
-    except Exception as _e:
+    except (OSError, ValueError, RuntimeError) as _e:
         print(f"Could not create confusion matrix plot: {_e}")
 
     # Optional test confusion matrix
@@ -355,7 +349,7 @@ def main():
         try:
             out_test_png = os.path.join('experiments', 'checkpoints', 'simple', 'confusion_matrix_swin_tiny_test.png')
             plot_confusion_matrix_image(model, test_loader, device, class_names, out_test_png)
-        except Exception as _e:
+        except (OSError, ValueError, RuntimeError) as _e:
             print(f"Could not create test confusion matrix plot: {_e}")
 
 

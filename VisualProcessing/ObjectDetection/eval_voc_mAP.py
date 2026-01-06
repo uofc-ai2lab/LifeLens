@@ -72,8 +72,45 @@ def evaluate(images_dir: Path, ann_dir: Path, model_name: str, classes: List[str
     for xmlp in ann_dir.glob("*.xml"):
         ann_map[xmlp.stem] = xmlp
 
-    # Discover overlap classes if none provided
-    provided_classes = classes[:] if classes else None
+    # Determine evaluation classes ONCE.
+    # If user provided --classes, we use it. Otherwise we evaluate the overlap between
+    # (a) VOC annotation labels present in ann_dir and (b) model label names.
+    provided_classes = list(classes) if classes else None
+
+    # Gather all GT labels from annotations
+    gt_names_all: set[str] = set()
+    for xmlp in ann_dir.glob("*.xml"):
+        for name, _box in parse_voc_xml(xmlp):
+            gt_names_all.add(name)
+
+    # Get model label names without running inference if possible
+    names_map = getattr(model, "names", None)
+    if names_map is None:
+        names_map = getattr(getattr(model, "model", None), "names", None)
+
+    if names_map is None:
+        # Fallback: run one inference to obtain names map
+        for img_path in img_paths:
+            stem = img_path.stem
+            if ann_map.get(stem) is None:
+                continue
+            results = model(str(img_path))
+            if results:
+                names_map = results[0].names
+                break
+
+    if names_map is None:
+        raise RuntimeError("Could not determine model class names.")
+
+    if provided_classes is None:
+        model_names = set(names_map.values()) if isinstance(names_map, dict) else set(names_map)
+        classes = sorted(list(gt_names_all & model_names))
+    else:
+        classes = provided_classes
+
+    if not classes:
+        print("No classes to evaluate (empty overlap between GT labels and model labels).")
+        return
 
     # Accumulators per class
     preds_by_class: Dict[str, List[Tuple[str, float, np.ndarray]]] = {}
@@ -93,11 +130,6 @@ def evaluate(images_dir: Path, ann_dir: Path, model_name: str, classes: List[str
             continue
         r = results[0]
         names_map = r.names
-        # Create set of classes to evaluate if not provided
-        if provided_classes is None:
-            gt_names = set(name for name, _ in gts)
-            model_names = set(names_map.values())
-            classes = sorted(list(gt_names & model_names))
 
         # Prepare GT storage per class
         for cname in classes:
