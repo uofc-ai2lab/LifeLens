@@ -1,7 +1,7 @@
 from pathlib import Path
 import sys
 from config.settings import GENAI_MODEL, MEANING_DIR, TRANSCRIPT_FILES_LIST
-import google.genai as genai
+import google.generativeai as genai
 import json, time
 from typing import List
 from src.utils.load_csv_file import load_csv_as_rows
