@@ -111,9 +111,18 @@ pyannote_models/
 #MedCat models
 nlpPipeline/data_p3.2
 
-# Extra data files - remove when we need them
+# Extra data files
 temp/
+data_p3.2/
 
+# local audio db
+Synthetic-Medical-Audio/cv-corpus-audio/
+
+# whisperX huggingface models
+pyannote_models/
+
+#MedCat models
+nlpPipeline/data_p3.2
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
