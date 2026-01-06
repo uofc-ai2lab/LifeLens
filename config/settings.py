@@ -1,7 +1,7 @@
 from pathlib import Path
 import os, platform
 from dotenv import load_dotenv
-import google.generativeai as genai
+from google import genai
 
 # Load environment variables from .env
 load_dotenv()
@@ -69,14 +69,14 @@ if MEANING_DIR_NEW != "":
 ENABLE_SEMANTIC_FILTERING = int(os.getenv("ENABLE_SEMANTIC_FILTERING", "0"))
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", None)
 GENAI_MODEL = None
+GENAI_CLIENT = None
 
 if ENABLE_SEMANTIC_FILTERING:
     if not GOOGLE_API_KEY:
         print("Error: GOOGLE_API_KEY or GEMINI_API_KEY not found in environment variables.")
-    genai.configure(api_key=GOOGLE_API_KEY)
+    GENAI_MODEL = "gemini-flash-latest"
+    GENAI_CLIENT = genai.Client()
 
-    GENAI_MODEL = genai.GenerativeModel("gemini-flash-latest")
-    
 # -------------------------
 # Encryption
 # -------------------------
