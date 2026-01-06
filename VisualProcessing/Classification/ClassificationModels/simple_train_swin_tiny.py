@@ -2,7 +2,6 @@
 Handles split, training loop, metrics, checkpoint and confusion matrix.
 """
 
-import argparse
 import os
 from typing import Tuple, Optional, Dict, Any, List
 
@@ -12,7 +11,6 @@ import torch.nn as nn
 from torch.optim import AdamW
 from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms
-import time
 import timm
 import numpy as np
 from sklearn.metrics import (
@@ -24,6 +22,102 @@ from sklearn.preprocessing import label_binarize
 from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 
+
+def _get_classifier_head(model: nn.Module) -> Optional[nn.Module]:
+    """Best-effort extraction of the classifier head for timm models."""
+    head: Optional[nn.Module] = None
+    if hasattr(model, "get_classifier"):
+        try:
+            candidate = model.get_classifier()  # timm convention
+            if isinstance(candidate, str):
+                head = getattr(model, candidate, None)
+            elif isinstance(candidate, nn.Module):
+                head = candidate
+        except (AttributeError, TypeError):
+            head = None
+
+    if head is None:
+        head = getattr(model, "head", None)
+    if head is None:
+        head = getattr(model, "classifier", None)
+    return head
+
+
+def _freeze_all_but_head(model: nn.Module, head: Optional[nn.Module]) -> None:
+    for p in model.parameters():
+        p.requires_grad = False
+    if head is not None and hasattr(head, "parameters"):
+        for p in head.parameters():
+            p.requires_grad = True
+
+
+def _build_adamw_optimizer(
+    model: nn.Module,
+    head: Optional[nn.Module],
+    lr: float,
+    backbone_lr_mult: float,
+) -> AdamW:
+    """Build an AdamW optimizer with optional separate backbone/head LRs."""
+    if head is None or not hasattr(head, "parameters"):
+        return AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
+
+    head_params = [p for p in head.parameters() if p.requires_grad]
+    head_param_ids = {id(p) for p in head_params}
+    backbone_params = [p for p in model.parameters() if p.requires_grad and id(p) not in head_param_ids]
+
+    param_groups = []
+    if backbone_params:
+        param_groups.append({"params": backbone_params, "lr": lr * backbone_lr_mult})
+    if head_params:
+        param_groups.append({"params": head_params, "lr": lr})
+    if not param_groups:
+        param_groups = [{"params": [p for p in model.parameters() if p.requires_grad], "lr": lr}]
+    return AdamW(param_groups, lr=lr)
+
+
+def _read_bool_env(name: str, default: bool) -> bool:
+    v = os.getenv(name)
+    if v is None:
+        return default
+    v = v.strip().lower()
+    if v in {"1", "true", "t", "yes", "y", "on"}:
+        return True
+    if v in {"0", "false", "f", "no", "n", "off"}:
+        return False
+    return default
+
+
+def _read_int_env(name: str, default: int) -> int:
+    v = os.getenv(name)
+    if v is None or v.strip() == "":
+        return default
+    try:
+        return int(v)
+    except ValueError:
+        return default
+
+
+def _read_float_env(name: str, default: float) -> float:
+    v = os.getenv(name)
+    if v is None or v.strip() == "":
+        return default
+    try:
+        return float(v)
+    except ValueError:
+        return default
+
+
+def _read_str_env(name: str, default: str) -> str:
+    v = os.getenv(name)
+    return default if v is None else v
+
+
+def _read_optional_str_env(name: str, default: Optional[str] = None) -> Optional[str]:
+    v = os.getenv(name)
+    if v is None:
+        return default
+    v = v.strip()
+    return v if v else default
 
 def build_dataloaders_from_folder(
     data_root: str,
@@ -357,6 +451,8 @@ def train_swin_tiny(
     lr: float = 3e-4,
     split_seed: int | None = None,
     freeze_backbone: bool = False,
+    freeze_backbone_epochs: int = 0,
+    backbone_lr_mult: float = 0.1,
     num_workers: int = 0,
     device: Optional[torch.device] = None,
     save_root: str = "experiments/checkpoints/simple",
@@ -402,25 +498,32 @@ def train_swin_tiny(
         )
     num_classes = len(class_names)
     model = create_model(num_classes=num_classes, pretrained=True).to(device)
-    if freeze_backbone:
-        for p in model.parameters():
-            p.requires_grad = False
-        if hasattr(model, "get_classifier"):
-            try:
-                for param in classifier.parameters():
-                    param.requires_grad = True
-            except (AttributeError, TypeError):
-                pass
+
+    head = _get_classifier_head(model)
+    if freeze_backbone or freeze_backbone_epochs > 0:
+        _freeze_all_but_head(model, head)
+
     criterion = nn.CrossEntropyLoss()
 
     best_val_accuracy = -1.0
-    os.makedirs("experiments/checkpoints/simple", exist_ok=True)
-    checkpoint_path = os.path.join("experiments/checkpoints/simple", "best_swin_tiny_patch4_window7_224.pt")
-    optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
-    best_metrics = None
     os.makedirs(save_root, exist_ok=True)
-    ckpt_path = os.path.join(save_root, "best_swin_tiny_patch4_window7_224.pt")
+    checkpoint_path = os.path.join(save_root, "best_swin_tiny_patch4_window7_224.pt")
+
+    # If the backbone is frozen, only the head is trainable; once unfrozen we optionally
+    # train with a smaller LR on the backbone using separate param groups.
+    if freeze_backbone or freeze_backbone_epochs > 0:
+        optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
+    else:
+        optimizer = _build_adamw_optimizer(model, head, lr=lr, backbone_lr_mult=backbone_lr_mult)
+
+    best_metrics = None
     for epoch in range(epochs):
+        if (not freeze_backbone) and freeze_backbone_epochs > 0 and epoch == freeze_backbone_epochs:
+            # Unfreeze the backbone and rebuild optimizer with backbone/head LR split.
+            for p in model.parameters():
+                p.requires_grad = True
+            optimizer = _build_adamw_optimizer(model, head, lr=lr, backbone_lr_mult=backbone_lr_mult)
+
         tr_loss = train_one_epoch(model, train_loader, device, optimizer, criterion)
         val_loss, val_acc, metrics = validate(model, val_loader, device, criterion, num_classes)
         extra = []
@@ -432,8 +535,8 @@ def train_swin_tiny(
             extra.append(f"prec {metrics['precision_macro']:.4f} recall {metrics['recall_macro']:.4f}")
         extra_str = (" - " + " - ".join(extra)) if extra else ""
         print(f"[cls] Epoch {epoch+1}/{epochs} - train_loss {tr_loss:.4f} - val_loss {val_loss:.4f} - val_acc {val_acc:.4f}{extra_str}")
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
+        if val_acc > best_val_accuracy:
+            best_val_accuracy = val_acc
             best_metrics = metrics
             torch.save({
                 "state_dict": model.state_dict(),
@@ -462,7 +565,7 @@ def train_swin_tiny(
                 "test_precision_macro": test_metrics.get("precision_macro"),
                 "test_recall_macro": test_metrics.get("recall_macro"),
             })
-        metrics_path = os.path.join("experiments", "checkpoints", "simple", "metrics_swin_tiny_patch4_window7_224.json")
+        metrics_path = os.path.join(save_root, "metrics_swin_tiny_patch4_window7_224.json")
         with open(metrics_path, "w", encoding="utf-8") as f:
             json.dump(metrics_out, f, indent=2)
     except (ImportError, OSError, TypeError, ValueError, RuntimeError):
@@ -470,20 +573,61 @@ def train_swin_tiny(
     print(f"Done. Best val acc: {best_val_accuracy:.4f}. Saved to {checkpoint_path}")
 
     # Simple confusion matrix plot on the validation set (end of training)
-    try:
-        out_png = os.path.join('experiments', 'checkpoints', 'simple', 'confusion_matrix_swin_tiny.png')
-        plot_confusion_matrix_image(model, val_loader, device, class_names, out_png)
-    except (OSError, ValueError, RuntimeError) as _e:
-        print(f"Could not create confusion matrix plot: {_e}")
+    if make_confusion_matrices:
+        try:
+            out_png = os.path.join(save_root, 'confusion_matrix_swin_tiny.png')
+            plot_confusion_matrix_image(model, val_loader, device, class_names, out_png)
+        except (OSError, ValueError, RuntimeError) as _e:
+            print(f"Could not create confusion matrix plot: {_e}")
 
     # Optional test confusion matrix
-    if test_loader is not None:
+    if make_confusion_matrices and test_loader is not None:
         try:
-            out_test_png = os.path.join('experiments', 'checkpoints', 'simple', 'confusion_matrix_swin_tiny_test.png')
+            out_test_png = os.path.join(save_root, 'confusion_matrix_swin_tiny_test.png')
             plot_confusion_matrix_image(model, test_loader, device, class_names, out_test_png)
         except (OSError, ValueError, RuntimeError) as _e:
             print(f"Could not create test confusion matrix plot: {_e}")
 
 
 if __name__ == "__main__":
-    train_swin_tiny("ImageData/images/Wound_dataset", epochs=1, batch_size=8, img_size=224, val_ratio=0.2)
+    # Direct-run entrypoint: treat `.env` / environment variables as "args".
+    # (VS Code can inject these via `python.envFile` pointing at `.env.template` or a local `.env`.)
+
+    # Prefer training directly from detection crop filenames unless explicitly disabled.
+    from_detection = _read_bool_env("PIPELINE_USE_DETECTION_CROPS_FOR_TRAINING", True)
+    detection_output = _read_str_env("PIPELINE_DETECTION_OUTPUT", "Main/PipelineOutputs/DetectionOutput")
+    detection_crops_root = os.path.join(detection_output, "crops")
+
+    # If not using detection crops, fall back to an ImageFolder layout.
+    # Default to the pipeline export folder, but allow overriding with PIPELINE_CLS_DATA_DIR.
+    data_dir = _read_optional_str_env("PIPELINE_CLS_DATA_DIR", None)
+    if data_dir is None:
+        data_dir = _read_str_env(
+            "PIPELINE_CLASSIFICATION_EXPORT",
+            "Main/PipelineOutputs/ClassificationOutput/parts_dataset",
+        )
+
+    train_swin_tiny(
+        data_dir=None if from_detection else data_dir,
+        epochs=_read_int_env("PIPELINE_CLS_EPOCHS", 5),
+        batch_size=_read_int_env("PIPELINE_CLS_BATCH_SIZE", 32),
+        img_size=_read_int_env("PIPELINE_CLS_IMG_SIZE", 224),
+        val_ratio=_read_float_env("PIPELINE_CLS_VAL_RATIO", 0.2),
+        test_ratio=_read_float_env("PIPELINE_CLS_TEST_RATIO", 0.0),
+        lr=_read_float_env("PIPELINE_CLS_LR", 3e-4),
+        split_seed=_read_int_env("PIPELINE_CLS_SPLIT_SEED", 42),
+        freeze_backbone=_read_bool_env("PIPELINE_CLS_FREEZE_BACKBONE", False),
+        freeze_backbone_epochs=_read_int_env("PIPELINE_CLS_FREEZE_BACKBONE_EPOCHS", 0),
+        backbone_lr_mult=_read_float_env("PIPELINE_CLS_BACKBONE_LR_MULT", 0.1),
+        num_workers=_read_int_env("PIPELINE_CLS_NUM_WORKERS", 0),
+        save_root=_read_str_env("PIPELINE_CLS_SAVE_ROOT", "experiments/checkpoints/parts_from_detection"),
+        make_confusion_matrices=_read_bool_env("PIPELINE_CLS_MAKE_CONFUSION_MATRICES", True),
+        from_detection_crops=from_detection,
+        detection_crops_root=detection_crops_root,
+        detection_label_position=_read_int_env("PIPELINE_CLS_DETECTION_LABEL_POSITION", -2),
+        device=(
+            torch.device(_read_str_env("PIPELINE_DEVICE", "cpu"))
+            if _read_optional_str_env("PIPELINE_DEVICE", None) is not None
+            else None
+        ),
+    )

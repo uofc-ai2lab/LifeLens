@@ -1,120 +1,105 @@
-Ignore the main folder as this will be used for later, you want to only be in the visual processing folder. in there we have two main folders, Classification and Object detection.
-These are the two components, within each is a readme that explains the thought process for the code. This is more like mental notes for me so you dont need to worry too much about it.
+# Main Pipeline (Detection  Classification)
 
-## Setup (Virtual Env + Dependencies + Dataset)
+This folder contains the unified *image* pipeline entrypoint used by the project.
 
-### 1) Create and activate a virtual environment
+At a high level:
 
-From the repo root:
+1. **Body-part detection** (YOLO segmentation) runs on a source image folder.
+2. **Crops** are written to a structured output directory.
+3. **Injury classification inference** runs a trained checkpoint on the produced crops.
 
-```bash
-python -m venv .venv
-```
+The pipeline code lives in:
 
-Activate it:
+- `Main/main_pipeline.py` (orchestration)
+- `Main/detect_body_parts.py` (detection + crop export)
+- `Main/infer_injuries_on_crops.py` (injury classifier inference over crops)
+- `Main/pipeline_config.py` (env-driven configuration)
 
-- Windows (PowerShell):
+## Quickstart
 
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-- macOS/Linux (bash/zsh):
-
-```bash
-source .venv/bin/activate
-```
-
-### 2) Install requirements (Object Detection + Classification)
-
-With the virtual environment activated:
+1. Create / activate your Python environment and install deps (see repo-level README).
+2. Configure environment variables by copying or editing the repo root `.env.template`.
+3. Run:
 
 ```bash
-python -m pip install --upgrade pip
-pip install -r VisualProcessing/ObjectDetection/requirements.txt
-pip install -r VisualProcessing/Classification/ClassificationModels/requirements.txt
+python Main/main_pipeline.py
 ```
 
-### 3) Download the `wounds_dataset` (Classification)
+If you run via VS Code, ensure your Python extension is pointing at `.env.template` (or a local `.env`) so the `PIPELINE_*` values are available.
 
-Download the dataset from Kaggle:
-https://www.kaggle.com/datasets/yasinpratomo/wound-dataset?resource=download
+## Configuration
 
-Extract the downloaded folder so the images end up at:
+The pipeline reads config from environment variables (see `Main/pipeline_config.py`).
+Defaults are defined in code, and the repo root `.env.template` documents the intended values.
 
-```
-VisualProcessing/Classification/ImageData/images/Wound_dataset/
-  Abrasion/
-  Bruise/
-  Burn/
-  Cut/
-  Laceration/
-  Stab_wound/
-  Normal skin/
-```
+### Most important variables
 
-How to run the components is as follows:
-This PR has two model components separately:
+- `PIPELINE_DETECTION_SOURCE`
+  - Default: `VisualProcessing/ObjectDetection/Priv_personpart/ImageSamples`
+  - Folder of input images (jpg/png/etc)
+- `PIPELINE_DETECTION_MODEL`
+  - Default: `MnLgt/yolo-human-parse`
+  - Can be a local `.pt` file or a Hugging Face repo id
+- `PIPELINE_ROOT`
+  - Default: `Main/PipelineOutputs`
+  - Parent output directory
+- `PIPELINE_DETECTION_OUTPUT`
+  - Default: `Main/PipelineOutputs/DetectionOutput`
+- `PIPELINE_CLASSIFICATION_OUTPUT`
+  - Default: `Main/PipelineOutputs/ClassificationOutput`
 
-Object detection script produces body-part crops and annotations.
+### Detection tuning
 
-Swin-Tiny classification script trains on an ImageFolder dataset with internal train/val(/test) splitting.
+- `PIPELINE_MAX_IMAGES` (limits how many images are processed)
+- `PIPELINE_CLASSES` (comma-separated list of parts)
+- `PIPELINE_MIN_AREA` (filters tiny masks)
+- `PIPELINE_MARGIN` (bbox expansion around each mask)
+- `PIPELINE_ADD_HEAD` (creates a composite `head` crop from face/hair/neck)
+- `PIPELINE_ALPHA_PNG` (writes extra `_alpha.png` crops with transparent background)
+- `PIPELINE_DEVICE` (optional, e.g. `cuda:0` or `cpu`)
+- `PIPELINE_DEBUG` (extra prints)
 
-No unified pipeline is introduced here; that will follow in a subsequent PR but added some file structure for now
+### Injury classifier inference
 
-## Object Detection Test Steps
+- `PIPELINE_INJURY_CHECKPOINT`
+  - Default: `experiments/checkpoints/simple/best_swin_tiny_patch4_window7_224.pt`
+- `PIPELINE_INJURY_REPORT_JSON`
+- `PIPELINE_INJURY_REPORT_CSV`
 
-Ensure sample images exist in the ImageSamples (if they don't, the readme has ALL dataset and model links, use those)
-Run detection (adjust model/source as needed) OR you can just hit play but ensure that the arg parameters (in def parse_args()) matches what you want!
+Notes:
 
-Note that the default max images is 1000 but you can change this depending on how much you want to run and how much is in your sample set
+- The `.env.template` currently contains additional `PIPELINE_CLS_*` variables for training; the default pipeline entrypoint (`Main/main_pipeline.py`) **does not train** a classifier today, it only runs injury inference.
+- The detector supports an optional ImageFolder-style export (`PIPELINE_CLASSIFICATION_EXPORT`) when `PIPELINE_USE_DETECTION_CROPS_FOR_TRAINING=false`.
 
-If you want to run the cmd command then run:
+## Output layout
 
-```bash
-python VisualProcessing/ObjectDetection/detect_body_parts.py \
-  --model MnLgt/yolo-human-parse \
-  --source VisualProcessing/ObjectDetection/Priv_personpart/ImageSamples \
-  --out VisualProcessing/ObjectDetection/outputs \
-  --max-images 10
-  ```
+By default outputs land under `Main/PipelineOutputs/`.
 
-- Crops: (if default) is under ./ObjectDetection/outputs/crops
-- Annotated images: (if default) is under ./ObjectDetection/outputs/annotated
+### Detection output (`DetectionOutput/`)
 
-The Swin-Tiny trainer performs its own train/val (and optional test) split directly from an ImageFolder structure.  
+- `crops/<image_id>/*.jpg`
+  - Crops are named like `<origstem>_<part>_<idx>.jpg`
+- `annotated/*.jpg`
+  - Model visualizations of detections
+- `vis/*.jpg`
+  - Simple bbox visualizations
 
-Directory structure:  
+### Classification output (`ClassificationOutput/`)
 
-Folder should already be prepared from the readme file and places as:  
+- `injury_predictions.json`
+  - Per-crop predictions + per-part aggregation
+- `injury_predictions_summary.csv`
+  - Aggregated summary per `(image_id, body_part)`
 
-VisualProcessing/Classification/ImageData/images/Wound_dataset/  
-  Abrasion/  
-    img001.jpg  
-    ...  
-  Bruise/  
-  Burn/  
-  Cut/  
-  Laceration/  
-  Stab_wound/  
-  Normal skin/  
+These output folders are intended to be generated artifacts and are ignored by git.
 
-```bash
-python VisualProcessing/Classification/ClassificationModels/simple_train_swin_tiny.py \
-  --data-dir VisualProcessing/Classification/ImageData/images/Wound_dataset \
-  --epochs 5 --val-ratio 0.2 --split-seed 42
-```
+## Troubleshooting
 
-Verify artifacts (must have already run model)
-Checkpoint: check that best_swin_tiny_patch4_window7_224.pt exists
--> if it you cant see it under experiments/checkpoints/simple, run
-Then to see the previews run the `predict_show_images` file (names will be changed later)
-Get-ChildItem -Recurse -File "experiments/checkpoints/simple/best_swin_tiny_patch4_window7_224.pt"
-as it may not show up in the explorer for a bit
+- **No crops were created**: confirm `PIPELINE_DETECTION_SOURCE` points to a folder with images and that the model is loading successfully.
+- **Slow first run**: if using a Hugging Face repo id for the detection model, weights may download on first run.
+- **CUDA issues**: set `PIPELINE_DEVICE=cpu` to force CPU inference.
 
-- Previews: under experiments/previews ensure that the image previews of the prediction is there  
-- Metrics JSON (if created): same folder  
-- Confusion matrix PNG: same folder  
+## Related folders
 
-Environment
-Requires: torch, torchvision, timm, numpy, scikit-learn, matplotlib.
+- `VisualProcessing/` contains older standalone scripts and datasets used during development.
+  The unified pipeline in `Main/` is the recommended entrypoint for running detection + injury inference.

@@ -2,10 +2,10 @@
 
 Press Run in VS Code to:
 1. Run body-part detection on the internal Priv_personpart image set (sample subset recommended).
-2. Export cropped parts into an ImageFolder-style directory for classification.
-3. Train Swin-Tiny classifier on the exported crops.
+2. Produce body-part crops.
+3. Run an injury classifier checkpoint on those crops.
 
-Adjust the CONFIG block below as needed.
+Configuration is loaded from `.env.template`.
 """
 from pathlib import Path
 import sys
@@ -15,64 +15,38 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from VisualProcessing.ObjectDetection.detect_body_parts import run_detection
-from VisualProcessing.Classification.ClassificationModels.simple_train_swin_tiny import train_swin_tiny
-
-# ----------------------- CONFIG (edit as needed) -----------------------
-# Source images directory (use the provided ImageSamples subset for quick iteration)
-DETECTION_SOURCE = "VisualProcessing/ObjectDetection/Priv_personpart/ImageSamples"
-# Central pipeline output root
-PIPELINE_ROOT = "Main/PipelineOutputs"
-# Subfolders for detection and classification stage outputs
-DETECTION_OUTPUT = f"{PIPELINE_ROOT}/DetectionOutput"
-CLASSIFICATION_OUTPUT = f"{PIPELINE_ROOT}/ClassificationOutput"
-CLASSIFICATION_EXPORT = f"{CLASSIFICATION_OUTPUT}/parts_dataset"  # legacy ImageFolder export (not needed when parsing filenames)
-USE_DETECTION_CROPS_FOR_TRAINING = True  # train directly from detection crops filenames
-# Detection parameters
-DETECTION_MODEL = "MnLgt/yolo-human-parse"  # or local .pt
-MAX_IMAGES = 200            # set <=0 to use all
-ADD_HEAD = True             # include composite head
-ALPHA_PNG = False           # set True if RGBA crops also desired
-MIN_AREA = 250              # filter tiny masks
-MARGIN = 0.10               # expand crop bbox
-CLASSES = ["face", "arm", "hand", "leg", "foot", "neck", "torso", "head"]
-DEVICE = None               # e.g. '0' for first CUDA GPU, or 'cpu'
-DEBUG = False
-
-# Classification parameters
-CLS_EPOCHS = 5
-CLS_BATCH_SIZE = 32
-CLS_IMG_SIZE = 224
-CLS_VAL_RATIO = 0.2
-CLS_TEST_RATIO = 0.0
-CLS_LR = 3e-4
-CLS_SPLIT_SEED = 42  # reproducible split
-CLS_FREEZE_BACKBONE = False
-# ----------------------------------------------------------------------
+from Main.detect_body_parts import run_detection
+from Main.infer_injuries_on_crops import predict_injuries_on_detection_crops
+from Main.pipeline_config import load_pipeline_config
 
 
 def main():
+    config = load_pipeline_config()
     print("[pipeline] Starting detection phase...")
     # Ensure pipeline folders exist
-    Path(PIPELINE_ROOT).mkdir(parents=True, exist_ok=True)
-    Path(DETECTION_OUTPUT).mkdir(parents=True, exist_ok=True)
-    Path(CLASSIFICATION_OUTPUT).mkdir(parents=True, exist_ok=True)
+    Path(config["PIPELINE_ROOT"]).mkdir(parents=True, exist_ok=True)
+    Path(config["DETECTION_OUTPUT"]).mkdir(parents=True, exist_ok=True)
+    Path(config["CLASSIFICATION_OUTPUT"]).mkdir(parents=True, exist_ok=True)
 
     detection_summary = run_detection(
-        model=DETECTION_MODEL,
-        source=DETECTION_SOURCE,
-        output=DETECTION_OUTPUT,
-        classes=CLASSES,
-        margin=MARGIN,
-        min_area=MIN_AREA,
-        device=DEVICE,
-        add_head=ADD_HEAD,
-        debug=DEBUG,
-        alpha_png=ALPHA_PNG,
-        max_images=MAX_IMAGES,
-        classification_export_dir=(None if USE_DETECTION_CROPS_FOR_TRAINING else CLASSIFICATION_EXPORT),
+        model=config["DETECTION_MODEL"],
+        source=config["DETECTION_SOURCE"],
+        output=config["DETECTION_OUTPUT"],
+        classes=config["CLASSES"],
+        margin=config["MARGIN"],
+        min_area=config["MIN_AREA"],
+        device=config["DEVICE"],
+        add_head=config["ADD_HEAD"],
+        debug=config["DEBUG"],
+        alpha_png=config["ALPHA_PNG"],
+        max_images=config["MAX_IMAGES"],
+        classification_export_dir=(None if config["USE_DETECTION_CROPS_FOR_TRAINING"] else config["CLASSIFICATION_EXPORT"]),
     )
-    crops_root = Path(DETECTION_OUTPUT) / "crops"
+
+    # call blur function on the source of detection
+    # call blur on faces of the detection output images
+    
+    crops_root = Path(config["DETECTION_OUTPUT"]) / "crops"
     if not crops_root.exists():
         print(f"[pipeline] No crops directory found at {crops_root}; aborting classification.")
         return
@@ -82,33 +56,27 @@ def main():
         print(f"[pipeline] No crop images found under {crops_root}; cannot train.")
         return
 
-    print("[pipeline] Detection complete. Starting classification phase from detection crops...")
-    cls_result = train_swin_tiny(
-        data_dir=None,
-        from_detection_crops=True,
-        detection_crops_root=str(crops_root),
-        detection_label_position=-2,  # part token in <stem>_<part>_<idx>
-        epochs=CLS_EPOCHS,
-        batch_size=CLS_BATCH_SIZE,
-        img_size=CLS_IMG_SIZE,
-        val_ratio=CLS_VAL_RATIO,
-        test_ratio=CLS_TEST_RATIO,
-        lr=CLS_LR,
-        split_seed=CLS_SPLIT_SEED,
-        freeze_backbone=CLS_FREEZE_BACKBONE,
-        save_root=str(Path("experiments/checkpoints/parts_from_detection")),
+    print("[pipeline] Detection complete. Starting injury classification on body-part crops...")
+    infer_summary = predict_injuries_on_detection_crops(
+        crops_root=str(crops_root),
+        checkpoint_path=config["INJURY_CHECKPOINT_PATH"],
+        out_json_path=config["INJURY_REPORT_JSON"],
+        out_csv_path=config["INJURY_REPORT_CSV"],
+        image_size=config["INJURY_IMG_SIZE"],
+        batch_size=config["INJURY_BATCH_SIZE"],
+        num_workers=config["INJURY_NUM_WORKERS"],
     )
 
-    print("[pipeline] Classification complete.")
+    print("[pipeline] Injury classification complete.")
     print("[pipeline] Summary:")
     print({
-        "pipeline_root": PIPELINE_ROOT,
+        "pipeline_root": config["PIPELINE_ROOT"],
         "detection_output": detection_summary["output"],
         "crops_used": str(crops_root),
         "crop_count": crop_count,
-        "best_val_accuracy": cls_result.get("best_val_accuracy"),
-        "val_metrics": cls_result.get("val_metrics"),
-        "checkpoint_path": cls_result.get("checkpoint_path"),
+        "injury_checkpoint": config["INJURY_CHECKPOINT_PATH"],
+        "injury_report_json": infer_summary.get("out_json"),
+        "injury_report_csv": infer_summary.get("out_csv"),
     })
 
 

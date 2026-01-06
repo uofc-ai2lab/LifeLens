@@ -27,6 +27,10 @@ ENV/
 # Logs
 *.log
 
+# Main pipeline outputs (generated artifacts)
+Main/PipelineOutputs/
+Main/PipelineOutputs/**
+
 # Generic output folders (keep code clean)
 **/outputs/**
 runs/

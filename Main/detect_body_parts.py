@@ -148,12 +148,20 @@ def process_image(
     min_area: int,
     add_head: bool,
     alpha_png: bool,
+    device: Optional[str] = None,
+    classification_export_dir: Optional[Path] = None,
     save_annotated: bool = True,
     debug: bool = False,
+    debug_print: bool = False,
 ):
     image = Image.open(image_path).convert("RGB")  # load as RGB
     image_np = np.array(image)
-    results = model(str(image_path))  # run inference
+
+    # Run inference. If a device is provided, use Ultralytics predict() so device selection is honored.
+    if device is None:
+        results = model(str(image_path))
+    else:
+        results = model.predict(source=str(image_path), device=device, verbose=False)
     print(f"Processing {image_path.name}: {len(results)} result(s)")
     vis_boxes = []
     vis_labels = []
@@ -215,7 +223,7 @@ def process_image(
                     try:
                         Image.open(crops_root / filename).save(cls_dir / filename)
                     except Exception as e:
-                        if DEBUG_PRINT:
+                        if debug_print:
                             print(f"[debug] classification export failed for {filename}: {e}")
 
     # Create composite head crop if requested
@@ -247,7 +255,7 @@ def process_image(
                         try:
                             Image.open(crops_root / head_filename).save(cls_dir / head_filename)
                         except Exception as e:
-                            if DEBUG_PRINT:
+                            if debug_print:
                                 print(f"[debug] classification export failed for composite head: {e}")
 
     # Visualization
@@ -266,11 +274,28 @@ def iterate_source(
     add_head: bool,
     alpha_png: bool,
     max_images: int,
+    device: Optional[str] = None,
+    classification_export_dir: Optional[Path] = None,
     save_annotated: bool = True,
     debug: bool = False,
+    debug_print: bool = False,
 ):
     if source.is_file():
-        process_image(model, source, output, classes, margin, min_area, add_head, alpha_png, save_annotated, debug=debug)
+        process_image(
+            model,
+            source,
+            output,
+            classes,
+            margin,
+            min_area,
+            add_head,
+            alpha_png,
+            device=device,
+            classification_export_dir=classification_export_dir,
+            save_annotated=save_annotated,
+            debug=debug,
+            debug_print=debug_print,
+        )
     else:
         exts = {".jpg", ".jpeg", ".png", ".bmp"}
         all_imgs = [p for p in sorted(source.rglob("*")) if p.suffix.lower() in exts]
@@ -279,68 +304,58 @@ def iterate_source(
             if debug:
                 print(f"[debug] Limiting to first {len(all_imgs)} images")
         for img_path in all_imgs:
-            process_image(model, img_path, output, classes, margin, min_area, add_head, alpha_png, save_annotated, debug=debug)
+            process_image(
+                model,
+                img_path,
+                output,
+                classes,
+                margin,
+                min_area,
+                add_head,
+                alpha_png,
+                device=device,
+                classification_export_dir=classification_export_dir,
+                save_annotated=save_annotated,
+                debug=debug,
+                debug_print=debug_print,
+            )
 
 
-def parse_args():
-    p = argparse.ArgumentParser(description="Body part segmentation + crop extraction (YOLO)")
-    p.add_argument("--model", type=str, default="MnLgt/yolo-human-parse", help="Model path or HF repo name")
-    # Change this to match your path for imageSamples!
-    p.add_argument("--source", type=str, default="ObjectDetection/Priv_personpart/Images", help="Image file or directory (default internal dataset Priv_personpart/Images)")
-    p.add_argument("--output", type=str, default="ObjectDetection/outputs", help="Output root directory")
-    p.add_argument("--classes", nargs="*", default=PART_DEFAULT, help="Subset of classes to crop (default face arm hand leg foot neck torso head; 'head' is composite; torso may later split into chest/abdomen/pelvis)")
-    p.add_argument("--margin", type=float, default=0.10, help="Margin fraction to expand crop bounding box")
-    p.add_argument("--min-area", type=int, default=250, help="Minimum mask pixel area to keep a crop (filter tiny artifacts)")
-    p.add_argument("--device", type=str, default=None, help="Force device (e.g. 'cpu', '0'). If None, ultralytics auto-selects.")
-    p.add_argument(
-        "--add-head",
-        action="store_true",
-        help="Generate composite 'head' crop (hair+face+upper neck). This is automatically enabled when 'head' is included in --classes.",
-    )
-    p.add_argument("--debug", action="store_true", help="Print masks tensor shapes and box counts for inspection")
-    p.add_argument("--alpha-png", action="store_true", help="Also save RGBA crops with transparent background (mask applied)")
-    p.add_argument("--max-images", type=int, default=1000, help="Limit number of images processed (set <=0 for all)")
-    return p.parse_args()
+def run_detection(
+    model: str = "MnLgt/yolo-human-parse",
+    source: str = "VisualProcessing/ObjectDetection/Priv_personpart/ImageSamples",
+    output: str = "Main/PipelineOutputs/DetectionOutput",
+    classes: Optional[List[str]] = None,
+    margin: float = 0.10,
+    min_area: int = 250,
+    device: Optional[str] = None,
+    add_head: bool = True,
+    debug: bool = False,
+    alpha_png: bool = False,
+    max_images: int = 200,
+    classification_export_dir: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Run YOLO segmentation + crop extraction.
 
+    This is the entrypoint used by `Main/main_pipeline.py`.
+    """
+    classes = PART_DEFAULT if classes is None else classes
 
-def main():
-    args = parse_args()
-    debug = bool(args.debug)
-    model = load_model(args.model)
-    if args.device is not None:
-        try:
-            model_obj.to(device)
-        except Exception:
-            print(f"Could not move model to device {device}, continuing on default.")
     source_path = Path(source)
     output_path = Path(output)
     ensure_dir(output_path)
-    # Do not mutate args: derive the effective behavior from flags.
-    # If user requests the 'head' class, we interpret it as the composite head crop.
-    effective_add_head = bool(args.add_head or ("head" in args.classes))
-    if ("head" in args.classes) and (not args.add_head):
-        print("[info] 'head' is in --classes; enabling composite head crop.")
-    iterate_source(
-        model,
-        source_path,
-        output_path,
-        args.classes,
-        args.margin,
-        args.min_area,
-        effective_add_head,
-        args.alpha_png,
-        args.max_images,
-        save_annotated=True,
-        debug=debug,
-    )
-    print(f"Done. Outputs in {output_path}")
 
+    # If user requests the 'head' class, interpret it as the composite head crop.
+    effective_add_head = bool(add_head or ("head" in classes))
+    if ("head" in classes) and (not add_head):
+        print("[detect] 'head' is in classes; enabling composite head crop.")
 
-    if ("head" in classes) and (not add_head):  # auto-enable composite head if requested
-        add_head = True
+    model_obj = load_model(model)
+
     export_dir_path: Optional[Path] = Path(classification_export_dir) if classification_export_dir else None
     if export_dir_path:
         ensure_dir(export_dir_path)
+
     iterate_source(
         model_obj,
         source_path,
@@ -348,12 +363,16 @@ def main():
         classes,
         margin,
         min_area,
-        add_head,
+        effective_add_head,
         alpha_png,
         max_images,
-        save_annotated=True,
+        device=device,
         classification_export_dir=export_dir_path,
+        save_annotated=True,
+        debug=debug,
+        debug_print=debug,
     )
+
     summary: Dict[str, Any] = {
         "model": model,
         "source": str(source_path),
@@ -391,10 +410,3 @@ def detect_and_train_classification(
     )
     return result
 
-
-# Minimal smoke test when executed directly (1 image, 1 epoch classification if export provided)
-if __name__ == "__main__":
-    # Adjust paths as needed for a quick local test
-    summary = run_detection(max_images=1, classification_export_dir="ObjectDetection/outputs/cls_export_smoke")
-    if summary.get("classification_export_dir"):
-        detect_and_train_classification(summary["classification_export_dir"], classification_epochs=1, classification_batch_size=8)
