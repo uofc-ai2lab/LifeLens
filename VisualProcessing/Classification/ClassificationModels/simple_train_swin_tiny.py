@@ -4,7 +4,7 @@ Handles split, training loop, metrics, checkpoint and confusion matrix.
 
 import argparse
 import os
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict, Any
 
 import time
 import torch
@@ -255,32 +255,27 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     pin_memory = (device.type == "cuda")
-
     train_loader, val_loader, test_loader, class_names = build_dataloaders_from_folder(
-        data_root=args.data_dir,
-        image_size=args.img_size,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        validation_ratio=args.val_ratio,
-        test_ratio=args.test_ratio,
-        split_seed=args.split_seed,
+        data_root=data_dir,
+        image_size=img_size,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        validation_ratio=val_ratio,
+        test_ratio=test_ratio,
+        split_seed=split_seed,
         pin_memory=pin_memory,
     )
-
     num_classes = len(class_names)
     model = create_model(num_classes=num_classes, pretrained=True).to(device)
-
-    if args.freeze_backbone:
-        for param in model.parameters():
-            param.requires_grad = False
+    if freeze_backbone:
+        for p in model.parameters():
+            p.requires_grad = False
         if hasattr(model, "get_classifier"):
-            classifier = model.get_classifier()
             try:
                 for param in classifier.parameters():
                     param.requires_grad = True
             except (AttributeError, TypeError):
                 pass
-
     criterion = nn.CrossEntropyLoss()
 
     best_val_accuracy = -1.0
@@ -288,9 +283,11 @@ def main():
     checkpoint_path = os.path.join("experiments/checkpoints/simple", "best_swin_tiny_patch4_window7_224.pt")
     optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
     best_metrics = None
-    for epoch in range(args.epochs):
-        train_loss = train_one_epoch(model, train_loader, device, optimizer, criterion)
-        val_loss, val_accuracy, metrics = validate(model, val_loader, device, criterion, num_classes)
+    os.makedirs(save_root, exist_ok=True)
+    ckpt_path = os.path.join(save_root, "best_swin_tiny_patch4_window7_224.pt")
+    for epoch in range(epochs):
+        tr_loss = train_one_epoch(model, train_loader, device, optimizer, criterion)
+        val_loss, val_acc, metrics = validate(model, val_loader, device, criterion, num_classes)
         extra = []
         if metrics.get("roc_auc") is not None:
             extra.append(f"auc {metrics['roc_auc']:.4f}")
@@ -299,9 +296,9 @@ def main():
         if metrics.get("precision_macro") is not None and metrics.get("recall_macro") is not None:
             extra.append(f"prec {metrics['precision_macro']:.4f} recall {metrics['recall_macro']:.4f}")
         extra_str = (" - " + " - ".join(extra)) if extra else ""
-        print(f"Epoch {epoch+1}/{args.epochs} - train_loss {train_loss:.4f} - val_loss {val_loss:.4f} - val_acc {val_accuracy:.4f}{extra_str}")
-        if val_accuracy > best_val_accuracy:
-            best_val_accuracy = val_accuracy
+        print(f"[cls] Epoch {epoch+1}/{epochs} - train_loss {tr_loss:.4f} - val_loss {val_loss:.4f} - val_acc {val_acc:.4f}{extra_str}")
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
             best_metrics = metrics
             torch.save({
                 "state_dict": model.state_dict(),
@@ -354,4 +351,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    train_swin_tiny("ImageData/images/Wound_dataset", epochs=1, batch_size=8, img_size=224, val_ratio=0.2)

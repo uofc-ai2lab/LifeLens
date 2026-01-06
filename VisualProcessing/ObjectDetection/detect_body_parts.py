@@ -1,13 +1,15 @@
-import argparse
 import os
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Dict, Any
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from ultralytics import YOLO
 from huggingface_hub import snapshot_download, hf_hub_download
 import dill  # required for some legacy checkpoints
+import torch  # needed for classification device selection
+
+# classification import is done lazily inside pipeline to keep loose coupling
 
 
 # NOTE: Torso placeholder
@@ -200,13 +202,21 @@ def process_image(
             if area < min_area:
                 continue
             bbox = mask_to_bbox(mask_bin, margin=margin, image_shape=image_np.shape[:2])
-            saved = save_crop(image_np, bbox, crops_root / f"{cls_name}_{idx}.jpg")
+            filename = f"{image_path.stem}_{cls_name}_{idx}.jpg"
+            saved = save_crop(image_np, bbox, crops_root / filename)
             if alpha_png and saved:
-                # Use original (non-margin) tight bbox for alpha transparency? For consistency keep margin bbox.
-                save_alpha_masked(image_np, mask_bin, bbox, crops_root / f"{cls_name}_{idx}_alpha.png")
+                save_alpha_masked(image_np, mask_bin, bbox, crops_root / f"{image_path.stem}_{cls_name}_{idx}_alpha.png")
             if saved:
                 vis_boxes.append(bbox)
                 vis_labels.append(cls_name)
+                if classification_export_dir is not None:
+                    cls_dir = classification_export_dir / cls_name
+                    ensure_dir(cls_dir)
+                    try:
+                        Image.open(crops_root / filename).save(cls_dir / filename)
+                    except Exception as e:
+                        if DEBUG_PRINT:
+                            print(f"[debug] classification export failed for {filename}: {e}")
 
     # Create composite head crop if requested
     if add_head:
@@ -225,11 +235,20 @@ def process_image(
             head_union = np.clip(sum(head_components), 0, 1)
             if head_union.sum() >= min_area:
                 bbox = mask_to_bbox(head_union, margin=margin, image_shape=image_np.shape[:2])
-                if save_crop(image_np, bbox, crops_root / "head_0.jpg"):
+                head_filename = f"{image_path.stem}_head_0.jpg"
+                if save_crop(image_np, bbox, crops_root / head_filename):
                     vis_boxes.append(bbox)
                     vis_labels.append("head")
                     if alpha_png:
-                        save_alpha_masked(image_np, head_union, bbox, crops_root / "head_0_alpha.png")
+                        save_alpha_masked(image_np, head_union, bbox, crops_root / f"{image_path.stem}_head_0_alpha.png")
+                    if classification_export_dir is not None:
+                        cls_dir = classification_export_dir / "head"
+                        ensure_dir(cls_dir)
+                        try:
+                            Image.open(crops_root / head_filename).save(cls_dir / head_filename)
+                        except Exception as e:
+                            if DEBUG_PRINT:
+                                print(f"[debug] classification export failed for composite head: {e}")
 
     # Visualization
     vis_dir = output_dir / "vis"
@@ -290,11 +309,11 @@ def main():
     model = load_model(args.model)
     if args.device is not None:
         try:
-            model.to(args.device)
+            model_obj.to(device)
         except Exception:
-            print(f"Could not move model to device {args.device}, continuing on default.")
-    source_path = Path(args.source)
-    output_path = Path(args.output)
+            print(f"Could not move model to device {device}, continuing on default.")
+    source_path = Path(source)
+    output_path = Path(output)
     ensure_dir(output_path)
     # Do not mutate args: derive the effective behavior from flags.
     # If user requests the 'head' class, we interpret it as the composite head crop.
@@ -317,5 +336,65 @@ def main():
     print(f"Done. Outputs in {output_path}")
 
 
+    if ("head" in classes) and (not add_head):  # auto-enable composite head if requested
+        add_head = True
+    export_dir_path: Optional[Path] = Path(classification_export_dir) if classification_export_dir else None
+    if export_dir_path:
+        ensure_dir(export_dir_path)
+    iterate_source(
+        model_obj,
+        source_path,
+        output_path,
+        classes,
+        margin,
+        min_area,
+        add_head,
+        alpha_png,
+        max_images,
+        save_annotated=True,
+        classification_export_dir=export_dir_path,
+    )
+    summary: Dict[str, Any] = {
+        "model": model,
+        "source": str(source_path),
+        "output": str(output_path),
+        "classification_export_dir": (str(export_dir_path) if export_dir_path else None),
+        "classes": classes,
+    }
+    print(f"[detect] Done. Outputs in {output_path}")
+    return summary
+
+
+def detect_and_train_classification(
+    detection_export_dir: str,
+    classification_epochs: int = 5,
+    classification_batch_size: int = 32,
+    classification_img_size: int = 224,
+    classification_val_ratio: float = 0.2,
+    classification_test_ratio: float = 0.0,
+    classification_lr: float = 3e-4,
+    classification_split_seed: Optional[int] = None,
+    freeze_backbone: bool = False,
+) -> Dict[str, Any]:
+    """Run classification training on a directory produced by run_detection (ImageFolder layout)."""
+    from VisualProcessing.Classification.ClassificationModels.simple_train_swin_tiny import train_swin_tiny
+    result = train_swin_tiny(
+        data_dir=detection_export_dir,
+        epochs=classification_epochs,
+        batch_size=classification_batch_size,
+        img_size=classification_img_size,
+        val_ratio=classification_val_ratio,
+        test_ratio=classification_test_ratio,
+        lr=classification_lr,
+        split_seed=classification_split_seed,
+        freeze_backbone=freeze_backbone,
+    )
+    return result
+
+
+# Minimal smoke test when executed directly (1 image, 1 epoch classification if export provided)
 if __name__ == "__main__":
-    main()
+    # Adjust paths as needed for a quick local test
+    summary = run_detection(max_images=1, classification_export_dir="ObjectDetection/outputs/cls_export_smoke")
+    if summary.get("classification_export_dir"):
+        detect_and_train_classification(summary["classification_export_dir"], classification_epochs=1, classification_batch_size=8)
