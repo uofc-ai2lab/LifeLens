@@ -1,4 +1,4 @@
-start,end,text,speaker
+start_time,end_time,text,speaker
 00:00:00.000,00:00:02.960,So we are going to facilitate a trauma scenario now.,UNKNOWN
 00:00:02.960,00:00:06.000,So you can see we have a mannequin on the floor with blankets.,UNKNOWN
 00:00:06.000,00:00:08.000,The blankets are supposed to be snow.,UNKNOWN

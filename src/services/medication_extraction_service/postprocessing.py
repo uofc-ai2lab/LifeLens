@@ -37,7 +37,7 @@ def missed_medication_info(text, med_list):
         start_idx = match.start()
         matches.append({
             "medication": matched_text,
-            "start": start_idx,
+            "start_idx": start_idx,
         })
     
     return matches
@@ -55,11 +55,11 @@ def ensure_proper_medication_name(entities, sentence):
         found_med = ent.word
         tokens = re.findall(r"[\w'-]+", sentence)
         if found_med not in tokens:
-            start = ent.start_idx
-            end = start
-            while end < len(sentence) and not sentence[end].isspace():
-                end += 1
-            ent.word = sentence[start:end]
+            start_idx = ent.start_idx
+            end_idx = start_idx
+            while end_idx < len(sentence) and not sentence[end_idx].isspace():
+                end_idx += 1
+            ent.word = sentence[start_idx:end_idx]
             
     return entities
 

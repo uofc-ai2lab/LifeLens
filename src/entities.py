@@ -1,5 +1,16 @@
 from dataclasses import dataclass
 from typing import Optional
+from pathlib import Path
+
+@dataclass
+class AudioFileMetaData:
+    audio_file: Optional[str] = None
+    transcript_filename: Optional[Path] = None
+    medication_filename: Optional[Path] = None
+    semantic_filename: Optional[Path] = None
+    intervention_filename: Optional[Path] = None
+    
+AUDIO_PIPELINE_METADATA: list[AudioFileMetaData] = []
 
 @dataclass
 class MedicationEntity:

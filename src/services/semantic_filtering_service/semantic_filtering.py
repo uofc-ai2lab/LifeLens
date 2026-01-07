@@ -91,7 +91,7 @@ async def run_semantic_filtering():
             output_path=MEANING_DIR,
             input_filename=Path(input_transcript).stem,
             service="semantic",
-            columns=["start", "end", "intervention"],
+            columns=["start_time", "end_time", "intervention"],
             empty_ok=True
         )
         

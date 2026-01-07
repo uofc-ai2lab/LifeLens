@@ -6,6 +6,7 @@ import soundfile as sf
 from src.constants.constants import bcolors
 from src.utils.export_to_csv import export_to_csv
 from config.settings import AUDIO_FILES_LIST, IS_JETSON, MODEL_SIZE, MODEL_CACHE_PATH, TRANSCRIPT_DIR
+from src.utils.generate_export_filename import generate_export_filename
 
 def print_formatting(type: str, text: str):
     print("\n" + "="*70)
@@ -115,7 +116,21 @@ def verify_transcription_output(result: dict):
     else:
         print(bcolors.WARNING + "WARNING: No segments found" + bcolors.ENDC)
         return full_text
-    
+
+def normalize_whisper_segments(segments):
+    """
+    Convert Whisper segment keys to pipeline-standard keys.
+    """
+    normalized = []
+    for seg in segments:
+        normalized.append({
+            "start_time": seg["start"],
+            "end_time": seg["end"],
+            "text": seg.get("text", ""),
+            "speaker": seg.get("speaker", "UNKNOWN")
+        })
+    return normalized
+           
 async def transcribe_audio(audio_file: str, model):
     print_formatting("heading","STEP 3: RUNNING TRANSCRIPTION")
     transcribe_start = datetime.now()
@@ -161,13 +176,15 @@ async def run_transcription():
             print(bcolors.FAIL + "\nTRANSCRIPTION FAILED - STOPPING PIPELINE" + bcolors.ENDC)
             return
 
+        normalized_result = normalize_whisper_segments(verified_result)
+
         # ==================== VERIFICATION STEP 5: CHECK EXPORT ====================
         export_start = datetime.now()
-        columns=["start", "end", "text", "speaker"]
+        columns=["start_time", "end_time", "text", "speaker"]
         print_formatting("heading","STEP 5: EXPORTING RESULTS")
-
+        
         export_to_csv(
-            data=verified_result,
+            data=normalized_result,
             output_path=TRANSCRIPT_DIR,
             input_filename=Path(audio_file).stem,
             service="transcript",
