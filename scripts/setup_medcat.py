@@ -2,7 +2,7 @@ from pathlib import Path
 import sys, time
 import urllib.request
 
-MEDCAT_DATA_DIR = Path("data_p3.2")
+MEDCAT_DATA_DIR = Path("data/data_p3.2")
 MEDCAT_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 FILES = {

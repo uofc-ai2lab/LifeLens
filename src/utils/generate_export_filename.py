@@ -1,8 +1,32 @@
 from datetime import datetime
+from src.utils.metadata import create_and_update_metadata, search_metadata
+
 
 def generate_export_filename(
     input_filename: str,
     service: str = "",
     ) -> str:
+    
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return f"{timestamp}_{service}_{input_filename}.csv"
+    full_output_filename = f"{timestamp}_{service}_{input_filename}.csv"
+    
+    existing_metadata = None
+    if service != "transcript":
+        existing_metadata=search_metadata("transcript_filename",input_filename) # check if transcript's metadata exists
+    
+    if existing_metadata:
+        if existing_metadata.audio_file is not None: #if it exists, rename the output file
+            full_output_filename = f"{timestamp}_{service}_{existing_metadata.audio_file}.csv"
+
+    create_and_update_metadata(input_filename, service, full_output_filename)
+    
+    # re-fetch to ensure updated object
+    metadata = search_metadata(
+        "transcript_filename" if service != "transcript" else "audio_file",
+        input_filename
+    )
+
+    if metadata is None:
+        raise RuntimeError("Metadata update failed")
+
+    return full_output_filename

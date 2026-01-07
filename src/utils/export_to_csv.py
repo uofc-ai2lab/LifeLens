@@ -1,10 +1,10 @@
 import os, csv
+from pathlib import Path
 import pandas as pd
 from typing import List, Dict, Callable, Optional, Union
 from src.constants.constants import bcolors
 from src.utils.generate_export_filename import generate_export_filename
 from src.utils.format_timestamp import format_timestamp
-
 
 def transform_row_fn(data, columns):
     # Apply default transformations
@@ -13,7 +13,7 @@ def transform_row_fn(data, columns):
         transformed_row = {}
         for k in (columns or r.keys()):
             val = r.get(k, "")
-            if k == "start" or k == "end":
+            if k == "start_time" or k == "end_time":
                 try:
                     # Only format if numeric
                     if isinstance(val, (int, float)):
@@ -26,11 +26,11 @@ def transform_row_fn(data, columns):
             elif k == "text":
                 val = str(val).strip()
             elif k == "speaker":
-                val = val if val else "UNKNOWN"
+                val = val
             transformed_row[k] = val
         transformed_rows.append(transformed_row)
     return transformed_rows
-    
+
 def export_to_csv(
     data: Union[List[Dict],pd.DataFrame],
     output_path: str,
@@ -57,6 +57,7 @@ def export_to_csv(
     full_output_name = generate_export_filename(input_filename, service)
     full_output_path=f"{output_path}/{full_output_name}"
     os.makedirs(os.path.dirname(full_output_path), exist_ok=True)
+    
     
     if data is None or (isinstance(data, list) and len(data) == 0):
         if not empty_ok:

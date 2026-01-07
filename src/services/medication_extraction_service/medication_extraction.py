@@ -39,8 +39,8 @@ def build_administration(
         dosage_score=None,
         route=None,
         route_score=None,
-        start_time=segment["start"],
-        end_time=segment["end"],
+        start_time=segment["start_time"],
+        end_time=segment["end_time"],
     )
     
     i+=1
@@ -76,8 +76,8 @@ def extract_med_admins_with_confidence(segments: list[dict]) -> list[MedicationA
     Args:
         segments (list[dict]): List of segments with keys:
             - 'original_text': str
-            - 'start': float
-            - 'end': float
+            - 'start_time': float
+            - 'end_time': float
             - 'entities': List[MedicationEntity]
 
     Returns:
@@ -120,8 +120,8 @@ def prepare_medication_rows(administrations: list[MedicationAdministration]) -> 
         list[MedicationAdministration]: List of finalized administrations with confidence scores.
     """
     return [{
-        "start": a.start_time,
-        "end": a.end_time,
+        "start_time": a.start_time,
+        "end_time": a.end_time,
         "medication (confidence score)" : (
             f"{a.medication} ({a.medication_score:.3f})" if a.medication else "Not Found"
         ),
@@ -156,8 +156,8 @@ def medication_extraction_pipeline(transcript_path: str, extractor: MedicationEx
         extracted_entities = postprocess_entities(extracted_entities, row["text"])
         nlp_data = {
             "original_text": row["text"],
-            "start": row['start'],
-            "end": row['end'],
+            "start_time": row['start_time'],
+            "end_time": row['end_time'],
             "entities": extracted_entities
         }
         transcript_data.append(nlp_data)
@@ -172,8 +172,8 @@ def medication_extraction_pipeline(transcript_path: str, extractor: MedicationEx
         input_filename=Path(transcript_path).stem,
         service="medX",
         columns=[
-            "start",
-            "end",
+            "start_time",
+            "end_time",
             "medication (confidence score)",
             "dosage (confidence score)",
             "route (confidence score)"
@@ -181,7 +181,7 @@ def medication_extraction_pipeline(transcript_path: str, extractor: MedicationEx
         empty_ok=True,
     )
 
-async def run_medication_extraction_service():
+async def run_medication_extraction():
     """Async wrapper to run the medication extraction pipeline."""
     extractor = MedicationExtractor()
     for transcript in TRANSCRIPT_FILES_LIST:

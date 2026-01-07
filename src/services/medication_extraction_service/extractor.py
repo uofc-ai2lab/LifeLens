@@ -58,8 +58,8 @@ class MedicationExtractor:
                 {
                     word_id: {
                         "entity": str,        # predicted entity label
-                        "start": int,         # start char index
-                        "end": int,           # end char index
+                        "start_idx": int,         # start char index
+                        "end_idx": int,           # end char index
                         "scores": List[float] # confidence scores per token
                     }
                 }
@@ -78,17 +78,17 @@ class MedicationExtractor:
             if label == "O":
                 continue
 
-            start, end = offsets[i].tolist()
+            start_idx, end_idx = offsets[i].tolist()
             
             # First token of a word → create group
             # Subsequent tokens → update same group
             group = word_groups.setdefault(word_id, {
                 "entity": label,
-                "start_idx": start,
-                "end_idx": end,
+                "start_idx": start_idx,
+                "end_idx": end_idx,
                 "scores": []
             })
-            group["end"] = end
+            group["end"] = end_idx
             group["scores"].append(score)
         
         return word_groups

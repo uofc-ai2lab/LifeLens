@@ -2,7 +2,7 @@
 
 # Extra data files
 temp/
-data_p3.2/
+data/data_p3.2/
 
 # local audio db
 Synthetic-Medical-Audio/cv-corpus-audio/

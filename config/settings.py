@@ -2,6 +2,7 @@ from pathlib import Path
 import os, platform
 from dotenv import load_dotenv
 from google import genai
+import spacy
 
 # Load environment variables from .env
 load_dotenv()
@@ -18,6 +19,9 @@ AUDIO_DIR = DATA_DIR / "audio_files"
 TRANSCRIPT_DIR = DATA_DIR / "transcript_files"
 MEANING_DIR = DATA_DIR / "meaning_files"
 TEST_DATA_DIR = DATA_DIR / "test_data"
+
+METADATA_FILENAME = "audio_pipeline_metadata.json"
+METADATA_JSON_PATH = DATA_DIR / METADATA_FILENAME
 
 # -------------------------
 # Environment
@@ -54,6 +58,18 @@ if TRANSCRIPT_DIR_NEW != "":
 # -------------------------
 # NLP / Meaning extraction
 # -------------------------
+MEDCAT_DATA_DIR = Path("data/data_p3.2")
+MODEL_PACK_PATH = MEDCAT_DATA_DIR / "medmen_wstatus_2021_oct.zip"
+
+try:
+    from medcat.cat import CAT
+except:
+    print("ERROR: MedCAT not installed or environment broken.")
+    exit()
+    
+MODEL_PACK = CAT.load_model_pack(MODEL_PACK_PATH)
+NLP = spacy.load("en_core_web_sm")
+
 _raw_transcript_files = os.getenv("TRANSCRIPT_FILES")
 if _raw_transcript_files:
     # Explicit list provided via env var
