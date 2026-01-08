@@ -1,6 +1,6 @@
 import re
 from functools import lru_cache
-from src.services.medication_extraction_service.medication_extraction_constants import ROUTES, DOSAGES, TEXT_NUMBERS, NUMBER_PATTERN, MEDICATIONS, LOW_CONFIDENCE_SCORE, HIGH_CONFIDENCE_SCORE
+from src.domain.constants import ROUTES, DOSAGES, TEXT_NUMBERS, NUMBER_PATTERN, MEDICATIONS, LOW_CONFIDENCE_SCORE, HIGH_CONFIDENCE_SCORE
 from src.domain.entities import MedicationEntity
 
 @lru_cache(maxsize=1)

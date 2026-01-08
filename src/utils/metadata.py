@@ -3,8 +3,7 @@ from datetime import datetime
 from pathlib import Path
 from dataclasses import asdict
 import pandas as pd
-from src.services.intervention_extraction_service.intervention_extraction_constants import INTER_COLUMNS
-from src.services.medication_extraction_service.medication_extraction_constants import MED_COLUMNS
+from src.domain.constants import INTER_COLUMNS, MED_COLUMNS
 from config.settings import TRANSCRIPT_FILES_LIST, TRANSCRIPT_DIR, METADATA_JSON_PATH, AUDIO_FILES_LIST, OUTPUT_DIR, MEANING_DIR
 from src.domain.entities import AUDIO_PIPELINE_METADATA, AudioFileMetaData
 
