@@ -1,11 +1,19 @@
 from datetime import datetime
-from config.settings import TRANSCRIPT_FILES_LIST, TRANSCRIPT_DIR, METADATA_JSON_PATH, AUDIO_FILES_LIST
+import os
+from config.settings import TRANSCRIPT_FILES_LIST, TRANSCRIPT_DIR, METADATA_JSON_PATH, AUDIO_FILES_LIST, OUTPUT_DIR, MEANING_DIR
 from src.entities import AUDIO_PIPELINE_METADATA, AudioFileMetaData
 from pathlib import Path
 import json
 from dataclasses import asdict
+import pandas as pd
+from src.constants.intervention_extraction_constants import INTER_COLUMNS
+from src.constants.medication_extraction_constants import MED_COLUMNS
 
 def _write_metadata_json():
+    """
+    Persist the in-memory pipeline metadata to disk as JSON (the single write-point)
+    """
+    
     METADATA_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(METADATA_JSON_PATH, "w", encoding="utf-8") as f:
         json.dump(
@@ -16,8 +24,8 @@ def _write_metadata_json():
         
 def setup_metadata():
     """
-    Initialize metadata from existing audio + transcript files.
-    Always creates a NEW metadata JSON file.
+    Initialize pipeline metadata from existing audio and transcript files.
+    Clears in-memory metadata and creates a new metadata JSON file based on files found at startup.
     """
     global AUDIO_PIPELINE_METADATA
     AUDIO_PIPELINE_METADATA.clear()
@@ -26,7 +34,7 @@ def setup_metadata():
     for audio in AUDIO_FILES_LIST:
         AUDIO_PIPELINE_METADATA.append(
             AudioFileMetaData(
-                audio_file=Path(audio).stem,
+                audio_file=Path(audio).name,
                 transcript_filename=None,
                 medication_filename=None,
                 intervention_filename=None,
@@ -36,12 +44,12 @@ def setup_metadata():
 
     # 2. Seed transcript files (may not have audio)
     for transcript in TRANSCRIPT_FILES_LIST:
-        stem = Path(transcript).stem
-        if not search_metadata("transcript_filename", stem):
+        name = Path(transcript).name
+        if not search_metadata("transcript_filename", name):
             AUDIO_PIPELINE_METADATA.append(
                 AudioFileMetaData(
                     audio_file=None,
-                    transcript_filename=stem,
+                    transcript_filename=name,
                     medication_filename=None,
                     intervention_filename=None,
                     semantic_filename=None,
@@ -52,7 +60,8 @@ def setup_metadata():
 
 def search_metadata(field_name, input_file):
     """
-    Look up metadata by matching the transcript_input_file of the transcript filename.
+    Find and return a metadata entry by matching a specific field value.
+    Returns None if no match is found.
     """
     
     existing = next((m for m in AUDIO_PIPELINE_METADATA if getattr(m, field_name, None) == input_file), None)
@@ -61,13 +70,12 @@ def search_metadata(field_name, input_file):
     else:
         return None
 
-def create_and_update_metadata(input_filename, service, output_filename):
+def create_update_metadata(input_filename, service, output_filename):
     """
-    Add or update metadata for an audio file in the global AUDIO_PIPELINE_METADATA list.
+    Create or update metadata when a service generates an output file.
 
-    Args:
-        input_filename (str): The stem of the audio file (e.g., "trauma_simulation")
-        service (str): One of the audio microservices
+    Updates in-memory pipeline state and persists changes to the
+    metadata JSON file.
     """
     
     global AUDIO_PIPELINE_METADATA
@@ -75,17 +83,17 @@ def create_and_update_metadata(input_filename, service, output_filename):
     existing_audio = search_metadata("audio_file",input_filename)
     existing_transc = None
     
+    # audio exists and we are adding transcription file (likely shouldn't happen) or output file
     if service == "transcript":
-        # audio exists and we are adding transcription file (likely shouldn't happen)
         if existing_audio:
-            existing_audio.transcript_filename=Path(output_filename).stem
+            existing_audio.transcript_filename=Path(output_filename).name
             TRANSCRIPT_FILES_LIST.append(TRANSCRIPT_DIR / Path(output_filename))
         # audio doesn't exist, new entry created
         elif existing_audio is None:
             AUDIO_PIPELINE_METADATA.append(
                 AudioFileMetaData(
-                    audio_file=Path(input_filename).stem, 
-                    transcript_filename=Path(output_filename).stem))
+                    audio_file=Path(input_filename).name, 
+                    transcript_filename=Path(output_filename).name))
             TRANSCRIPT_FILES_LIST.append(TRANSCRIPT_DIR / Path(output_filename))
     
     else: # if not a transcription service, check for transcript filename 
@@ -93,13 +101,13 @@ def create_and_update_metadata(input_filename, service, output_filename):
 
         if existing_transc:
             if service == "medX":
-                existing_transc.medication_filename=Path(output_filename).stem
+                existing_transc.medication_filename=Path(output_filename).name
             elif service == "intervention":
-                existing_transc.intervention_filename=Path(output_filename).stem
+                existing_transc.intervention_filename=Path(output_filename).name
             elif service == "semantic":
-                existing_transc.semantic_filename=Path(output_filename).stem
+                existing_transc.semantic_filename=Path(output_filename).name
             else:
-                raise ValueError(f"1: Unknown service type: {service}")
+                raise ValueError(f"Unknown service type: {service}")
         
         else:
             # Transcript not registered yet -> create new entry
@@ -107,12 +115,59 @@ def create_and_update_metadata(input_filename, service, output_filename):
             AUDIO_PIPELINE_METADATA.append(
                 AudioFileMetaData(
                     audio_file=None,
-                    transcript_filename=Path(input_filename).stem,
-                    medication_filename=Path(output_filename).stem if service == "medX" else None,
-                    intervention_filename=Path(output_filename).stem if service == "intervention" else None,
-                    semantic_filename=Path(output_filename).stem if service == "semantic" else None,
+                    transcript_filename=Path(input_filename).name,
+                    medication_filename=Path(output_filename).name if service == "medX" else None,
+                    intervention_filename=Path(output_filename).name if service == "intervention" else None,
+                    semantic_filename=Path(output_filename).name if service == "semantic" else None
                 )
             )
     
     _write_metadata_json()
  
+def finalize_metadata():
+    """
+    Finalize pipeline outputs by combining medication and intervention
+    results into a single CSV per audio/transcript.
+    """
+    
+    for meta in AUDIO_PIPELINE_METADATA:
+        if not meta.medication_filename or not meta.intervention_filename:
+            continue
+        
+        med_path = MEANING_DIR / Path(meta.medication_filename)
+        inter_path = MEANING_DIR / Path(meta.intervention_filename)
+
+        if not med_path.exists() or not inter_path.exists():
+            continue
+        
+        med_df = pd.read_csv(med_path)
+        inter_df = pd.read_csv(inter_path)
+        
+        all_columns = []
+        for col in INTER_COLUMNS + MED_COLUMNS:
+            if col not in all_columns:
+                all_columns.append(col)
+                if col not in med_df:
+                    med_df[col] = None
+                if col not in inter_df:
+                    inter_df[col] = None
+
+        
+        combined_df = pd.concat(
+            [med_df[all_columns], inter_df[all_columns]],
+            ignore_index=True
+        )
+
+        combined_df.sort_values("start_time", inplace=True, ignore_index=True)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base_name = meta.audio_file or meta.transcript_filename
+        full_output_filename = f"{timestamp}_final_{Path(base_name).stem}.csv"
+        full_output_path = OUTPUT_DIR / full_output_filename
+        full_output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        combined_df.to_csv(full_output_path, index=False)
+
+        meta.output_file = full_output_filename
+
+    _write_metadata_json()

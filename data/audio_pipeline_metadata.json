@@ -1,16 +1,10 @@
 [
   {
-    "audio_file": "trauma_simulation",
-    "transcript_filename": null,
-    "medication_filename": null,
+    "audio_file": "trauma_simulation.mp3",
+    "transcript_filename": "20260107_175805_transcript_trauma_simulation.csv",
+    "medication_filename": "20260107_175808_medX_trauma_simulation.csv",
     "semantic_filename": null,
-    "intervention_filename": null
-  },
-  {
-    "audio_file": null,
-    "transcript_filename": "20260107_025447_transcript_trauma_simulation",
-    "medication_filename": null,
-    "semantic_filename": null,
-    "intervention_filename": null
+    "intervention_filename": "20260107_175808_intervention_trauma_simulation.csv",
+    "output_file": "20260107_175808_final_trauma_simulation.csv"
   }
 ]

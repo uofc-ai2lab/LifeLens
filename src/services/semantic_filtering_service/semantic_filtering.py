@@ -6,8 +6,8 @@ from google.genai import types
 import json, time
 from typing import List
 import asyncio
-from src.utils.load_csv_file import load_csv_as_rows
 from src.utils.export_to_csv import export_to_csv
+from src.utils.load_csv_file import load_csv_as_rows 
 from src.entities import ClinicalIntervention
 from src.services.semantic_filtering_service.llm_prompt import llm_prompt
 
@@ -52,8 +52,8 @@ async def extract_valid_interventions(transcript_rows: list[dict]) -> List[Clini
         print(f"Since calling Gemini has proposed an error, we will be using mock data to contibue the program.")
         
         mock_data = [
-            {"start_time": "00:01", "end_time": "00:05", "intervention": "CPR"},
-            {"start_time": "00:06", "end_time": "00:10", "intervention": "Administer Morphine"},
+            {"start_time": "00:01:00.000", "end_time": "00:05:33.000", "intervention": "CPR"},
+            {"start_time": "00:06:00.000", "end_time": "00:10:00.000", "intervention": "Administer Morphine"},
         ]
         return mock_data
 
@@ -89,7 +89,7 @@ async def run_semantic_filtering():
         export_to_csv(
             data=csv_rows,
             output_path=MEANING_DIR,
-            input_filename=Path(input_transcript).stem,
+            input_filename=Path(input_transcript).name,
             service="semantic",
             columns=["start_time", "end_time", "intervention"],
             empty_ok=True

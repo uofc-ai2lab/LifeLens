@@ -9,6 +9,7 @@ class AudioFileMetaData:
     medication_filename: Optional[Path] = None
     semantic_filename: Optional[Path] = None
     intervention_filename: Optional[Path] = None
+    output_file: Optional[Path] = None
     
 AUDIO_PIPELINE_METADATA: list[AudioFileMetaData] = []
 
