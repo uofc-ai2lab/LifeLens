@@ -3,10 +3,11 @@ import re
 from config.settings import TRANSCRIPT_FILES_LIST, MEANING_DIR
 from typing import Optional
 from functools import lru_cache
-from src.constants.medication_extraction_constants import ROUTES, LOW_CONFIDENCE_SCORE, HIGH_CONFIDENCE_SCORE
+from src.constants.medication_extraction_constants import ROUTES, LOW_CONFIDENCE_SCORE, HIGH_CONFIDENCE_SCORE, MED_COLUMNS
 
 from src.utils.export_to_csv import export_to_csv
-from src.utils.load_csv_file import load_csv_file
+from src.utils.load_csv_file import load_csv_file 
+
 from src.utils.calculate_mean import mean
 
 from src.entities import MedicationEntity, MedicationAdministration
@@ -122,6 +123,7 @@ def prepare_medication_rows(administrations: list[MedicationAdministration]) -> 
     return [{
         "start_time": a.start_time,
         "end_time": a.end_time,
+        "event_type": "medication",
         "medication (confidence score)" : (
             f"{a.medication} ({a.medication_score:.3f})" if a.medication else "Not Found"
         ),
@@ -131,6 +133,7 @@ def prepare_medication_rows(administrations: list[MedicationAdministration]) -> 
         "route (confidence score)" : (
             f"{a.route} ({a.route_score:.3f})" if a.route else "Not Found"
         ),
+        "full_text": ""
     } for a in administrations]
 
 def medication_extraction_pipeline(transcript_path: str, extractor: MedicationExtractor) -> None:
@@ -169,15 +172,9 @@ def medication_extraction_pipeline(transcript_path: str, extractor: MedicationEx
     export_to_csv(
         data=rows,
         output_path=MEANING_DIR,
-        input_filename=Path(transcript_path).stem,
+        input_filename=Path(transcript_path).name,
         service="medX",
-        columns=[
-            "start_time",
-            "end_time",
-            "medication (confidence score)",
-            "dosage (confidence score)",
-            "route (confidence score)"
-        ],
+        columns=MED_COLUMNS,
         empty_ok=True,
     )
 

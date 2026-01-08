@@ -3,10 +3,10 @@ from pathlib import Path
 import pandas as pd
 import spacy
 import re
-from src.utils.load_csv_file import load_csv_file
 from src.utils.export_to_csv import export_to_csv
+from src.utils.load_csv_file import load_csv_file 
 from config.settings import TRANSCRIPT_FILES_LIST, MEANING_DIR, NLP, MODEL_PACK
-from src.constants.intervention_extraction_constants import INTERVENTIONS, REPLACEMENTS
+from src.constants.intervention_extraction_constants import INTERVENTIONS, REPLACEMENTS, INTER_COLUMNS
 
 def normalize_text(text):
     """Normalize text for better matching"""
@@ -111,16 +111,9 @@ def intervention_extraction_pipeline(transcript_path: str, output_path="interven
     export_to_csv(
         data=extracted_interventions,
         output_path=MEANING_DIR,
-        input_filename=Path(transcript_path).stem,
+        input_filename=Path(transcript_path).name,
         service="intervention",
-        columns=[
-            "start_time", 
-            "end_time",
-            "event_type", 
-            "event_category",
-            "entity_detected", 
-            "full_text"
-        ],
+        columns=INTER_COLUMNS, 
         empty_ok=True,
     )
 

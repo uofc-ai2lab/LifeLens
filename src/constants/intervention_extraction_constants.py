@@ -13,3 +13,12 @@ REPLACEMENTS = {
     "pneumo ": "pneumothorax ",
     "c collar": "cervical collar",
 }
+
+INTER_COLUMNS = [
+    "start_time", 
+    "end_time",
+    "event_type", 
+    "event_category",
+    "entity_detected", 
+    "full_text"
+]

@@ -102,3 +102,13 @@ NUMBER_PATTERN = re.compile(r"\d+(?:\.\d+)?(?:/\d+)?")
 LOW_CONFIDENCE_SCORE = 0.5
 
 HIGH_CONFIDENCE_SCORE = 1.0
+
+MED_COLUMNS = [
+    "start_time",
+    "end_time",
+    "event_type",
+    "medication (confidence score)",
+    "dosage (confidence score)",
+    "route (confidence score)",
+    "full_text"
+]

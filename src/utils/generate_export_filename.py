@@ -1,6 +1,6 @@
+from pathlib import Path
 from datetime import datetime
-from src.utils.metadata import create_and_update_metadata, search_metadata
-
+from src.utils.metadata import create_update_metadata, search_metadata
 
 def generate_export_filename(
     input_filename: str,
@@ -8,7 +8,7 @@ def generate_export_filename(
     ) -> str:
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    full_output_filename = f"{timestamp}_{service}_{input_filename}.csv"
+    full_output_filename = f"{timestamp}_{service}_{Path(input_filename).stem}.csv"
     
     existing_metadata = None
     if service != "transcript":
@@ -16,9 +16,9 @@ def generate_export_filename(
     
     if existing_metadata:
         if existing_metadata.audio_file is not None: #if it exists, rename the output file
-            full_output_filename = f"{timestamp}_{service}_{existing_metadata.audio_file}.csv"
+            full_output_filename = f"{timestamp}_{service}_{Path(existing_metadata.audio_file).stem}.csv"
 
-    create_and_update_metadata(input_filename, service, full_output_filename)
+    create_update_metadata(input_filename, service, full_output_filename)
     
     # re-fetch to ensure updated object
     metadata = search_metadata(

@@ -18,6 +18,7 @@ DATA_DIR = BASE_DIR / "data"
 AUDIO_DIR = DATA_DIR / "audio_files"
 TRANSCRIPT_DIR = DATA_DIR / "transcript_files"
 MEANING_DIR = DATA_DIR / "meaning_files"
+OUTPUT_DIR = DATA_DIR / "output_files"
 TEST_DATA_DIR = DATA_DIR / "test_data"
 
 METADATA_FILENAME = "audio_pipeline_metadata.json"

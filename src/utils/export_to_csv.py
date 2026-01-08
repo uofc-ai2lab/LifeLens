@@ -1,12 +1,13 @@
 import os, csv
 from pathlib import Path
 import pandas as pd
+from datetime import datetime
 from typing import List, Dict, Callable, Optional, Union
 from src.constants.constants import bcolors
-from src.utils.generate_export_filename import generate_export_filename
 from src.utils.format_timestamp import format_timestamp
+from src.utils.generate_export_filename import generate_export_filename
 
-def transform_row_fn(data, columns):
+def _transform_row_fn(data, columns):
     # Apply default transformations
     transformed_rows = []
     for r in data:
@@ -31,6 +32,7 @@ def transform_row_fn(data, columns):
         transformed_rows.append(transformed_row)
     return transformed_rows
 
+
 def export_to_csv(
     data: Union[List[Dict],pd.DataFrame],
     output_path: str,
@@ -50,7 +52,7 @@ def export_to_csv(
     - service: type of service exporting a csv
     - columns: ordered list of columns to include
     - header: optional custom header (for csv.writer style)
-    - transform_row_fn: optional function to transform each row
+    - _transform_row_fn: optional function to transform each row
     - empty_ok: whether to write empty CSV if data is empty
     """
 
@@ -74,7 +76,7 @@ def export_to_csv(
             
         # Case 2: List[Dict]
         else:
-            rows = transform_row_fn(data, columns)
+            rows = _transform_row_fn(data, columns)
             
             if columns:
                 rows = [{k: r.get(k,"") for k in columns} for r in rows]

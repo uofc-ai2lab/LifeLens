@@ -6,7 +6,6 @@ import soundfile as sf
 from src.constants.constants import bcolors
 from src.utils.export_to_csv import export_to_csv
 from config.settings import AUDIO_FILES_LIST, IS_JETSON, MODEL_SIZE, MODEL_CACHE_PATH, TRANSCRIPT_DIR
-from src.utils.generate_export_filename import generate_export_filename
 
 def print_formatting(type: str, text: str):
     print("\n" + "="*70)
@@ -186,12 +185,10 @@ async def run_transcription():
         export_to_csv(
             data=normalized_result,
             output_path=TRANSCRIPT_DIR,
-            input_filename=Path(audio_file).stem,
+            input_filename=Path(audio_file).name,
             service="transcript",
             columns=columns,
         )
-        
-        # export_to_csv(result, filename, output_dir=TRANSCRIPT_DIR)
         export_end = datetime.now()
 
         # Print timing summary

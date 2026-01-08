@@ -4,7 +4,7 @@ from src.services.medication_extraction_service.medication_extraction import run
 from src.services.intervention_extraction_service.intervention_extraction import run_intervention_extraction
 from src.services.semantic_filtering_service.semantic_filtering import run_semantic_filtering
 from src.entities import AUDIO_PIPELINE_METADATA
-from src.utils.metadata import setup_metadata
+from src.utils.metadata import setup_metadata, finalize_metadata
 
 async def main():
     """
@@ -22,45 +22,46 @@ async def main():
     
     setup_metadata()
 
-    if args.service == "transcribe":
-        await run_transcription()
-    elif args.service == "meds":
-        await run_medication_extraction()
-    elif args.service == "sem":
-        await run_semantic_filtering()
-    elif args.service == "inter":
-        await run_intervention_extraction()
-    else:
-        
-        try:
-            print("Starting transcription...\n")
+    try:
+        if args.service == "transcribe":
             await run_transcription()
-            print("Transcription finished.\n")
-        except Exception as e:
-            print("Transcription failed:", e)
-
-        try:
-            print("Starting medication extraction...\n")
+        elif args.service == "meds":
             await run_medication_extraction()
-            print("Medication extraction finished\n")
-        except Exception as e:
-            print("Medication extraction failed:", e)
-
-        try:
-            print("Starting intervention extraction...\n")
+        elif args.service == "inter":
             await run_intervention_extraction()
-            print("Intervention extraction finished\n")
-        except Exception as e:
-            print("Intervention extraction failed:", e)
-            
-        try:
-            print("Starting semantic filtering...\n")
+        elif args.service == "sem":
             await run_semantic_filtering()
-            print("All services finished!\n")
-        except Exception as e:
-            print("Semantic filtering failed:", e)
-            
-        print(f"ALL METADATA:\n{AUDIO_PIPELINE_METADATA}")
+        else:  
+            try:
+                print("Starting transcription...\n")
+                await run_transcription()
+                print("Transcription finished.\n")
+            except Exception as e:
+                print("Transcription failed:", e)
+
+            try:
+                print("Starting medication extraction...\n")
+                await run_medication_extraction()
+                print("Medication extraction finished\n")
+            except Exception as e:
+                print("Medication extraction failed:", e)
+
+            try:
+                print("Starting intervention extraction...\n")
+                await run_intervention_extraction()
+                print("All services finished!\n")
+            except Exception as e:
+                print("Intervention extraction failed:", e)
+                
+            # try:
+            #     print("Starting semantic filtering...\n")
+            #     await run_semantic_filtering()
+            #     print("All services finished!\n")
+            # except Exception as e:
+            #     print("Semantic filtering failed:", e)
+                
+    finally:
+        finalize_metadata()
     
 if __name__ == "__main__":
     import asyncio
