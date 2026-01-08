@@ -272,7 +272,10 @@ def parse_cli_args():
         help=f'File path(s) or camera device name. It is possible to pass multiple paths by separating them by spaces or by using shell expansion (e.g. `$ deface vids/*.mp4`). Alternatively, you can pass a directory as an input, in which case all files in the directory will be used as inputs. If a camera is installed, a live webcam demo can be started by running `$ deface cam` (which is a shortcut for `$ deface -p \'<video0>\'`.')
     parser.add_argument(
         '--output', '-o', default=None, metavar='O',
-        help='Output file name. Defaults to input path + postfix "_anonymized".')
+        help='Output file name (single file). For batch jobs prefer --outdir. Defaults to input path + postfix "_anonymized".')
+    parser.add_argument(
+        '--outdir', '-O', default=None, metavar='D',
+        help='Directory to write anonymized outputs. If set, outputs will be named <basename>_anonymized<ext> in this directory.')
     parser.add_argument(
         '--thresh', '-t', default=0.2, type=float, metavar='T',
         help='Detection threshold (tune this to trade off between false positive and false negative rate). Default: 0.2.')
@@ -322,6 +325,12 @@ def parse_cli_args():
     parser.add_argument(
         '--keep-metadata', '-m', default=False, action='store_true',
         help='Keep metadata of the original image. Default : False.')
+    parser.add_argument(
+        '--recursive', '-r', default=False, action='store_true',
+        help='Recursively process files in directories. Only files with image MIME types will be added.')
+    parser.add_argument(
+        '--dry-run', '-n', default=False, action='store_true',
+        help='List files that would be processed and exit (no changes).')
     parser.add_argument('--help', '-h', action='help', help='Show this help message and exit.')
 
     args = parser.parse_args()
@@ -337,23 +346,62 @@ def parse_cli_args():
 
     return args
 
-def expand_input_paths(input_args: list[str]) -> list[str]:
+def expand_input_paths(input_args: list[str], recursive: bool = False) -> list[str]:
     ipaths: list[str] = []
 
     for path in input_args:
         if os.path.isdir(path):
-            for file in os.listdir(path):
-                ipaths.append(os.path.join(path, file))
+            if recursive:
+                for root, _, files in os.walk(path):
+                    for file in files:
+                        full = os.path.join(root, file)
+                        if get_file_type(full) == 'image':
+                            ipaths.append(full)
+            else:
+                for file in os.listdir(path):
+                    full = os.path.join(path, file)
+                    if get_file_type(full) == 'image':
+                        ipaths.append(full)
         else:
             ipaths.append(path)
 
+    # Sort for deterministic processing order
+    ipaths.sort()
     return ipaths
+
+
+def compute_output_path(ipath: str, base_opath: str | None, outdir: str | None) -> str | None:
+    """
+    Compute the output path for a given input path.
+    Returns None for camera/live preview inputs.
+    """
+    if ipath.startswith('<video'):
+        return None
+
+    # If an output directory is specified, place the anonymized file there
+    if outdir is not None:
+        try:
+            os.makedirs(outdir, exist_ok=True)
+        except OSError as e:
+            raise RuntimeError(f'Could not create output directory {outdir}: {e}') from e
+        base = os.path.splitext(os.path.basename(ipath))[0]
+        ext = os.path.splitext(ipath)[1] or ''
+        return os.path.join(outdir, f'{base}_anonymized{ext}')
+
+    # If a single output filename is provided, use it (may be overwritten for multiple inputs)
+    if base_opath is not None:
+        return base_opath
+
+    # Default: append _anonymized to original path
+    root, ext = os.path.splitext(ipath)
+    return f'{root}_anonymized{ext}'
 
 def process_input(
     ipath: str,
     base_opath: str | None,
     centerface: CenterFace,
     *,
+    outdir: str | None = None,
     threshold,
     replacewith,
     mask_scale,
@@ -375,10 +423,11 @@ def process_input(
     filetype = get_file_type(ipath)
     is_cam = filetype == 'cam'
 
-    opath = base_opath
-    if opath is None and not is_cam:
-        root, ext = os.path.splitext(ipath)
-        opath = f'{root}_anonymized{ext}'
+    try:
+        opath = compute_output_path(ipath, base_opath, outdir)
+    except RuntimeError as e:
+        print(str(e))
+        return
 
     print(f'Input:  {ipath}\nOutput: {opath}')
 
@@ -430,7 +479,22 @@ def process_input(
 def main() -> None:
     args = parse_cli_args()
 
-    ipaths = expand_input_paths(args.input)
+    ipaths = expand_input_paths(args.input, recursive=args.recursive)
+
+    # Dry-run mode: list files that would be processed and exit (avoid heavy init)
+    if args.dry_run:
+        if len(ipaths) == 0:
+            print('Dry run: no files found to process.')
+        else:
+            print('Dry run: the following files would be processed:')
+            for p in ipaths:
+                try:
+                    outp = compute_output_path(p, args.output, args.outdir)
+                except RuntimeError as e:
+                    outp = f'ERROR: {e}'
+                print(f' - {p} -> {outp if outp is not None else "<preview/none>"}')
+            print(f'Total: {len(ipaths)} files')
+        return
 
     in_shape = None
     if args.scale is not None:
@@ -456,6 +520,7 @@ def main() -> None:
         process_input(
             ipath=ipath,
             base_opath=args.output,
+            outdir=args.outdir,
             centerface=centerface,
             threshold=args.thresh,
             replacewith=args.replacewith,
