@@ -1,135 +1,181 @@
-# capstone-audio-to-text
-## Create and Activate Python Virtual Environment
+# LifeLens
+
+LifeLens is a capstone project that combines:
+
+- **Audio transcription + diarization** (WhisperX / faster-whisper / WhisperTRT)
+- **NLP extraction** of interventions and medications from transcripts
+- **Image pipeline** for body-part detection (YOLO segmentation) and injury classification on the resulting crops
+
+## Table of contents
+
+- [Quickstart](#quickstart)
+- [Configuration (.env)](#configuration-env)
+- [Run services (CLI)](#run-services-cli)
+- [Main image pipeline (detection → classification)](#main-image-pipeline-detection--classification)
+- [NLP pipeline](#nlp-pipeline)
+- [Injury classification notes (multi-label)](#injury-classification-notes-multi-label)
+
+## Quickstart
+
+### 1) Create and activate a Python virtual environment
 
 ```sh
-python3.11 -m venv venv311
-# On Windows:
-venv311\Scripts\activate
-# On Mac/Linux:
-source venv311/bin/activate
+python3.11 -m venv .venv
+
+# Windows (PowerShell)
+.\.venv\Scripts\Activate.ps1
+
+# Mac/Linux
+source .venv/bin/activate
 ```
 
-## Upgrade pip
+### 2) Install dependencies
+
+This repo contains multiple components, some with their own dependency sets.
+
+- macOS dev env: `pip install -r requirements-mac.txt`
+- Additional component-specific requirements exist under:
+  - `WhisperTRT/requirements.txt`
+  - `encryption/requirements.txt`
+  - `VisualProcessing/**/requirements.txt`
+
+### 3) Configuration (.env)
+
+Copy `.env.template` to `.env` and fill in required values.
+
+Key variables:
+
+- `HUGGING_FACE_TOKEN` (needed if pulling models from Hugging Face)
+- `DEVICE` (`cpu` or `cuda`)
+- `AUDIO_FILE_PATH` (path to the audio to transcribe)
+- `OUTPUT_DIR` (default `./output`)
+
+The file also contains `PIPELINE_*` variables used by the image pipeline.
+
+## Run services (CLI)
+
+`main.py` is the command-line entrypoint for the project’s microservices:
 
 ```sh
-python.exe -m pip install --upgrade pip
+python main.py whisperx
+python main.py faster_whisper
+python main.py whispertrt
+python main.py nlp
 ```
 
-## Install Dependencies
+Outputs are generally written under `./output/` and/or `Main/PipelineOutputs/` depending on the service.
+
+## Main image pipeline (detection → classification)
+
+The unified image pipeline lives in the `Main/` folder:
+
+1. **Body-part detection** (YOLO segmentation) runs on a source image folder.
+2. **Crops** are written to a structured output directory.
+3. **Injury classification inference** runs a trained checkpoint on the produced crops.
+
+Key files:
+
+- `Main/main_pipeline.py` (orchestration)
+- `Main/detect_body_parts.py` (detection + crop export)
+- `Main/infer_injuries_on_crops.py` (injury classifier inference over crops)
+- `Main/pipeline_config.py` (env-driven configuration)
+
+### Run
 
 ```sh
-pip install -r requirements.txt
+python Main/main_pipeline.py
 ```
 
-## .ENV Setup
+### Most important `PIPELINE_*` variables
 
-1. Register at [Hugging Face](https://huggingface.co).
-2. Get your access token with READ permissions.
-3. Create `.env` file in this folder holding the hugging face token and the rest of the variables found in the `sample.env` **Importantly set the AUDIO_FILE_PATH variable to the file you wish to transcribe.**:
+- `PIPELINE_DETECTION_SOURCE` (input image folder)
+- `PIPELINE_DETECTION_MODEL` (local `.pt` or Hugging Face repo id)
+- `PIPELINE_ROOT` / `PIPELINE_DETECTION_OUTPUT` / `PIPELINE_CLASSIFICATION_OUTPUT`
+- `PIPELINE_INJURY_CHECKPOINT` (injury classifier checkpoint)
+- `PIPELINE_DEVICE` (optional override, e.g. `cuda:0` or `cpu`)
 
+Defaults live in `Main/pipeline_config.py`, and intended values are documented in `.env.template`.
+
+### Output layout
+
+By default outputs land under `Main/PipelineOutputs/`:
+
+- `DetectionOutput/`
+  - `crops/<image_id>/*.jpg`
+  - `annotated/*.jpg`
+  - `vis/*.jpg`
+- `ClassificationOutput/`
+  - `injury_predictions.json`
+  - `injury_predictions_summary.csv`
+
+## NLP pipeline
+
+The NLP pipeline reads a Whisper transcript CSV and writes extracted entities:
+
+1. Load transcript from `./output/transcript.csv`
+2. Extract **interventions** (MedCAT)
+3. Extract **medications** (BioNER)
+4. Save results to `./output/nlp_extracted.csv`
+
+### Setup (NLP-only)
+
+Some NLP dependencies may be installed separately until the repo uses a single pinned requirements set:
+
+```sh
+pip install medcat~=1.16.0
+python -m spacy download en_core_web_sm
 ```
-HUGGING_FACE_TOKEN=
-CHUNK_LENGTH=10 # in minutes
-CHUNK_OVERLAP=0.5 # in minutes
-DEVICE=cpu # or cuda for NVIDIA GPU
-AUDIO_FILE_PATH=
-OUTPUT_DIR=./output
 
-# using offline models for pyannote
-PYANNOTE_CACHE_DIR=./pyannote_models
-# 0 is false (use online model), 1 is true (use offline model)
-USE_OFFLINE_MODELS = 0
+### Download MedCAT model + example data (optional)
+
+```sh
+cd nlpPipeline
+mkdir -p ../data_p3.2
+
+# Download MedCAT model and example data
+wget -N https://cogstack-medcat-example-models.s3.eu-west-2.amazonaws.com/medcat-example-models/medmen_wstatus_2021_oct.zip -P ../data_p3.2
+wget -N https://raw.githubusercontent.com/CogStack/MedCATtutorials/main/notebooks/introductory/data/pt_notes.csv -P ../data_p3.2
 ```
 
-**Ensure you are keeping the sample.env updated for any variables your services require.**
-# Paramedic Injury Classification (Multi-label)
+Notes:
 
-## Core classes (multi-label)
-Use concise, normalized names:
+- Keep `data_p3.2/` local only (do not commit).
+
+### Run
+
+```sh
+python main.py nlp
+```
+
+## Injury classification notes (multi-label)
+
+### Core classes (multi-label)
+
 - Abrasion
 - Bruise
 - Laceration
-- Cut (or Puncture) — pick one; we’ll start with "Cut"
+- Cut
 - Burn
 - Normal skin
 
-Optional classes to consider later:
-- Avulsion
-- Bite
-- Other/unclear
-- Chronic ulcers (Pressure/Diabetic/Venous) – likely not needed for field triage
-
-## Scope and assumptions
-- One image may have multiple applicable labels (multi-label).
-- Start with still images (first or best frame from a video). Video handling is optional later.
-
-## Simple data spec (CSV)
-We’ll keep dataset wiring dead simple with a CSV file:
+### Simple data spec (CSV)
 
 - File: `data/annotations/labels.csv`
 - Columns:
-  - `image_path` (relative to project root or a base images dir)
+  - `image_path` (relative to project root)
   - `labels` (semicolon-separated class names)
 
 Example:
-```
+
+```csv
 image_path,labels
 images/img_0001.jpg,"Bruise;Laceration"
 images/img_0002.jpg,"Burn"
 images/img_0003.jpg,"Normal skin"
 ```
 
-## Minimal plan
-- Baseline 1 (no training): Zero-shot classifier using OpenCLIP with prompts for each class; apply per-class thresholds.
-- Baseline 2 (light training): Linear probe on CLIP features (One-vs-Rest logistic regression).
-- Baseline 3 (small fine-tune): EfficientNet-B0 (or ConvNeXt-Tiny) with a 6-logit sigmoid head and BCEWithLogitsLoss.
+### Baselines
 
-## Quick prompts (zero-shot)
-- "a clinical photo of an abrasion"
-- "a clinical photo of a bruise"
-- "a clinical photo of a laceration"
-- "a clinical photo of a cut"
-- "a clinical photo of a burn"
-- "a clinical photo of normal skin"
-
-We can add variants like "wound photo showing {class}" and average text embeddings for a slight boost.
-
-## Metrics and thresholds (basic)
-- Metrics: macro/micro F1, per-class precision/recall, mAP.
-- Start thresholds at 0.5; then tune per class on the validation set (maximize F1 or Youden’s J).
-
-## Handling imbalance (basic)
-- Use class weights in BCEWithLogits, or oversample minority labels.
-- Keep augmentations moderate: random crop/resize, flips, small color jitter; avoid heavy transforms that distort clinical appearance.
-
----
-
-## Optional ideas (for later)
-
-### Attributes (additional labels)
-Add a small attribute head or additional labels:
-- Active bleeding (yes/no; consider severity flag)
-- Severe burn (yes/no) or burn degree buckets
-- Foreign object present (yes/no)
-- Contamination/soiling (yes/no)
-
-### Advanced models
-- Transformers: ViT-B/16 or Swin-T (multi-label head)
-- Foundation features: DINOv2 or OpenCLIP for stronger linear probes
-- Lightweight: MobileNetV3-Large / EfficientNetV2-S for speed/edge
-
-### Better thresholding and calibration
-- Optimize per-class thresholds on val set
-- Try temperature scaling or Platt scaling for probability calibration
-
-### Video handling (later)
-- Start with per-frame predictions + temporal smoothing (majority vote or EMA)
-- Optionally pick the sharpest/clearest frame as the single inference frame
-- Consider lightweight tracking to avoid label flicker
-
----
-
-## Next steps
-1) Confirm the exact class list (the six above) and finalize names.
-2) Prepare a small CSV with a handful of labeled examples in `data/annotations/labels.csv`.
-3) We’ll wire up two tiny scripts: zero-shot and linear-probe. If useful, we’ll add one small fine-tune script next.
+- Zero-shot with CLIP prompts + per-class thresholds
+- Linear probe on CLIP features (one-vs-rest logistic regression)
+- Small fine-tune (e.g., EfficientNet / Swin) with sigmoid + BCEWithLogitsLoss
