@@ -1,6 +1,6 @@
 from transformers import AutoTokenizer, AutoModelForTokenClassification
 import torch
-from src.entities import MedicationEntity
+from src.domain.entities import MedicationEntity
 from src.utils.calculate_mean import mean
 
 class MedicationExtractor:

@@ -3,7 +3,6 @@ from src.services.transcription_service.transcription_whispertrt import run_tran
 from src.services.medication_extraction_service.medication_extraction import run_medication_extraction
 from src.services.intervention_extraction_service.intervention_extraction import run_intervention_extraction
 from src.services.semantic_filtering_service.semantic_filtering import run_semantic_filtering
-from src.entities import AUDIO_PIPELINE_METADATA
 from src.utils.metadata import setup_metadata, finalize_metadata
 
 async def main():

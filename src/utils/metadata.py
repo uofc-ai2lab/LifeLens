@@ -1,13 +1,12 @@
-from datetime import datetime
-import os
-from config.settings import TRANSCRIPT_FILES_LIST, TRANSCRIPT_DIR, METADATA_JSON_PATH, AUDIO_FILES_LIST, OUTPUT_DIR, MEANING_DIR
-from src.entities import AUDIO_PIPELINE_METADATA, AudioFileMetaData
-from pathlib import Path
 import json
+from datetime import datetime
+from pathlib import Path
 from dataclasses import asdict
 import pandas as pd
-from src.constants.intervention_extraction_constants import INTER_COLUMNS
-from src.constants.medication_extraction_constants import MED_COLUMNS
+from src.services.intervention_extraction_service.intervention_extraction_constants import INTER_COLUMNS
+from src.services.medication_extraction_service.medication_extraction_constants import MED_COLUMNS
+from config.settings import TRANSCRIPT_FILES_LIST, TRANSCRIPT_DIR, METADATA_JSON_PATH, AUDIO_FILES_LIST, OUTPUT_DIR, MEANING_DIR
+from src.domain.entities import AUDIO_PIPELINE_METADATA, AudioFileMetaData
 
 def _write_metadata_json():
     """

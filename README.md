@@ -5,10 +5,6 @@ A complete audio-to-transcript and transcript-to-meaning pipeline with services 
 
 ## 🔧 Environment Setup
 ### Step 1: Verify Python Environment
-
-### Step 1: Verify Python Environment
-
-
 First, check which Python executable is currently active:
 
 ```bash

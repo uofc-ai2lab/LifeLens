@@ -1,7 +1,7 @@
 import re
 from functools import lru_cache
-from src.constants.medication_extraction_constants import ROUTES, DOSAGES, TEXT_NUMBERS, NUMBER_PATTERN, MEDICATIONS, LOW_CONFIDENCE_SCORE, HIGH_CONFIDENCE_SCORE
-from src.entities import MedicationEntity
+from src.services.medication_extraction_service.medication_extraction_constants import ROUTES, DOSAGES, TEXT_NUMBERS, NUMBER_PATTERN, MEDICATIONS, LOW_CONFIDENCE_SCORE, HIGH_CONFIDENCE_SCORE
+from src.domain.entities import MedicationEntity
 
 @lru_cache(maxsize=1)
 def create_all_med_list(med_list=MEDICATIONS) -> list[str]:

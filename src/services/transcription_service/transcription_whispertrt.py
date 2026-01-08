@@ -3,7 +3,7 @@ from pathlib import Path
 from datetime import datetime
 import pandas as pd
 import soundfile as sf
-from src.constants.constants import bcolors
+from src.domain.constants import bcolors
 from src.utils.export_to_csv import export_to_csv
 from config.settings import AUDIO_FILES_LIST, IS_JETSON, MODEL_SIZE, MODEL_CACHE_PATH, TRANSCRIPT_DIR
 

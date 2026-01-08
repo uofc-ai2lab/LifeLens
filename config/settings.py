@@ -35,7 +35,7 @@ IS_JETSON = platform.machine() == "aarch64"
 # Audio / Transcription
 # -------------------------
 HUGGING_FACE_TOKEN = os.getenv("HUGGING_FACE_TOKEN", "")
-DEVICE = os.getenv("DEVICE", "cuda")
+DEVICE = os.getenv("DEVICE", "cpu")
 MODEL_SIZE = os.getenv("MODEL_SIZE", "base")
 if IS_JETSON:
     MODEL_SIZE = os.getenv("MODEL_SIZE_TRT", "base.en")  # WhisperTRT models: tiny.en, base.en, small.en, medium.en
