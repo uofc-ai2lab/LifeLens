@@ -6,7 +6,7 @@ import re
 from src.utils.export_to_csv import export_to_csv
 from src.utils.load_csv_file import load_csv_file 
 from config.settings import TRANSCRIPT_FILES_LIST, MEANING_DIR, NLP, MODEL_PACK
-from src.constants.intervention_extraction_constants import INTERVENTIONS, REPLACEMENTS, INTER_COLUMNS
+from src.services.intervention_extraction_service.intervention_extraction_constants import INTERVENTIONS, REPLACEMENTS, INTER_COLUMNS
 
 def normalize_text(text):
     """Normalize text for better matching"""

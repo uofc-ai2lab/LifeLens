@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 from datetime import datetime
 from typing import List, Dict, Callable, Optional, Union
-from src.constants.constants import bcolors
+from src.domain.constants import bcolors
 from src.utils.format_timestamp import format_timestamp
 from src.utils.generate_export_filename import generate_export_filename
 
