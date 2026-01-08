@@ -1,20 +1,31 @@
 # 🎙 Audio Processing Pipeline
-A complete audio-to-transcript and transcript-to-meaning pipeline with services for transcription, intervention extraction, and medication extraction.
+A complete audio-to-transcript and transcript-to-meaning pipeline with services for transcription, intervention extraction, medication extraction, and semantic filtering.
 
 **Note: Ensure you are running all of the following commands from the project root unless otherwise specified.**
 
 ## 🔧 Environment Setup
 ### Step 1: Verify Python Environment
-First, check which Python executable is currently active:
+First, check which Python executable is currently active
+
+**For Mac:**
 
 ```bash
 which python
-```
-or, if python is not available on your system:
-
+``` 
+or, check Python3: 
 ```bash
 which python3
-```
+``` 
+
+**For Windows:**
+
+```bash
+where python
+``` 
+or, check Python3: 
+```bash
+where python3
+``` 
 
 If the output points to Anaconda (❌ not desired):
 ```
@@ -26,15 +37,7 @@ Deactivate Conda:
 conda deactivate
 ```
 
-Then verify again:
-```bash
-which python
-```
-or:
-
-```bash
-which python3
-```
+Then verify again (commands above)
 
 At this point, one of the following is expected and OK:
 - No output (Python not currently on PATH)
@@ -127,7 +130,14 @@ Place your testing data in the `data/` directory using the following structure:
     - Output from audio-to-transcript service and  input for transcript-to-meaning services
     - Note: `TRANSCRIPT_FILES` should point to the transcript(s) you wish to extract meaning from. If left blank, the pipeline will process all audio files in `data/transcript_files/`
 - `data/meaning_files/` - Output files from transcript-to-meaning services (CSV format)
+- `data/output_files/` - Combined output files from transcript-to-meaning services (CSV format) so eventually, each audio file has 1 corresponding output file instead of 1 from each service.
 
+**Naming Convention**
+
+All files are named in the format: `"{timestamp}_{service}_{input_filename}.csv"`
+- The `timestamp` is important to have at the start for ordering. It is in the format YYYYMMDD_HHMMSS
+- The `service` here is either `medX`, `intervention`,`semantic`, or `output` (the combined output file)
+- The `input_filename` is whatever audio file was transcribed or transcription file was processed.
 
 ## ▶️ Running Services (Pipeline)
 

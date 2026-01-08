@@ -19,24 +19,17 @@ AUDIO_DIR = DATA_DIR / "audio_files"
 TRANSCRIPT_DIR = DATA_DIR / "transcript_files"
 MEANING_DIR = DATA_DIR / "meaning_files"
 OUTPUT_DIR = DATA_DIR / "output_files"
-TEST_DATA_DIR = DATA_DIR / "test_data"
 
 METADATA_FILENAME = "audio_pipeline_metadata.json"
 METADATA_JSON_PATH = DATA_DIR / METADATA_FILENAME
 
 # -------------------------
-# Environment
-# -------------------------
-ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
-DEBUG = os.getenv("DEBUG", "false").lower() == "true"
-IS_JETSON = platform.machine() == "aarch64"
-
-# -------------------------
 # Audio / Transcription
 # -------------------------
 HUGGING_FACE_TOKEN = os.getenv("HUGGING_FACE_TOKEN", "")
-DEVICE = os.getenv("DEVICE", "cpu")
+DEVICE = os.getenv("DEVICE", "cpu") # Won't run if defaults to cuda and machine doesn't have Nvidia GPU, but will run on most machines if set to cpu by default.
 MODEL_SIZE = os.getenv("MODEL_SIZE", "base")
+IS_JETSON = platform.machine() == "aarch64"
 if IS_JETSON:
     MODEL_SIZE = os.getenv("MODEL_SIZE_TRT", "base.en")  # WhisperTRT models: tiny.en, base.en, small.en, medium.en
 
@@ -51,11 +44,7 @@ if _raw_audio_files:
 else:
     # Default: take ALL files in audio_files directory
     AUDIO_FILES_LIST = [f for f in AUDIO_DIR.iterdir() if f.is_file()]
-   
-TRANSCRIPT_DIR_NEW = os.getenv("TRANSCRIPT_DIR","")
-if TRANSCRIPT_DIR_NEW != "":
-    TRANSCRIPT_DIR = TRANSCRIPT_DIR_NEW
-    
+
 # -------------------------
 # NLP / Meaning extraction
 # -------------------------
@@ -78,10 +67,6 @@ if _raw_transcript_files:
 else:
     # Default: take ALL files in audio_files directory
     TRANSCRIPT_FILES_LIST = [f for f in TRANSCRIPT_DIR.iterdir() if f.is_file()]
-   
-MEANING_DIR_NEW = os.getenv("MEANING_DIR","")
-if MEANING_DIR_NEW != "":
-    MEANING_DIR = MEANING_DIR_NEW
 
 ENABLE_SEMANTIC_FILTERING = int(os.getenv("ENABLE_SEMANTIC_FILTERING", "0"))
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", None)
@@ -93,16 +78,3 @@ if ENABLE_SEMANTIC_FILTERING:
         print("Error: GOOGLE_API_KEY or GEMINI_API_KEY not found in environment variables.")
     GENAI_MODEL = "gemini-flash-latest"
     GENAI_CLIENT = genai.Client()
-
-# -------------------------
-# Encryption
-# -------------------------
-# ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
-
-# if not ENCRYPTION_KEY and ENVIRONMENT != "test":
-#     raise RuntimeError("ENCRYPTION_KEY must be set in .env")
-
-# -------------------------
-# Logging
-# -------------------------
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
