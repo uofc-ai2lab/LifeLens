@@ -137,9 +137,16 @@ def finalize_metadata():
 
         if not med_path.exists() or not inter_path.exists():
             continue
-        
-        med_df = pd.read_csv(med_path)
-        inter_df = pd.read_csv(inter_path)
+            
+        try:
+            med_df = pd.read_csv(med_path)
+        except Exception as e:
+            print(f"Failed to read Medications CSV at {med_path}: {e}")
+            
+        try:
+            inter_df = pd.read_csv(inter_path)
+        except Exception as e:
+            print(f"Failed to read Interventions CSV at {inter_path}: {e}")
         
         all_columns = []
         for col in INTER_COLUMNS + MED_COLUMNS:

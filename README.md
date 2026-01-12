@@ -3,7 +3,7 @@ A complete audio-to-transcript and transcript-to-meaning pipeline with services 
 
 **Note: Ensure you are running all of the following commands from the project root unless otherwise specified.**
 
-## 🔧 Environment Setup
+## Environment Setup
 ### Step 1: Verify Python Environment
 First, check which Python executable is currently active
 
@@ -27,7 +27,7 @@ or, check Python3:
 where python3
 ``` 
 
-If the output points to Anaconda (❌ not desired):
+If the output points to Anaconda (not desired):
 ```
 .../anaconda3/bin/python
 ```
@@ -68,7 +68,7 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 ```
 
-## 📦 Install Dependencies
+## Install Dependencies
 ***Note: run all of the following commands INSIDE your virtual environment***
 
 ### Install Required Dependencies
@@ -93,7 +93,7 @@ From the project root, run the setup script:
 python -m scripts.setup_medcat
 ```
 
-## 🔑.ENV Setup
+## .ENV Setup
 
 1. **Hugging Face Token**
    - Register at [Hugging Face](https://huggingface.co)
@@ -118,9 +118,9 @@ python -m scripts.setup_medcat
      GOOGLE_API_KEY=your_google_key_here
      ```
 
-**⚠️ Keep env.template updated with any new variables your services require.**
+**Keep env.template updated with any new variables your services require.**
 
-## 📂 Data Directory Structure
+## Data Directory Structure
 
 Place your testing data in the `data/` directory using the following structure:
 
@@ -139,7 +139,7 @@ All files are named in the format: `"{timestamp}_{service}_{input_filename}.csv"
 - The `service` here is either `medX`, `intervention`,`semantic`, or `output` (the combined output file)
 - The `input_filename` is whatever audio file was transcribed or transcription file was processed.
 
-## ▶️ Running Services (Pipeline)
+## Running Services (Pipeline)
 
 ### Run All Services
 
