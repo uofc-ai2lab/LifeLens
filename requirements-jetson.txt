@@ -1,0 +1,9 @@
+# Jetson-specific requirements
+
+# PyTorch (should already be installed via JetPack)
+# Uncomment if not installed:
+# torch>=2.0.0
+# torchaudio>=2.0.0
+
+# Note: install WhisperTRT separately with:
+# cd /path/to/WhisperTRT && pip3 install -e .
