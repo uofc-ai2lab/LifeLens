@@ -19,12 +19,6 @@ dist/
 # Notebooks
 .ipynb_checkpoints/
 
-# Virtual environments
-.venv/
-venv/
-env/
-ENV/
-
 # Logs
 *.log
 
@@ -61,17 +55,12 @@ VisualProcessing/Classification/experiments/previews/
 VisualProcessing/Classification/scripts/make_csv_from_folder.py
 VisualProcessing/Classification/scripts/make_multilabel_csv_from_subfolders.py
 
-# WhisperX generated data
-whisperX/output/
-whisperX/output/**
-
 # Caches
 .cache/
 **/.cache/**
 
 # Env files
 *.env
-!whisperX/sample.env
 
 # Windows PowerShell transient
 *.ps1.tmp# Python
@@ -80,12 +69,6 @@ __pycache__/
 *.pyo
 *.pyd
 *.so
-
-# Virtual environments
-.venv/
-venv/
-venv311/
-ENV/
 
 # Jupyter
 .ipynb_checkpoints/
