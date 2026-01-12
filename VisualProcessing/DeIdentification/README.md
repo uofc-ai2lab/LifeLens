@@ -39,7 +39,19 @@ If the `onnxruntime-gpu` package is found and a GPU is available, the face detec
 ---
 
 ## Usage
-In the directory of the `defacer.py` file, specify the input path to an image and an output endpoint:
+In the directory of the `defacer.py` file, the input folder of images can be parsed with each image anonymized to an output folder:
+```sh
+python3 defacer.py <input_file_path> -r -O <output_directory_path>
+```
+For example:
+```sh
+python3 defacer.py test_data/input -r -O test_data/output
+```
+The output file name will be named `<basename>_anonymized<ext>` in this directory. For example, an input of `city.jpg` will output to `city_anonymized.jpg`.
+
+Note: The `-r` tag is for recursive file processing, and the `-O` tag is to specify a directory to write anonymized outputs to.
+
+Alternatively, you can specify a single image path for both the input and output:
 ```sh
 python3 defacer.py <input_file_path> -o <output_file_path>
 ```
@@ -47,4 +59,11 @@ For example:
 ```sh
 python3 defacer.py test_data/input/city.jpg -o test_data/output/city_anon.jpg
 ``` 
-- Note: The input is an existing image that hasn't yet been anonymized, but since the output is made using the model, a file name has to be specified in the `output_file_path`. Here "city_anon.jpg" was manually chosen as the output file name in the command line.
+Note: The input is an existing image that hasn't yet been anonymized, but since the output is made using the model, a file name has to be specified in the `output_file_path`. Here "city_anon.jpg" was manually chosen as the output file name in the command line.
+
+If you wish to test commands without any execution, there is a `dry-run` tag (`-n`) to list files that would be processed and exit (no changes). The tag should be included at the end of the command.
+
+For example:
+```sh
+python3 defacer.py test_data/input/ -r -O test_data/output/ -n
+```

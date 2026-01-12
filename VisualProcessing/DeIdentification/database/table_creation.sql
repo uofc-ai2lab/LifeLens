@@ -14,6 +14,7 @@ CREATE TABLE deidentified_images (
     image_key CHAR(20) NOT NULL,
     image_id TEXT,
     image_data BYTEA NOT NULL,
+    sha256 TEXT,
     saved_at TIMESTAMP DEFAULT NOW(),
     FOREIGN KEY (image_key) REFERENCES source_images(image_key)
 );

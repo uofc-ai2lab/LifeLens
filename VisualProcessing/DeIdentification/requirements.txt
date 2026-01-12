@@ -5,3 +5,4 @@ tqdm>=4.65.0
 scikit-image==0.19.3
 imageio>=2.25
 imageio-ffmpeg>=0.4.6
+pytest==9.0.2
