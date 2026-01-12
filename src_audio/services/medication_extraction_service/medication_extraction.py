@@ -8,7 +8,7 @@ from src_audio.domain.entities import MedicationEntity, MedicationAdministration
 from src_audio.services.medication_extraction_service.extractor import MedicationExtractor
 from src_audio.services.medication_extraction_service.postprocessing import postprocess_entities, fallback_dosage_or_route
 
-def build_administration(
+def build_medication_record(
     ent: MedicationEntity, 
     ents: list[MedicationEntity], 
     segment: dict, 
@@ -86,7 +86,7 @@ def extract_med_admins_with_confidence(segments: list[dict]) -> list[MedicationA
             ent = ents[i]
 
             if ent.entity in {"B-Medication", "MEDICATION"}:
-                record, i = build_administration(ent, ents, segment, i)
+                record, i = build_medication_record(ent, ents, segment, i)
 
                 if not record.dosage:
                     dose = fallback_dosage_or_route(segment["original_text"], ent.start_idx, mode="dosage")

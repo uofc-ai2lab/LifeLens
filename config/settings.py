@@ -50,15 +50,19 @@ else:
 # -------------------------
 MEDCAT_DATA_DIR = DATA_DIR / "data_p3.2"
 MODEL_PACK_PATH = MEDCAT_DATA_DIR / "medmen_wstatus_2021_oct.zip"
+ENABLE_MEDCAT = os.getenv("ENABLE_MEDCAT")
+MODEL_PACK = None
+NLP = None
 
-try:
-    from medcat.cat import CAT
-except:
-    print("ERROR: MedCAT not installed or environment broken.")
-    exit()
-    
-MODEL_PACK = CAT.load_model_pack(MODEL_PACK_PATH)
-NLP = spacy.load("en_core_web_sm")
+if ENABLE_MEDCAT:
+    try:
+        from medcat.cat import CAT
+    except:
+        print("ERROR: MedCAT not installed or environment broken.")
+        exit()
+        
+    MODEL_PACK = CAT.load_model_pack(MODEL_PACK_PATH)
+    NLP = spacy.load("en_core_web_sm")
 
 _raw_transcript_files = os.getenv("TRANSCRIPT_FILES")
 if _raw_transcript_files:
