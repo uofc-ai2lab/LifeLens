@@ -1,0 +1,32 @@
+run_name: swin_tiny_baseline
+out_dir: experiments
+seed: 42
+
+classes:
+  - Abrasion
+  - Bruise
+  - Laceration
+  - Cut
+  - Burn
+  - Stab_wound
+  - Normal skin
+
+data:
+  train_csv: data/train.csv
+  val_csv: data/val.csv
+  img_dir: .
+  img_size: 224
+
+model:
+  name: swin_tiny_patch4_window7_224
+  pretrained: true
+  dropout: 0.0
+  freeze_backbone: false
+
+training:
+  epochs: 10
+  batch_size: 32
+  num_workers: 4
+  lr: 0.0003
+  weight_decay: 0.0001
+  amp: true
