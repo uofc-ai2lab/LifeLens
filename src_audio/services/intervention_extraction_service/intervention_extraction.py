@@ -1,4 +1,4 @@
-import os
+import os, sys
 from pathlib import Path
 import pandas as pd
 import spacy
@@ -46,6 +46,9 @@ def has_intervention_keyword(text_norm):
 def intervention_extraction_pipeline(transcript_path: str, output_path="interventions_extracted.csv"):
     """Main extraction pipeline for interventions only"""
     df = load_csv_file(transcript_path)
+    if MODEL_PACK is None:
+        print("ERROR: MedCAT not installed or environment broken.")
+        sys.exit(1)
     
     #  dict to group by start_time only (one row per start time)
     interventions_dict = {}
