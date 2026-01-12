@@ -120,17 +120,17 @@ python -m scripts.setup_medcat
 
 **Keep env.template updated with any new variables your services require.**
 
-## Data Directory Structure
+## Audio Data Directory Structure
 
-Place your testing data in the `data/` directory using the following structure:
+Place your testing data in the `data/audio/` directory using the following structure:
 
-- `data/audio_files/` - Store your input audio files (MP3, WAV, etc.)
-    - Note: `AUDIO_FILES` should point to the file(s) you want to transcribe. If left blank, the pipeline will process all audio files in `data/audio_files/`
-- `data/transcript_files/` - Store your input transcript files (CSV format)  
+- `data/audio/audio_files/` - Store your input audio files (MP3, WAV, etc.)
+    - Note: `AUDIO_FILES` should point to the file(s) you want to transcribe. If left blank, the pipeline will process all audio files in `data/audio/audio_files/`
+- `data/audio/transcript_files/` - Store your input transcript files (CSV format)  
     - Output from audio-to-transcript service and  input for transcript-to-meaning services
-    - Note: `TRANSCRIPT_FILES` should point to the transcript(s) you wish to extract meaning from. If left blank, the pipeline will process all audio files in `data/transcript_files/`
-- `data/meaning_files/` - Output files from transcript-to-meaning services (CSV format)
-- `data/output_files/` - Combined output files from transcript-to-meaning services (CSV format) so eventually, each audio file has 1 corresponding output file instead of 1 from each service.
+    - Note: `TRANSCRIPT_FILES` should point to the transcript(s) you wish to extract meaning from. If left blank, the pipeline will process all audio files in `data/audio/transcript_files/`
+- `data/audio/meaning_files/` - Output files from transcript-to-meaning services (CSV format)
+- `data/audio/output_files/` - Combined output files from transcript-to-meaning services (CSV format) so eventually, each audio file has 1 corresponding output file instead of 1 from each service.
 
 **Naming Convention**
 
@@ -139,24 +139,25 @@ All files are named in the format: `"{timestamp}_{service}_{input_filename}.csv"
 - The `service` here is either `medX`, `intervention`,`semantic`, or `output` (the combined output file)
 - The `input_filename` is whatever audio file was transcribed or transcription file was processed.
 
-## Running Services (Pipeline)
+## Running AUDIO Services (Pipeline)
 
-### Run All Services
+### Run All Audio Services
 
-Run all services combined from the **root folder** using the following command (no arguments):
+Run all audio services from the **root folder** using the following command (no arguments):
 
 ```sh
-python -m src.main
+python -m src_audio.main
 ```
 
-This will run transcription -> medication extraction -> semantic filtering
+This will run transcription -> medication extraction -> intervention extraction
+(semantic filtering is currently excluded from the full pipeline run until med/inter extraction is complete, it can still be ran independently.)
 
-### Run Individual Services
+### Run Individual Audio Services
 
 Run services from the **root folder** using the following command pattern:
 
 ```sh
-python -m src.main <service_name>
+python -m src_audio.main <service_name>
 ```
 
 ### Available Services
@@ -173,12 +174,12 @@ python -m src.main <service_name>
 
 ```sh
 # Run medication extraction
-python -m src.main meds
+python -m src_audio.main meds
 
 # Run transcription
-python -m src.main transcribe
+python -m src_audio.main transcribe
 ```
 
 ### Important Notes:
 - Always run from the **root** folder.
-- Run as a module (`src.main`), not as a file (`src/main.py`).
+- Run as a module (`src_audio.main`), not as a file (`src_audio/main.py`).
