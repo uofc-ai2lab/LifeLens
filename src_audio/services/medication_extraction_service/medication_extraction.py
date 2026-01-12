@@ -1,12 +1,12 @@
 from pathlib import Path
 from config.settings import TRANSCRIPT_FILES_LIST, MEANING_DIR
-from src.utils.export_to_csv import export_to_csv
-from src.utils.load_csv_file import load_csv_file 
-from src.utils.calculate_mean import mean
-from src.domain.constants import ROUTES, LOW_CONFIDENCE_SCORE, HIGH_CONFIDENCE_SCORE, MED_COLUMNS
-from src.domain.entities import MedicationEntity, MedicationAdministration
-from src.services.medication_extraction_service.extractor import MedicationExtractor
-from src.services.medication_extraction_service.postprocessing import postprocess_entities, fallback_dosage_or_route
+from src_audio.utils.export_to_csv import export_to_csv
+from src_audio.utils.load_csv_file import load_csv_file 
+from src_audio.utils.calculate_mean import mean
+from src_audio.domain.constants import ROUTES, LOW_CONFIDENCE_SCORE, HIGH_CONFIDENCE_SCORE, MED_COLUMNS
+from src_audio.domain.entities import MedicationEntity, MedicationAdministration
+from src_audio.services.medication_extraction_service.extractor import MedicationExtractor
+from src_audio.services.medication_extraction_service.postprocessing import postprocess_entities, fallback_dosage_or_route
 
 def build_administration(
     ent: MedicationEntity, 

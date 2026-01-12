@@ -3,10 +3,10 @@ from pathlib import Path
 import pandas as pd
 import spacy
 import re
-from src.utils.export_to_csv import export_to_csv
-from src.utils.load_csv_file import load_csv_file 
+from src_audio.utils.export_to_csv import export_to_csv
+from src_audio.utils.load_csv_file import load_csv_file 
 from config.settings import TRANSCRIPT_FILES_LIST, MEANING_DIR, NLP, MODEL_PACK
-from src.domain.constants import INTERVENTIONS, REPLACEMENTS, INTER_COLUMNS
+from src_audio.domain.constants import INTERVENTIONS, REPLACEMENTS, INTER_COLUMNS
 
 def normalize_text(text):
     """Normalize text for better matching"""
