@@ -61,9 +61,9 @@ def show_camera():
                 if keyCode == 27 or keyCode == ord('q'):
                     break
                 #Save a snapshot of the video stream when on the 'e'
-                elif keyCode == 32 or keyCode == ord(' '):
+                elif keyCode == ord('e'):
                     timestamp = cv2.getTickCount()
-                    filename = f"CSI-Camra/saved_imgs/captured_img_{timestamp}.jpg"
+                    filename = f"src_video/CSI-Camera/saved_imgs/captured_img_{timestamp}.jpg"
                     cv2.imwrite(filename, frame)
                     print(f"Image saved as {filename}")
         finally:
