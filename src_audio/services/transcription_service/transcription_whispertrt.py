@@ -5,7 +5,14 @@ import pandas as pd
 import soundfile as sf
 from src_audio.domain.constants import bcolors
 from src_audio.utils.export_to_csv import export_to_csv
-from config.settings import AUDIO_FILES_LIST, IS_JETSON, MODEL_SIZE, MODEL_CACHE_PATH, TRANSCRIPT_DIR
+from config.settings import (
+    AUDIO_FILES_LIST,
+    IS_JETSON,
+    MODEL_SIZE,
+    MODEL_CACHE_PATH,
+    TRANSCRIPT_DIR,
+    DATA_DIR,
+)
 
 def print_formatting(type: str, text: str):
     print("\n" + "="*70)
@@ -14,20 +21,20 @@ def print_formatting(type: str, text: str):
     elif type=="heading":
         print(bcolors.OKCYAN + f"{text}" + bcolors.ENDC)
     print("="*70 + "\n") 
-    
+
 def load_whisper_model(model_size: str, model_cache_path: str = None):
     """Transcribe audio using WhisperTRT or fallback to original Whisper"""
     print_formatting("heading",f"STEP 1: LOADING {MODEL_SIZE.upper()} MODEL")
     model = None
-    
+
     # Determine if we should use WhisperTRT or original Whisper
     use_whispertrt = IS_JETSON and MODEL_SIZE in ["tiny.en", "base.en"]
-    
+
     if use_whispertrt:
         from whisper_trt import load_trt_model
         print(bcolors.OKGREEN + f"Using WhisperTRT for {model_size} (TensorRT accelerated)" + bcolors.ENDC)
         print(bcolors.WARNING + "Note: First run will build TensorRT engine (takes 2-5 minutes)\n" + bcolors.ENDC)
-        
+
         try:
             if model_cache_path:
                 print(bcolors.OKBLUE + f"Using custom cache path: {model_cache_path}" + bcolors.ENDC)
@@ -37,33 +44,33 @@ def load_whisper_model(model_size: str, model_cache_path: str = None):
             else:
                 print(bcolors.OKBLUE + f"Using default cache: ~/.cache/whisper_trt/" + bcolors.ENDC)
                 model = load_trt_model(model_size)
-            
+
             print(bcolors.OKGREEN + f"Model loaded successfully" + bcolors.ENDC)
             print(bcolors.OKGREEN + f"  Model type: {type(model)}" + bcolors.ENDC)
-            
+
         except Exception as e:
             print(bcolors.FAIL + f"ERROR loading WhisperTRT model: {e}" + bcolors.ENDC)
             print(bcolors.WARNING + f"Falling back to original Whisper..." + bcolors.ENDC)
             use_whispertrt = False
-    
+
     if not use_whispertrt:
         print(bcolors.OKGREEN + f"Using original Whisper for {model_size}" + bcolors.ENDC)
         print(bcolors.WARNING + f"Note: Slower than TensorRT but more memory efficient\n" + bcolors.ENDC)
-        
+
         try:
             import whisper
             print(bcolors.OKBLUE + f"Loading Whisper {model_size} model..." + bcolors.ENDC)
             model = whisper.load_model(model_size)
-            
+
             print(bcolors.OKGREEN + f"Model loaded successfully" + bcolors.ENDC)
             print(bcolors.OKGREEN + f"  Model type: {type(model)}" + bcolors.ENDC)
-            
+
         except Exception as e:
             print(bcolors.FAIL + f"ERROR loading model: {e}" + bcolors.ENDC)
             raise
- 
+
     return model  
- 
+
 def verify_audio_file_exists(audio_file: str) -> bool:
     print_formatting("heading",f"STEP 2: VERIFYING INPUT AUDIO FILE ({Path(audio_file).name})")
     
@@ -129,7 +136,7 @@ def normalize_whisper_segments(segments):
             "speaker": seg.get("speaker", "UNKNOWN")
         })
     return normalized
-           
+
 async def transcribe_audio(audio_file: str, model):
     print_formatting("heading","STEP 3: RUNNING TRANSCRIPTION")
     transcribe_start = datetime.now()
@@ -144,28 +151,53 @@ async def transcribe_audio(audio_file: str, model):
         traceback.print_exc()
         raise
 
+
+async def move_file_to_processed(audio_file: str):
+    """Move processed audio file to 'processed' subdirectory"""
+    processed_dir = DATA_DIR / "audio_files" / "processed"
+    # Create processed directory if it doesn't exist (will not overwrite existing)
+    processed_dir.mkdir(parents=True, exist_ok=True)
+
+    destination = processed_dir / Path(audio_file).name
+    try:
+        os.rename(audio_file, destination)
+        print(
+            bcolors.OKGREEN + f"Moved processed file to: {destination}" + bcolors.ENDC
+        )
+    except Exception as e:
+        print(
+            bcolors.FAIL
+            + f"ERROR moving file to processed directory: {e}"
+            + bcolors.ENDC
+        )
+        import traceback
+
+        traceback.print_exc()
+        raise
+
+
 async def run_transcription():
     print_formatting("title", "TRANSCRIPTION PIPELINE")
-    
+
     """Main runner function for WhisperTRT (or Whisper) transcription """
     # ==================== VERIFICATION STEP 1: LOAD MODEL ====================
     model = load_whisper_model(MODEL_SIZE, MODEL_CACHE_PATH)
-    
+
     for audio_file in AUDIO_FILES_LIST:
         print(bcolors.OKGREEN + f"Transcribing {Path(audio_file).name}...\n" + bcolors.ENDC)
-        
+
         # ==================== VERIFICATION STEP 2: CHECK INPUT FILE ====================
         if verify_audio_file_exists(audio_file) is False:
             print(bcolors.FAIL + f"{audio_file} does not exist. Stopping transcription, moving to next audio file." + bcolors.ENDC)
             continue 
-    
+
         # Track total time
         total_start = datetime.now()
 
         # ==================== VERIFICATION STEP 3: TRANSCRIBE ====================
         transcribe_start = datetime.now()
         result = await transcribe_audio(audio_file, model)
-       
+
         # ==================== VERIFICATION STEP 4: CHECK OUTPUT ====================
         verified_result = verify_transcription_output(result)
         transcribe_end = datetime.now()
@@ -181,7 +213,7 @@ async def run_transcription():
         export_start = datetime.now()
         columns=["start_time", "end_time", "text", "speaker"]
         print_formatting("heading","STEP 5: EXPORTING RESULTS")
-        
+
         export_to_csv(
             data=normalized_result,
             output_path=TRANSCRIPT_DIR,
@@ -189,6 +221,9 @@ async def run_transcription():
             service="transcript",
             columns=columns,
         )
+
+        # Move processed audio file
+        await move_file_to_processed(audio_file)
         export_end = datetime.now()
 
         # Print timing summary
