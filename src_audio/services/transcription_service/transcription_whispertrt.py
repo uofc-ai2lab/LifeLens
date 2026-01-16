@@ -5,7 +5,14 @@ import pandas as pd
 import soundfile as sf
 from src_audio.domain.constants import bcolors
 from src_audio.utils.export_to_csv import export_to_csv
-from config.settings import AUDIO_FILES_LIST, IS_JETSON, MODEL_SIZE, MODEL_CACHE_PATH, TRANSCRIPT_DIR
+from config.settings import (
+    AUDIO_FILES_LIST,
+    IS_JETSON,
+    MODEL_SIZE,
+    MODEL_CACHE_PATH,
+    TRANSCRIPT_DIR,
+    DATA_DIR,
+)
 # extra config needed for speaker diarization - unused otherwise
 # from config.settings import USE_OFFLINE_MODELS, PYANNOTE_CACHE_DIR, HUGGING_FACE_TOKEN, DEVICE
 # from download_pyannote import download_pyannote_models
@@ -147,6 +154,30 @@ async def transcribe_audio(audio_file: str, model):
         import traceback
         traceback.print_exc()
         raise
+
+async def move_file_to_processed(audio_file: Path):
+    """Move processed audio file to 'processed' subdirectory"""
+    processed_dir = DATA_DIR / "audio_files" / "processed"
+    # Create processed directory if it doesn't exist (will not overwrite existing)
+    processed_dir.mkdir(parents=True, exist_ok=True)
+
+    destination = processed_dir / audio_file.name
+    try:
+        os.rename(audio_file, destination)
+        print(
+            bcolors.OKGREEN + f"Moved processed file to: {destination}" + bcolors.ENDC
+        )
+    except Exception as e:
+        print(
+            bcolors.FAIL
+            + f"ERROR moving file to processed directory: {e}"
+            + bcolors.ENDC
+        )
+        import traceback
+
+        traceback.print_exc()
+        raise
+
 
 # def _check_models_exist(cache_dir: Path) -> bool:
 #     """
@@ -327,6 +358,9 @@ async def run_transcription():
             service="transcript",
             columns=columns,
         )
+
+        # Move processed audio file
+        await move_file_to_processed(audio_file)
         export_end = datetime.now()
 
         # Print timing summary
