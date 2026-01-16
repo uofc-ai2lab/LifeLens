@@ -1,6 +1,6 @@
 from pathlib import Path
 import sys
-from config.settings import GENAI_CLIENT, GENAI_MODEL, MEANING_DIR, TRANSCRIPT_FILES_LIST
+from config.audio_settings import GENAI_CLIENT, GENAI_MODEL, MEANING_DIR, TRANSCRIPT_FILES_LIST
 from google import genai
 from google.genai import types
 import json, time

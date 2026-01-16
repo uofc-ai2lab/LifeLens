@@ -5,7 +5,7 @@ import pandas as pd
 import soundfile as sf
 from src_audio.domain.constants import bcolors
 from src_audio.utils.export_to_csv import export_to_csv
-from config.settings import AUDIO_FILES_LIST, IS_JETSON, MODEL_SIZE, MODEL_CACHE_PATH, TRANSCRIPT_DIR
+from config.audio_settings import AUDIO_FILES_LIST, IS_JETSON, MODEL_SIZE, MODEL_CACHE_PATH, TRANSCRIPT_DIR
 
 def print_formatting(type: str, text: str):
     print("\n" + "="*70)

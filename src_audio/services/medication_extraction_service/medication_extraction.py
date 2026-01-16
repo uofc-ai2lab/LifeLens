@@ -1,5 +1,5 @@
 from pathlib import Path
-from config.settings import TRANSCRIPT_FILES_LIST, MEANING_DIR
+from config.audio_settings import TRANSCRIPT_FILES_LIST, MEANING_DIR
 from src_audio.utils.export_to_csv import export_to_csv
 from src_audio.utils.load_csv_file import load_csv_file 
 from src_audio.utils.calculate_mean import mean
