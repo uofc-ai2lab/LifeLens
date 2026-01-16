@@ -1,7 +1,7 @@
 from transformers import AutoTokenizer, AutoModelForTokenClassification
 import torch
-from src.domain.entities import MedicationEntity
-from src.utils.calculate_mean import mean
+from src_audio.domain.entities import MedicationEntity
+from src_audio.utils.calculate_mean import mean
 
 class MedicationExtractor:
     def __init__(self):

@@ -1,9 +1,9 @@
 import argparse
-from src.services.transcription_service.transcription_whispertrt import run_transcription
-from src.services.medication_extraction_service.medication_extraction import run_medication_extraction
-from src.services.intervention_extraction_service.intervention_extraction import run_intervention_extraction
-from src.services.semantic_filtering_service.semantic_filtering import run_semantic_filtering
-from src.utils.metadata import setup_metadata, finalize_metadata
+from src_audio.services.transcription_service.transcription_whispertrt import run_transcription
+from src_audio.services.medication_extraction_service.medication_extraction import run_medication_extraction
+from src_audio.services.intervention_extraction_service.intervention_extraction import run_intervention_extraction
+from src_audio.services.semantic_filtering_service.semantic_filtering import run_semantic_filtering
+from src_audio.utils.metadata import setup_metadata, finalize_metadata
 
 async def main():
     """

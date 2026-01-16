@@ -12,8 +12,8 @@ load_dotenv()
 # -------------------------
 BASE_DIR = Path(os.getcwd()).resolve()
 
-SRC_DIR = BASE_DIR / "src"
-DATA_DIR = BASE_DIR / "data"
+SRC_DIR = BASE_DIR / "src_audio"
+DATA_DIR = BASE_DIR / "data/audio"
 
 AUDIO_DIR = DATA_DIR / "audio_files"
 TRANSCRIPT_DIR = DATA_DIR / "transcript_files"
@@ -48,18 +48,25 @@ else:
 # -------------------------
 # NLP / Meaning extraction
 # -------------------------
-MEDCAT_DATA_DIR = Path("data/data_p3.2")
+MEDCAT_DATA_DIR = DATA_DIR / "data_p3.2"
 MODEL_PACK_PATH = MEDCAT_DATA_DIR / "medmen_wstatus_2021_oct.zip"
+ENABLE_MEDCAT = os.getenv("ENABLE_MEDCAT", "0")
 
-try:
-    from medcat.cat import CAT
-except:
-    print("ERROR: MedCAT not installed or environment broken.")
-    exit()
+if ENABLE_MEDCAT is True:
+    try:
+        from medcat.cat import CAT
+    except:
+        print("ERROR: MedCAT not installed or environment broken.")
+        exit()
     
-MODEL_PACK = CAT.load_model_pack(MODEL_PACK_PATH)
-NLP = spacy.load("en_core_web_sm")
+    MODEL_PACK = CAT.load_model_pack(MODEL_PACK_PATH)
+    NLP = spacy.load("en_core_web_sm")
 
+else:
+    print("MEDCAT DISABLED. Please enable prior to running intervention extraction.")
+    MODEL_PACK = None
+    NLP = None
+    
 _raw_transcript_files = os.getenv("TRANSCRIPT_FILES")
 if _raw_transcript_files:
     # Explicit list provided via env var

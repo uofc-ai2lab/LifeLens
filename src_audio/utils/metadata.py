@@ -3,9 +3,9 @@ from datetime import datetime
 from pathlib import Path
 from dataclasses import asdict
 import pandas as pd
-from src.domain.constants import INTER_COLUMNS, MED_COLUMNS
+from src_audio.domain.constants import INTER_COLUMNS, MED_COLUMNS
 from config.settings import TRANSCRIPT_FILES_LIST, TRANSCRIPT_DIR, METADATA_JSON_PATH, AUDIO_FILES_LIST, OUTPUT_DIR, MEANING_DIR
-from src.domain.entities import AUDIO_PIPELINE_METADATA, AudioFileMetaData
+from src_audio.domain.entities import AUDIO_PIPELINE_METADATA, AudioFileMetaData
 
 def _write_metadata_json():
     """
@@ -137,9 +137,16 @@ def finalize_metadata():
 
         if not med_path.exists() or not inter_path.exists():
             continue
-        
-        med_df = pd.read_csv(med_path)
-        inter_df = pd.read_csv(inter_path)
+            
+        try:
+            med_df = pd.read_csv(med_path)
+        except Exception as e:
+            print(f"Failed to read Medications CSV at {med_path}: {e}")
+            
+        try:
+            inter_df = pd.read_csv(inter_path)
+        except Exception as e:
+            print(f"Failed to read Interventions CSV at {inter_path}: {e}")
         
         all_columns = []
         for col in INTER_COLUMNS + MED_COLUMNS:

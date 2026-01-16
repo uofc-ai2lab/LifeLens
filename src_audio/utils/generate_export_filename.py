@@ -1,6 +1,6 @@
 from pathlib import Path
 from datetime import datetime
-from src.utils.metadata import create_update_metadata, search_metadata
+from src_audio.utils.metadata import create_update_metadata, search_metadata
 
 def generate_export_filename(
     input_filename: str,

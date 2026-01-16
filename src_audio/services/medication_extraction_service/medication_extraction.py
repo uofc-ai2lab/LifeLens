@@ -1,14 +1,14 @@
 from pathlib import Path
 from config.settings import TRANSCRIPT_FILES_LIST, MEANING_DIR
-from src.utils.export_to_csv import export_to_csv
-from src.utils.load_csv_file import load_csv_file 
-from src.utils.calculate_mean import mean
-from src.domain.constants import ROUTES, LOW_CONFIDENCE_SCORE, HIGH_CONFIDENCE_SCORE, MED_COLUMNS
-from src.domain.entities import MedicationEntity, MedicationAdministration
-from src.services.medication_extraction_service.extractor import MedicationExtractor
-from src.services.medication_extraction_service.postprocessing import postprocess_entities, fallback_dosage_or_route
+from src_audio.utils.export_to_csv import export_to_csv
+from src_audio.utils.load_csv_file import load_csv_file 
+from src_audio.utils.calculate_mean import mean
+from src_audio.domain.constants import ROUTES, LOW_CONFIDENCE_SCORE, HIGH_CONFIDENCE_SCORE, MED_COLUMNS
+from src_audio.domain.entities import MedicationEntity, MedicationAdministration
+from src_audio.services.medication_extraction_service.extractor import MedicationExtractor
+from src_audio.services.medication_extraction_service.postprocessing import postprocess_entities, fallback_dosage_or_route
 
-def build_administration(
+def build_medication_record(
     ent: MedicationEntity, 
     ents: list[MedicationEntity], 
     segment: dict, 
@@ -86,7 +86,7 @@ def extract_med_admins_with_confidence(segments: list[dict]) -> list[MedicationA
             ent = ents[i]
 
             if ent.entity in {"B-Medication", "MEDICATION"}:
-                record, i = build_administration(ent, ents, segment, i)
+                record, i = build_medication_record(ent, ents, segment, i)
 
                 if not record.dosage:
                     dose = fallback_dosage_or_route(segment["original_text"], ent.start_idx, mode="dosage")

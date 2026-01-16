@@ -6,10 +6,10 @@ from google.genai import types
 import json, time
 from typing import List
 import asyncio
-from src.utils.export_to_csv import export_to_csv
-from src.utils.load_csv_file import load_csv_as_rows 
-from src.domain.entities import ClinicalIntervention
-from src.services.semantic_filtering_service.llm_prompt import llm_prompt
+from src_audio.utils.export_to_csv import export_to_csv
+from src_audio.utils.load_csv_file import load_csv_as_rows 
+from src_audio.domain.entities import ClinicalIntervention
+from src_audio.services.semantic_filtering_service.llm_prompt import llm_prompt
 
 async def extract_valid_interventions(transcript_rows: list[dict]) -> List[ClinicalIntervention]:
     """

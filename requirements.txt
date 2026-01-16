@@ -16,12 +16,37 @@ whisperx>=3.1.1
 torch>=2.8.0
 torchvision>=0.23.0
 torchaudio>=2.8.0
+# Core
+numpy>=1.23.0,<2.0
+pandas>=2.0.0
+python-dotenv>=1.0.0
+psutil>=5.9.0
+
+# Audio/Whisper
+librosa>=0.10.0
+soundfile>=0.12.0
+ffmpeg-python>=0.2.0
+faster-whisper>=0.10.0
+openai-whisper>=20230314
+whisperx>=3.1.1
+
+# AI/ML
+torch>=2.8.0
+torchvision>=0.23.0
+torchaudio>=2.8.0
 transformers>=4.30.0
+sentencepiece>=0.1.99
 sentencepiece>=0.1.99
 huggingface-hub>=0.16.0
 
 # Diarization
+
+# Diarization
 pyannote.audio>=3.1.0
+torch-audiomentations>=0.11.0
+
+# NLP
+medcat~=1.16.0
 torch-audiomentations>=0.11.0
 
 # NLP

@@ -64,13 +64,17 @@ source .venv/bin/activate
 ```
 
 ### Step 3: Upgrade pip
+### Step 3: Upgrade pip
 ```sh
+python -m pip install --upgrade pip
 python -m pip install --upgrade pip
 ```
 
 ## 📦 Install Dependencies
 ***Note: run all of the following commands INSIDE your virtual environment***
 
+### Install Required Dependencies
+For all operating systems, run the following:
 ### Install Required Dependencies
 For all operating systems, run the following:
 ```sh
