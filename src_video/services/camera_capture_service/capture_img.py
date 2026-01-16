@@ -3,7 +3,13 @@
 
 import cv2
 import os
+import time 
 from config.video_settings import IMAGE_SAVE_DIR
+
+# script_dir=os.path.dirname(os.path.abspath(__file__))
+# IMAGE_SAVE_DIR = os.path.join(script_dir,"saved_imgs")
+# os.makedirs(IMAGE_SAVE_DIR,exist_ok=True)
+
 """ 
 gstreamer_pipeline returns a GStreamer pipeline for capturing from the CSI camera
 Flip the image by setting the flip_method (most common values: 0 and 2)
@@ -63,10 +69,16 @@ def show_camera():
                     break
                 #Save a snapshot of the video stream when on the 'e'
                 elif keyCode == ord('e'):
-                    timestamp = cv2.getTickCount()
-                    filename = os.path.join(IMAGE_SAVE_DIR, f"captured_img_{timestamp}.jpg")
-                    cv2.imwrite(filename, frame)
-                    print(f"Image saved as {filename}")
+                    num_snaps = 0 
+                    while num_snaps != 10:
+                        timestamp = cv2.getTickCount()
+                        filename = os.path.join(IMAGE_SAVE_DIR, f"captured_img_{timestamp}.jpg")
+                        cv2.imwrite(filename, frame)
+                        print(f"Image saved as {filename}")
+                        num_snaps += 1 
+                        time.sleep(2)
+
+
         finally:
             video_capture.release()
             cv2.destroyAllWindows()
@@ -76,3 +88,8 @@ def show_camera():
 
 if __name__ == "__main__":
     show_camera()
+
+
+async def run_show_camera():
+    show_camera()
+        
