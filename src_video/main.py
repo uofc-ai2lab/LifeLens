@@ -32,13 +32,8 @@ def _as_posix(path: str) -> str:
 def main() -> int:
     settings = load_video_pipeline_settings()
 
-    # Ensure pipeline folders exist
-    Path(settings["PIPELINE_ROOT"]).mkdir(parents=True, exist_ok=True)
-    Path(settings["DETECTION_OUTPUT"]).mkdir(parents=True, exist_ok=True)
-    Path(settings["CLASSIFICATION_OUTPUT"]).mkdir(parents=True, exist_ok=True)
-
     detection_output = Path(settings["DETECTION_OUTPUT"])
-    crops_root = detection_output / "crops"
+    crops_root = Path(settings["CROPS_ROOT"])
 
     try:
         print("[video] Starting detection...\n")
@@ -59,11 +54,10 @@ def main() -> int:
         print("\n[video] Detection finished.\n")
 
         # Make it very obvious where outputs landed.
-        annotated_dir = detection_output / "annotated"
-        crops_dir = detection_output / "crops"
-        vis_dir = detection_output / "vis"
+        annotated_dir = Path(settings["ANNOTATED_DIR"])
+        vis_dir = Path(settings["VIS_DIR"])
         annotated_count = sum(1 for _ in annotated_dir.rglob("*.jpg")) if annotated_dir.exists() else 0
-        crop_count_now = sum(1 for _ in crops_dir.rglob("*.jpg")) if crops_dir.exists() else 0
+        crop_count_now = sum(1 for _ in crops_root.rglob("*.jpg")) if crops_root.exists() else 0
         vis_count = sum(1 for _ in vis_dir.rglob("*.jpg")) if vis_dir.exists() else 0
         print(
             {

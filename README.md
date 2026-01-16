@@ -93,6 +93,31 @@ From the project root, run the setup script:
 python -m scripts.setup_medcat
 ```
 
+## Depenedencies for video pipeline:
+Dataset for training classifier:
+Download the `wounds_dataset` (Classification)
+
+Download the dataset from Kaggle:
+https://www.kaggle.com/datasets/yasinpratomo/wound-dataset?resource=download
+
+Extract the downloaded folder so the images end up at:
+
+```
+data/video/source_files/Images/Wound_dataset/
+  Abrasion/
+  Bruise/
+  Burn/
+  Cut/
+  Laceration/
+  Stab_wound/
+  Normal skin/
+```
+Note that imageSamples is a subset of this dataset
+
+
+Dataset for object detection:
+Image set link: https://github.com/xiaojie1017/Human-Parts Object detection link: https://huggingface.co/MnLgt/yolo-human-parse/tree/main Dataset Assets (Priv_personpart):
+
 ## .ENV Setup
 
 1. **Hugging Face Token**
@@ -119,6 +144,8 @@ python -m scripts.setup_medcat
      ```
 
 **Keep env.template updated with any new variables your services require.**
+
+# Audio Processing Pipeline
 
 ## Audio Data Directory Structure
 
@@ -185,10 +212,10 @@ python -m src_audio.main transcribe
 - Run as a module (`src_audio.main`), not as a file (`src_audio/main.py`).
 
 
-# 📹 Video Processing Pipeline
+# Video Processing Pipeline
 A detection + crop extraction pipeline with an injury-classification inference step.
 
-## 📂 Video Data Directory Structure
+## Video Data Directory Structure
 
 Place your video/image test data under:
 
@@ -202,7 +229,7 @@ Place your video/image test data under:
       - `injury_predictions.json` - Per-crop predictions + summary
       - `injury_predictions_summary.csv` - Per-image/per-body-part summary
 
-## 🔑 Video .ENV Variables
+## Video .ENV Variables
 
 Video pipeline configuration lives in the **VIDEO PIPELINE ENVIRONMENT VARIABLES** section of `config/.env.template`.
 Create your local `.env` in the repo root (as described above) and set at minimum:
@@ -212,7 +239,7 @@ Create your local `.env` in the repo root (as described above) and set at minimu
 - `PIPELINE_DETECTION_OUTPUT` (defaults to `data/video/output_files/DetectionOutput`)
 - `PIPELINE_INJURY_CHECKPOINT` (checkpoint used for injury inference)
 
-## ▶️ Running the Video Pipeline
+## Running the Video Pipeline
 
 Run the full video pipeline (no arguments) from the **root folder**:
 
@@ -228,7 +255,7 @@ This will run:
 - If you see no outputs, ensure `data/video/source_files/` is not empty (or set `PIPELINE_DETECTION_SOURCE` to a folder that contains images).
 - De-identification is currently a placeholder step and is disabled by default.
 
-## 🧾 Model Checkpoints
+## Model Checkpoints
 
 The video pipeline uses a trained injury classifier checkpoint configured via `PIPELINE_INJURY_CHECKPOINT`.
 
@@ -249,31 +276,7 @@ By default it writes to `checkpoints/classificationModel/injury/` and produces:
 - `metrics_swin_tiny_patch4_window7_224.json` (training metrics)
 
 The default training script assumes the dataset is located at:
-`data/video/source_files/images/Wound_dataset/`
+`data/video/source_files/Images/Wound_dataset/`
 
 If you save to a different location (or store the dataset elsewhere), set `PIPELINE_INJURY_CHECKPOINT` in your `.env` to point at the resulting `.pt` file and/or pass `--data-dir` to the training script.
 
-## Sources:
-Dataset for training classifier:
-Download the `wounds_dataset` (Classification)
-
-Download the dataset from Kaggle:
-https://www.kaggle.com/datasets/yasinpratomo/wound-dataset?resource=download
-
-Extract the downloaded folder so the images end up at:
-
-```
-data/video/source_files/images/Wound_dataset/
-  Abrasion/
-  Bruise/
-  Burn/
-  Cut/
-  Laceration/
-  Stab_wound/
-  Normal skin/
-```
-Note that imageSamples is a subset of this dataset
-
-
-Dataset for object detection:
-Image set link: https://github.com/xiaojie1017/Human-Parts Object detection link: https://huggingface.co/MnLgt/yolo-human-parse/tree/main Dataset Assets (Priv_personpart):

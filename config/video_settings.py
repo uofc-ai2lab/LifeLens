@@ -2,6 +2,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+import sys
 
 # Load environment variables from .env (if present). In VS Code, this is often
 # driven by python.envFile.
@@ -69,11 +70,25 @@ def load_video_pipeline_settings() -> dict:
         f"{pipeline_root}/ClassificationOutput",
     )
 
+    # Ensure pipeline folders exist
+    Path(pipeline_root).mkdir(parents=True, exist_ok=True)
+    Path(detection_output).mkdir(parents=True, exist_ok=True)
+    Path(classification_output).mkdir(parents=True, exist_ok=True)
+
+    # Derived paths
+    detection_output_path = Path(detection_output)
+    crops_root = detection_output_path / "crops"
+    annotated_dir = detection_output_path / "annotated"
+    vis_dir = detection_output_path / "vis"
+
     return {
         "DETECTION_SOURCE": os.getenv("PIPELINE_DETECTION_SOURCE", str(VIDEO_SOURCE_DIR)).replace("\\", "/"),
         "PIPELINE_ROOT": pipeline_root,
         "DETECTION_OUTPUT": detection_output,
         "CLASSIFICATION_OUTPUT": classification_output,
+        "CROPS_ROOT": str(crops_root),
+        "ANNOTATED_DIR": str(annotated_dir),
+        "VIS_DIR": str(vis_dir),
         "DETECTION_MODEL": os.getenv("PIPELINE_DETECTION_MODEL", "MnLgt/yolo-human-parse"),
         "MAX_IMAGES": _env_int("PIPELINE_MAX_IMAGES", 200),
         "ADD_HEAD": _env_bool("PIPELINE_ADD_HEAD", True),

@@ -15,7 +15,7 @@ Usage:
     python scripts/train_video_injury_classifier.py
 
 This default assumes the Kaggle wound dataset has been extracted to:
-    data/video/source_files/images/Wound_dataset/
+    data/video/source_files/Images/Wound_dataset/
 
 You can override the dataset location via --data-dir.
 
@@ -44,7 +44,7 @@ TRAINER_PATH = (
 # Keep runnable from anywhere.
 sys.path.insert(0, str(PROJECT_ROOT))
 
-DEFAULT_DATA_DIR = "data/video/source_files/images/Wound_dataset"
+DEFAULT_DATA_DIR = "data/video/source_files/Images/Wound_dataset"
 
 
 def _load_train_swin_tiny():

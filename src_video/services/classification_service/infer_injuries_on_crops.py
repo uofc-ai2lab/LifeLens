@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import torch
 from torch.utils.data import DataLoader, Dataset
-from torchvision import transforms
+from torchvision import Module, transforms
 import timm
 from PIL import Image
 
@@ -71,20 +71,8 @@ def _infer_body_part_from_filename(path: Path, delimiter: str = "_", label_posit
     return tokens[label_position]
 
 
-def predict_injuries_on_detection_crops(
-    crops_root: str,
-    checkpoint_path: str,
-    out_json_path: str,
-    out_csv_path: str,
-    image_size: int = 224,
-    batch_size: int = 32,
-    num_workers: int = 0,
-    device: Optional[torch.device] = None,
-    filename_delimiter: str = "_",
-    body_part_label_position: int = -2,
-) -> Dict[str, Any]:
-    """Run injury classifier on detection crops and write reports."""
-
+def _collect_crop_paths(crops_root: str) -> List[Path]:
+    """Recursively collect all image files from crops directory."""
     crops_root_path = Path(crops_root)
     if not crops_root_path.exists():
         raise FileNotFoundError(f"Crops root not found: {crops_root}")
@@ -98,21 +86,19 @@ def predict_injuries_on_detection_crops(
     )
     if not crop_paths:
         raise RuntimeError(f"No crop images found under {crops_root}")
+    return crop_paths
 
-    if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model, injury_class_names = load_model_from_checkpoint(checkpoint_path, device)
-
-    dataset = _CropsDataset(crop_paths, image_size=image_size)
-    data_loader = DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=(device.type == "cuda"),
-    )
-
+def _run_inference_on_crops(
+    model: Module,
+    data_loader: DataLoader,
+    device: torch.device,
+    crop_paths: List[Path],
+    injury_class_names: List[str],
+    filename_delimiter: str,
+    body_part_label_position: int,
+) -> List[CropPrediction]:
+    """Run inference on all crops and return predictions."""
     predictions: List[CropPrediction] = []
 
     with torch.no_grad():
@@ -142,9 +128,15 @@ def predict_injuries_on_detection_crops(
                         injury_prob=injury_probability,
                     )
                 )
+    return predictions
 
-    # Aggregate: per (image_id, body_part) pick most common top-1, tie-break by avg prob
+
+def _aggregate_predictions_by_part(
+    predictions: List[CropPrediction],
+) -> List[Dict[str, Any]]:
+    """Aggregate predictions by (image_id, body_part) using voting and average probability."""
     aggregation_by_image_and_part: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    
     for pred in predictions:
         key = (pred.image_id, pred.body_part)
         entry = aggregation_by_image_and_part.setdefault(key, {"counts": {}, "probabilities": {}, "count": 0})
@@ -174,7 +166,19 @@ def predict_injuries_on_detection_crops(
                 "avg_prob": float(sum(probabilities[best_injury]) / max(1, len(probabilities[best_injury]))),
             }
         )
+    return per_part_summary
 
+
+def _save_reports(
+    out_json_path: str,
+    out_csv_path: str,
+    checkpoint_path: str,
+    crops_root: str,
+    injury_class_names: List[str],
+    predictions: List[CropPrediction],
+    per_part_summary: List[Dict[str, Any]],
+) -> None:
+    """Save JSON and CSV reports."""
     out_json = {
         "checkpoint": checkpoint_path,
         "crops_root": crops_root,
@@ -198,6 +202,58 @@ def predict_injuries_on_detection_crops(
         w.writeheader()
         for row in per_part_summary:
             w.writerow(row)
+
+
+def predict_injuries_on_detection_crops(
+    crops_root: str,
+    checkpoint_path: str,
+    out_json_path: str,
+    out_csv_path: str,
+    image_size: int = 224,
+    batch_size: int = 32,
+    num_workers: int = 0,
+    device: Optional[torch.device] = None,
+    filename_delimiter: str = "_",
+    body_part_label_position: int = -2,
+) -> Dict[str, Any]:
+    """Run injury classifier on detection crops and write reports."""
+    crop_paths = _collect_crop_paths(crops_root)
+
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    model, injury_class_names = load_model_from_checkpoint(checkpoint_path, device)
+
+    dataset = _CropsDataset(crop_paths, image_size=image_size)
+    data_loader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=(device.type == "cuda"),
+    )
+
+    predictions = _run_inference_on_crops(
+        model=model,
+        data_loader=data_loader,
+        device=device,
+        crop_paths=crop_paths,
+        injury_class_names=injury_class_names,
+        filename_delimiter=filename_delimiter,
+        body_part_label_position=body_part_label_position,
+    )
+
+    per_part_summary = _aggregate_predictions_by_part(predictions)
+
+    _save_reports(
+        out_json_path=out_json_path,
+        out_csv_path=out_csv_path,
+        checkpoint_path=checkpoint_path,
+        crops_root=crops_root,
+        injury_class_names=injury_class_names,
+        predictions=predictions,
+        per_part_summary=per_part_summary,
+    )
 
     return {
         "out_json": out_json_path,

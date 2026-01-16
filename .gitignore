@@ -327,3 +327,6 @@ __marimo__/
 
 # visual outputs
 data/video/output_files/
+
+# training set
+data/video/source_files/Images/Wound_dataset/
