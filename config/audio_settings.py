@@ -16,9 +16,16 @@ SRC_DIR = BASE_DIR / "src_audio"
 DATA_DIR = BASE_DIR / "data/audio"
 
 AUDIO_DIR = DATA_DIR / "audio_files"
+os.makedirs(AUDIO_DIR, exist_ok=True)
+
 TRANSCRIPT_DIR = DATA_DIR / "transcript_files"
+os.makedirs(TRANSCRIPT_DIR, exist_ok=True)
+
 MEANING_DIR = DATA_DIR / "meaning_files"
+os.makedirs(MEANING_DIR, exist_ok=True)
+
 OUTPUT_DIR = DATA_DIR / "output_files"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 METADATA_FILENAME = "audio_pipeline_metadata.json"
 METADATA_JSON_PATH = DATA_DIR / METADATA_FILENAME
