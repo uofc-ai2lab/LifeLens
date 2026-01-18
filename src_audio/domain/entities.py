@@ -6,6 +6,7 @@ from pathlib import Path
 class AudioFileMetaData:
     audio_file: Optional[str] = None
     transcript_filename: Optional[Path] = None
+    anonymization_filename: Optional[Path] = None
     medication_filename: Optional[Path] = None
     semantic_filename: Optional[Path] = None
     intervention_filename: Optional[Path] = None
