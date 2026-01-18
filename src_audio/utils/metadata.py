@@ -104,6 +104,8 @@ def create_update_metadata(input_filename, service, output_filename):
                 existing_transc.intervention_filename=Path(output_filename).name
             elif service == "semantic":
                 existing_transc.semantic_filename=Path(output_filename).name
+            elif service == "anonymization":
+                existing_transc.anonymization_filename=Path(output_filename).name
             else:
                 raise ValueError(f"Unknown service type: {service}")
         

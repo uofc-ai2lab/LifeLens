@@ -26,6 +26,7 @@ os.makedirs(MEANING_DIR, exist_ok=True)
 
 OUTPUT_DIR = DATA_DIR / "output_files"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+ANONYMIZED_DIR = DATA_DIR / "anonymized_files"
 
 METADATA_FILENAME = "audio_pipeline_metadata.json"
 METADATA_JSON_PATH = DATA_DIR / METADATA_FILENAME
