@@ -6,10 +6,6 @@ import os
 import time 
 from config.video_settings import IMAGE_SAVE_DIR
 
-# script_dir=os.path.dirname(os.path.abspath(__file__))
-# IMAGE_SAVE_DIR = os.path.join(script_dir,"saved_imgs")
-# os.makedirs(IMAGE_SAVE_DIR,exist_ok=True)
-
 """ 
 gstreamer_pipeline returns a GStreamer pipeline for capturing from the CSI camera
 Flip the image by setting the flip_method (most common values: 0 and 2)
