@@ -192,6 +192,7 @@ python -m src_audio.main <service_name>
 | Service Name     | Description                       |
 | ---------------- | --------------------------------- |
 | `transcribe`     | Run audio-to-transcript service   |
+| `anonymize` | Run transcript anonymization service   |
 | `meds`           | Run medication extraction service |
 | `inter`          | Run NLP intervention extraction   |
 | `sem`            | Run semantic filtering service |
