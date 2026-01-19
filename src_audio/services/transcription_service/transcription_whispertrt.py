@@ -283,7 +283,6 @@ async def transcribe_audio(audio_file: str, model):
 
 #     return result
 
-
 async def move_file_to_processed(audio_file: str):
     """Move processed audio file to 'processed' subdirectory"""
     processed_dir = DATA_DIR / "audio_files" / "processed"
@@ -306,7 +305,6 @@ async def move_file_to_processed(audio_file: str):
 
         traceback.print_exc()
         raise
-
 
 async def run_transcription():
     print_formatting("title", "TRANSCRIPTION PIPELINE")
