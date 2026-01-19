@@ -15,7 +15,7 @@ BASE_DIR = Path(os.getcwd()).resolve()
 SRC_DIR = BASE_DIR / "src_audio"
 DATA_DIR = BASE_DIR / "data/audio"
 
-AUDIO_DIR = DATA_DIR / "audio_files"
+AUDIO_DIR = DATA_DIR / "audio_files/unprocessed"
 TRANSCRIPT_DIR = DATA_DIR / "transcript_files"
 MEANING_DIR = DATA_DIR / "meaning_files"
 OUTPUT_DIR = DATA_DIR / "output_files"
@@ -58,7 +58,7 @@ if ENABLE_MEDCAT is True:
     except:
         print("ERROR: MedCAT not installed or environment broken.")
         exit()
-    
+
     MODEL_PACK = CAT.load_model_pack(MODEL_PACK_PATH)
     NLP = spacy.load("en_core_web_sm")
 
@@ -66,7 +66,7 @@ else:
     print("MEDCAT DISABLED. Please enable prior to running intervention extraction.")
     MODEL_PACK = None
     NLP = None
-    
+
 _raw_transcript_files = os.getenv("TRANSCRIPT_FILES")
 if _raw_transcript_files:
     # Explicit list provided via env var
