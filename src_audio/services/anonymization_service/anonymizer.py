@@ -27,9 +27,9 @@ class TranscriptAnonymizer:
         Raises:
             RuntimeError: If the PHI_PSEUDONYM_KEY environment variable is not set.
         """
-        self.secret_key = os.getenv("PHI_PSEUDONYM_KEY")
-        if not self.secret_key:
-            raise RuntimeError("PHI_PSEUDONYM_KEY environment variable not set.") # putting this here for now as a 'safeguard' but need to have response behavior if this ever fails -> anonmyzation won't run but then we gotta be extra secure w/ the transript
+        # self.secret_key = os.getenv("PHI_PSEUDONYM_KEY") # No need for this key anymore since we are using 'ANON' for all fields. Left here in case we want to re-implement.
+        # if not self.secret_key:
+        #     raise RuntimeError("PHI_PSEUDONYM_KEY environment variable not set.") # putting this here for now as a 'safeguard' but need to have response behavior if this ever fails -> anonmyzation won't run but then we gotta be extra secure w/ the transript
         self.analyzer = AnalyzerEngine()
         self.anonymizer = AnonymizerEngine()
         self.entity_operators = self._create_anonymized_entity_operators()
@@ -109,23 +109,23 @@ class TranscriptAnonymizer:
 
         # define entities to be anonymized (these come from Presidio)
         ENTITY_OPERATORS = {
-            "PERSON": OperatorConfig("custom", {
-                "lambda": lambda x: self._pseudonymize(x, "PERSON")
-            }),
-            "DATE_TIME": OperatorConfig("replace", {
-                "new_value": "<DATE>"
-            }),
-            "AGE": OperatorConfig("custom", {
-                "lambda": lambda x: self._age_anonymizer(x)
-            }),
-            "LOCATION": OperatorConfig("replace", {"new_value": "<LOCATION>"}),
-            "GPE": OperatorConfig("replace", {"new_value": "<LOCATION>"}),
-            "PHONE_NUMBER": OperatorConfig("replace", {"new_value": "<PHONE>"}),
-            "EMAIL_ADDRESS": OperatorConfig("replace", {"new_value": "<EMAIL>"}),
-            "ORGANIZATION": OperatorConfig("replace", {"new_value": "<ORG>"}),
-            "EMS_UNIT": OperatorConfig("replace", {"new_value": "<EMS_UNIT>"}),
-            "CASE_NUMBER": OperatorConfig("replace", {"new_value": "<CASE_ID>"}),
-            "DEFAULT": OperatorConfig("replace", {"new_value": "<REDACTED>"})
+            # "PERSON": OperatorConfig("custom", {
+            #     "lambda": lambda x: self._pseudonymize(x, "PERSON") Uncomment if we want to reversible anonymization
+            # }),
+            # "AGE": OperatorConfig("custom", {
+            #     "lambda": lambda x: self._age_anonymizer(x)
+            # }),
+            "DATE_TIME": OperatorConfig("replace", {"new_value": "<ANON>"}),
+            "PERSON": OperatorConfig("replace", {"new_value": "<ANON>"}),
+            "AGE": OperatorConfig("replace", {"new_value": "<ANON>"}),
+            "LOCATION": OperatorConfig("replace", {"new_value": "<ANON>"}),
+            "GPE": OperatorConfig("replace", {"new_value": "<ANON>"}),
+            "PHONE_NUMBER": OperatorConfig("replace", {"new_value": "<ANON>"}),
+            "EMAIL_ADDRESS": OperatorConfig("replace", {"new_value": "<ANON>"}),
+            "ORGANIZATION": OperatorConfig("replace", {"new_value": "<ANON>"}),
+            "EMS_UNIT": OperatorConfig("replace", {"new_value": "<ANON>"}),
+            "CASE_NUMBER": OperatorConfig("replace", {"new_value": "<ANON>"}),
+            "DEFAULT": OperatorConfig("replace", {"new_value": "<ANON>"})
         }
 
         return ENTITY_OPERATORS
