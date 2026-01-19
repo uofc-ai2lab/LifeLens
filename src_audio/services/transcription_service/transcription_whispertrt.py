@@ -14,7 +14,7 @@ from config.audio_settings import (
     DATA_DIR,
 )
 # extra config needed for speaker diarization - unused otherwise
-# from config.settings import USE_OFFLINE_MODELS, PYANNOTE_CACHE_DIR, HUGGING_FACE_TOKEN, DEVICE
+# from config.audio_settings import USE_OFFLINE_MODELS, PYANNOTE_CACHE_DIR, HUGGING_FACE_TOKEN, DEVICE
 # from download_pyannote import download_pyannote_models
 # from pyannote.audio import Pipeline
 
@@ -199,10 +199,10 @@ async def move_file_to_processed(audio_file: Path):
 #         if not model_path.exists():
 #             return False
     
-#     return True
+    return True
 
 # commented out for now to get no import erros if "from pyannote.audio import Pipeline" is not found - diarization can be added later
-# async def assign_speakers(device: str, audio_file: str, result: dict):
+async def assign_speakers(device: str, audio_file: str, result: dict):
 #     """
 #     Assign speakers using pyannote diarization.
     
@@ -305,7 +305,7 @@ async def move_file_to_processed(audio_file: Path):
 #     diarize_end = datetime.now()
 #     print(bcolors.OKGREEN + f"✓ Diarization completed, took {diarize_end - diarize_start}.\n" + bcolors.ENDC)
 
-#     return result
+    return result
 
 async def run_transcription():
     print_formatting("title", "TRANSCRIPTION PIPELINE")
