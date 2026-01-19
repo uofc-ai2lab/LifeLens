@@ -38,12 +38,14 @@ def run_anonymization(transcript_path: str, anonymizer: TranscriptAnonymizer) ->
     )
 
 async def run_anonymization_service():
-    """Async wrapper to run the transcript anonymization script
+    """
+    Async wrapper to run the transcript anonymization script
     
-    Args: None
+    Args: 
+        None
     
-    Returns: None
-    # will implement this
+    Returns: 
+        None
     """
     anonymizer = TranscriptAnonymizer()
     for transcript in TRANSCRIPT_FILES_LIST:
