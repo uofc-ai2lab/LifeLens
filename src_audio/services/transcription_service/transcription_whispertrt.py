@@ -5,7 +5,11 @@ import pandas as pd
 import soundfile as sf
 from src_audio.domain.constants import bcolors
 from src_audio.utils.export_to_csv import export_to_csv
+<<<<<<< HEAD
 from config.audio_settings import (
+=======
+from config.settings import (
+>>>>>>> 63b642c (SCRUM-175 Split up data folder into processed and unprocessed. Transcription now only takes all files from processed folder if AUDIO_FILES env variable is empty. (#25))
     AUDIO_FILES_LIST,
     IS_JETSON,
     MODEL_SIZE,
@@ -155,6 +159,161 @@ async def transcribe_audio(audio_file: str, model):
         traceback.print_exc()
         raise
 
+<<<<<<< HEAD
+=======
+async def move_file_to_processed(audio_file: Path):
+    """Move processed audio file to 'processed' subdirectory"""
+    processed_dir = DATA_DIR / "audio_files" / "processed"
+    # Create processed directory if it doesn't exist (will not overwrite existing)
+    processed_dir.mkdir(parents=True, exist_ok=True)
+
+    destination = processed_dir / audio_file.name
+    try:
+        os.rename(audio_file, destination)
+        print(
+            bcolors.OKGREEN + f"Moved processed file to: {destination}" + bcolors.ENDC
+        )
+    except Exception as e:
+        print(
+            bcolors.FAIL
+            + f"ERROR moving file to processed directory: {e}"
+            + bcolors.ENDC
+        )
+        import traceback
+
+        traceback.print_exc()
+        raise
+
+
+# def _check_models_exist(cache_dir: Path) -> bool:
+#     """
+#     Check if pyannote models are downloaded in the cache directory.
+    
+#     Parameters:
+#         cache_dir: Path to the pyannote models cache directory
+        
+#     Returns:
+#         bool: True if both required models exist, False otherwise
+#     """
+#     required_models = [
+#         "models--pyannote--speaker-diarization-3.1",
+#         "models--pyannote--segmentation-3.0",
+#     ]
+    
+#     for model in required_models:
+#         model_path = cache_dir / model
+#         if not model_path.exists():
+#             return False
+    
+#     return True
+
+# commented out for now to get no import erros if "from pyannote.audio import Pipeline" is not found - diarization can be added later
+# async def assign_speakers(device: str, audio_file: str, result: dict):
+#     """
+#     Assign speakers using pyannote diarization.
+    
+#     Uses offline models if USE_OFFLINE_MODELS=1, otherwise uses online models
+#     with Hugging Face authentication. Automatically downloads models if they
+#     don't exist locally when offline mode is enabled.
+    
+#     Parameters:
+#         device: Computing device ('cpu' or 'cuda')
+#         audio_file: Path to the audio file for diarization
+#         result: Transcription result dictionary containing segments
+        
+#     Returns:
+#         dict: Updated result with speaker assignments added to segments
+        
+#     Raises:
+#         ValueError: If online mode is used but HUGGING_FACE_TOKEN is not set
+#     """
+#     print_formatting("heading", "RUNNING DIARIZATION")
+#     diarize_start = datetime.now()
+
+#     # Determine if using offline models
+#     use_offline = USE_OFFLINE_MODELS == 1
+    
+#     if use_offline:
+#         print(bcolors.OKBLUE + "Using offline pyannote models for diarization.\n" + bcolors.ENDC)
+        
+#         # Set cache directory from settings or use default
+#         cache_dir = Path(PYANNOTE_CACHE_DIR or "./pyannote_models")
+        
+#         # Check if models exist, download if not
+#         if not _check_models_exist(cache_dir):
+#             print(bcolors.WARNING + "Pyannote models not found locally. Downloading...\n" + bcolors.ENDC)
+#             download_pyannote_models()
+        
+#         # Enable offline mode for Hugging Face Hub
+#         os.environ['HF_HUB_OFFLINE'] = '1'
+        
+#         # Load pipeline from cache
+#         diarize_model = Pipeline.from_pretrained(
+#             "pyannote/speaker-diarization-3.1",
+#             cache_dir=str(cache_dir)
+#         )
+#     else:
+#         print(bcolors.OKBLUE + "Using online pyannote models for diarization.\n" + bcolors.ENDC)
+        
+#         # Validate token for online usage
+#         if not HUGGING_FACE_TOKEN:
+#             raise ValueError(
+#                 "HUGGING_FACE_TOKEN not set. Either:\n"
+#                 "1. Set HUGGING_FACE_TOKEN in your .env file, or\n"
+#                 "2. Set USE_OFFLINE_MODELS=1 to use cached models"
+#             )
+        
+#         # Load pipeline with authentication
+#         diarize_model = Pipeline.from_pretrained(
+#             "pyannote/speaker-diarization-3.1",
+#             use_auth_token=HUGGING_FACE_TOKEN
+#         )
+
+#     # Move model to GPU if available
+#     if device == "cuda":
+#         diarize_model.to(torch.device("cuda"))
+
+#     # Run diarization on audio file
+#     diarization = diarize_model(audio_file)
+
+#     # Convert pyannote output to segment format
+#     diarize_segments = []
+#     for turn, _, speaker in diarization.itertracks(yield_label=True):
+#         diarize_segments.append({
+#             'start': turn.start,
+#             'end': turn.end,
+#             'speaker': speaker
+#         })
+
+#     # Extract segments from transcription result
+#     if 'segments' in result and result['segments']:
+#         segments = result['segments']
+#     else:
+#         # Fallback: create single segment from full text
+#         segments = [{'start': 0.0, 'end': 0.0, 'text': result.get('text', '')}]
+
+#     # Assign speakers to transcription segments based on temporal overlap
+#     for seg in segments:
+#         seg_start = seg.get("start", 0.0)
+#         seg_end = seg.get("end", 0.0)
+#         seg_mid = (seg_start + seg_end) / 2
+#         seg["speaker"] = "UNKNOWN"
+
+#         # Find diarization segment containing the midpoint
+#         for diar in diarize_segments:
+#             if diar["start"] <= seg_mid <= diar["end"]:
+#                 seg["speaker"] = diar["speaker"]
+#                 break
+
+#     # Update result with speaker-assigned segments
+#     result['segments'] = segments
+
+#     diarize_end = datetime.now()
+#     print(bcolors.OKGREEN + f"✓ Diarization completed, took {diarize_end - diarize_start}.\n" + bcolors.ENDC)
+
+#     return result
+
+>>>>>>> 63b642c (SCRUM-175 Split up data folder into processed and unprocessed. Transcription now only takes all files from processed folder if AUDIO_FILES env variable is empty. (#25))
 async def run_transcription():
     print_formatting("title", "TRANSCRIPTION PIPELINE")
     

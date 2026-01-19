@@ -16,8 +16,11 @@ SRC_DIR = BASE_DIR / "src_audio"
 DATA_DIR = BASE_DIR / "data/audio"
 
 AUDIO_DIR = DATA_DIR / "audio_files/unprocessed"
+<<<<<<< HEAD:config/audio_settings.py
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
+=======
+>>>>>>> 63b642c (SCRUM-175 Split up data folder into processed and unprocessed. Transcription now only takes all files from processed folder if AUDIO_FILES env variable is empty. (#25)):config/settings.py
 TRANSCRIPT_DIR = DATA_DIR / "transcript_files"
 os.makedirs(TRANSCRIPT_DIR, exist_ok=True)
 
