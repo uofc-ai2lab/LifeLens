@@ -156,10 +156,14 @@ class TranscriptAnonymizer:
 
         # define entities to be anonymized (these come from Presidio)
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> f0f654c (PR Comments)
         ENTITY_OPERATORS = {k: OperatorConfig("replace", {"new_value": "<ANON>"}) for k in [
             "DATE_TIME", "PERSON", "AGE", "LOCATION", "GPE", "PHONE_NUMBER",
             "EMAIL_ADDRESS", "ORGANIZATION", "EMS_UNIT", "CASE_NUMBER", "DEFAULT"
         ]}
+<<<<<<< HEAD
 =======
         ENTITY_OPERATORS = {
             "DATE_TIME": OperatorConfig("replace", {"new_value": "<ANON>"}),
@@ -175,6 +179,9 @@ class TranscriptAnonymizer:
             "DEFAULT": OperatorConfig("replace", {"new_value": "<ANON>"})
         }
 >>>>>>> 3eb8813 (Implement Transcript Anonymization Code in Audio Pipeline (Working))
+=======
+
+>>>>>>> f0f654c (PR Comments)
 
         return ENTITY_OPERATORS
 
