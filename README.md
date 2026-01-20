@@ -280,3 +280,33 @@ The default training script assumes the dataset is located at:
 
 If you save to a different location (or store the dataset elsewhere), set `PIPELINE_INJURY_CHECKPOINT` in your `.env` to point at the resulting `.pt` file and/or pass `--data-dir` to the training script.
 
+### Training with No-Injury Class (run before creating checkpoint)
+
+To reduce false positives and improve real-world performance, you can augment the training dataset with a "no_injury" class using actual detection crops from your pipeline:
+
+**Step 1: Create the no_injury dataset**
+
+```sh
+python scripts/create_no_injury_dataset.py
+```
+
+This will:
+- Sample 300 detection crops (stratified across source images)
+- Split into 80% training / 20% held-out test (by default)
+- Copy training samples to `data/video/source_files/Images/Wound_dataset/no_injury/`
+
+You can customize with:
+```sh
+python scripts/create_no_injury_dataset.py --num-samples 500 --train-ratio 0.8
+```
+
+**Step 2: Retrain the classifier**
+
+```sh
+python scripts/train_video_injury_classifier.py
+```
+
+The classifier will now have 8 classes (7 injury types + no_injury) and should significantly reduce false positives on clean body parts.
+
+**Note:** The 80/20 split ensures that the held-out 20% is completely separate from training, preventing data leakage when evaluating pipeline performance.
+
