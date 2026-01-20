@@ -181,8 +181,11 @@ class TranscriptAnonymizer:
 >>>>>>> 3eb8813 (Implement Transcript Anonymization Code in Audio Pipeline (Working))
 =======
 
+<<<<<<< HEAD
 >>>>>>> f0f654c (PR Comments)
 
+=======
+>>>>>>> 3c603d5 (Extra Line Removal)
         return ENTITY_OPERATORS
 
     def anonymize(self, text: str, language: str = "en") -> str:
