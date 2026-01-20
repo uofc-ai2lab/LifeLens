@@ -19,6 +19,7 @@ AUDIO_DIR = DATA_DIR / "audio_files/unprocessed"
 TRANSCRIPT_DIR = DATA_DIR / "transcript_files"
 MEANING_DIR = DATA_DIR / "meaning_files"
 OUTPUT_DIR = DATA_DIR / "output_files"
+ANONYMIZED_DIR = DATA_DIR / "anonymized_files"
 
 METADATA_FILENAME = "audio_pipeline_metadata.json"
 METADATA_JSON_PATH = DATA_DIR / METADATA_FILENAME

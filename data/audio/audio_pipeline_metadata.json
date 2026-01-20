@@ -1,7 +1,134 @@
 [
   {
+    "audio_file": "2025-12-01 IMG_0278.mp3",
+    "transcript_filename": null,
+    "anonymization_filename": null,
+    "medication_filename": null,
+    "semantic_filename": null,
+    "intervention_filename": null,
+    "output_file": null
+  },
+  {
+    "audio_file": "2025-12-01 IMG_4505.mp3",
+    "transcript_filename": null,
+    "anonymization_filename": null,
+    "medication_filename": null,
+    "semantic_filename": null,
+    "intervention_filename": null,
+    "output_file": null
+  },
+  {
+    "audio_file": "2025-12-01 IMG_4507.mp3",
+    "transcript_filename": null,
+    "anonymization_filename": null,
+    "medication_filename": null,
+    "semantic_filename": null,
+    "intervention_filename": null,
+    "output_file": null
+  },
+  {
+    "audio_file": "2025-12-08 IMG_0308.mp3",
+    "transcript_filename": null,
+    "anonymization_filename": null,
+    "medication_filename": null,
+    "semantic_filename": null,
+    "intervention_filename": null,
+    "output_file": null
+  },
+  {
+    "audio_file": "2025-12-08 IMG_0310.mp3",
+    "transcript_filename": null,
+    "anonymization_filename": null,
+    "medication_filename": null,
+    "semantic_filename": null,
+    "intervention_filename": null,
+    "output_file": null
+  },
+  {
+    "audio_file": "2025-12-08 IMG_4535.mp3",
+    "transcript_filename": null,
+    "anonymization_filename": null,
+    "medication_filename": null,
+    "semantic_filename": null,
+    "intervention_filename": null,
+    "output_file": null
+  },
+  {
+    "audio_file": "2025-12-08 IMG_4536.mp3",
+    "transcript_filename": null,
+    "anonymization_filename": null,
+    "medication_filename": null,
+    "semantic_filename": null,
+    "intervention_filename": null,
+    "output_file": null
+  },
+  {
+    "audio_file": "2025-12-08 Interventions A-Z-01.mp3",
+    "transcript_filename": null,
+    "anonymization_filename": null,
+    "medication_filename": null,
+    "semantic_filename": null,
+    "intervention_filename": null,
+    "output_file": null
+  },
+  {
+    "audio_file": "2025-12-08 Interventions A-Z-02.mp3",
+    "transcript_filename": null,
+    "anonymization_filename": null,
+    "medication_filename": null,
+    "semantic_filename": null,
+    "intervention_filename": null,
+    "output_file": null
+  },
+  {
+    "audio_file": "call_268.mp3",
+    "transcript_filename": null,
+    "anonymization_filename": null,
+    "medication_filename": null,
+    "semantic_filename": null,
+    "intervention_filename": null,
+    "output_file": null
+  },
+  {
+    "audio_file": "HeartAttack5Minutes.wav",
+    "transcript_filename": null,
+    "anonymization_filename": null,
+    "medication_filename": null,
+    "semantic_filename": null,
+    "intervention_filename": null,
+    "output_file": null
+  },
+  {
+    "audio_file": "IMG_0286 (1).mp3",
+    "transcript_filename": null,
+    "anonymization_filename": null,
+    "medication_filename": null,
+    "semantic_filename": null,
+    "intervention_filename": null,
+    "output_file": null
+  },
+  {
+    "audio_file": "ShortParamedicClip.wav",
+    "transcript_filename": null,
+    "anonymization_filename": null,
+    "medication_filename": null,
+    "semantic_filename": null,
+    "intervention_filename": null,
+    "output_file": null
+  },
+  {
     "audio_file": "trauma_simulation.mp3",
+    "transcript_filename": null,
+    "anonymization_filename": null,
+    "medication_filename": null,
+    "semantic_filename": null,
+    "intervention_filename": null,
+    "output_file": null
+  },
+  {
+    "audio_file": null,
     "transcript_filename": "20260112_140413_transcript_trauma_simulation.csv",
+    "anonymization_filename": "20260119_155441_anonymization_20260112_140413_transcript_trauma_simulation.csv",
     "medication_filename": null,
     "semantic_filename": null,
     "intervention_filename": null,

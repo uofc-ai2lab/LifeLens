@@ -19,13 +19,32 @@ which python3
 
 **For Windows:**
 
-```bash
+First, ensure you have Python 3.11 installed. If not, download and install it from [python.org](https://www.python.org/downloads/). During installation, make sure to check "Add Python to PATH".
+
+Check which Python executable is currently active:
+
+In Command Prompt or PowerShell:
+```cmd
 where python
-``` 
-or, check Python3: 
-```bash
+```
+or, check Python3:
+```cmd
 where python3
-``` 
+```
+
+In bash (Git Bash or WSL):
+```bash
+which python
+```
+or:
+```bash
+which python3
+```
+
+Check the Python version:
+```cmd
+python --version
+```
 
 If the output points to Anaconda (not desired):
 ```
@@ -41,21 +60,33 @@ Then verify again (commands above)
 
 At this point, one of the following is expected and OK:
 - No output (Python not currently on PATH)
-- A system Python location (e.g. `/usr/bin/python3`)
+- A system Python location (e.g. `C:\Python311\python.exe`)
 
 You are now ready to create and activate a virtual environment.
 
 ### Step 2: Setup Virtual Environment
 Once you have the expected output, create a **dedicated virtual environment**:
 
-Create venv:
+Create venv (ensure you're using Python 3.11):
 ```bash
 python3.11 -m venv .venv
 ```
 
 Activate on Windows:
-```bash
+
+In Command Prompt:
+```cmd
 .venv\Scripts\activate
+```
+
+In PowerShell:
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+In bash (Git Bash or WSL):
+```bash
+source .venv/Scripts/activate
 ```
 
 Activate on Mac/Linux:
@@ -192,6 +223,7 @@ python -m src_audio.main <service_name>
 | Service Name     | Description                       |
 | ---------------- | --------------------------------- |
 | `transcribe`     | Run audio-to-transcript service   |
+| `anonymize` | Run transcript anonymization service   |
 | `meds`           | Run medication extraction service |
 | `inter`          | Run NLP intervention extraction   |
 | `sem`            | Run semantic filtering service |
