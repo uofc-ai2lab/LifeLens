@@ -65,7 +65,6 @@ class TranscriptAnonymizer:
             "EMAIL_ADDRESS", "ORGANIZATION", "EMS_UNIT", "CASE_NUMBER", "DEFAULT"
         ]}
 
-
         return ENTITY_OPERATORS
 
     def anonymize(self, text: str, language: str = "en") -> str:
