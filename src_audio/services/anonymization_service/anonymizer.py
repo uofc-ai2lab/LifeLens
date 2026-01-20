@@ -27,58 +27,10 @@ class TranscriptAnonymizer:
         Raises:
             RuntimeError: If the PHI_PSEUDONYM_KEY environment variable is not set.
         """
-        # self.secret_key = os.getenv("PHI_PSEUDONYM_KEY") # No need for this key anymore since we are using 'ANON' for all fields. Left here in case we want to re-implement.
-        # if not self.secret_key:
-        #     raise RuntimeError("PHI_PSEUDONYM_KEY environment variable not set.") # putting this here for now as a 'safeguard' but need to have response behavior if this ever fails -> anonmyzation won't run but then we gotta be extra secure w/ the transript
         self.analyzer = AnalyzerEngine()
         self.anonymizer = AnonymizerEngine()
         self.entity_operators = self._create_anonymized_entity_operators()
     
-    # creates anonymized identifier
-    def _pseudonymize(self, value: str, entity: str) -> str:
-        """
-        Creates a pseudonymized identifier for a given value and entity type.
-        
-        Uses HMAC-SHA256 with a secret key to generate a consistent, anonymized token
-        for the input value, prefixed with the entity type.
-        
-        Args:
-            value (str): The original value to pseudonymize.
-            entity (str): The entity type (e.g., "PERSON").
-        
-        Returns:
-            str: The pseudonymized identifier in the format "<ENTITY_TOKEN>".
-        """
-        digest = hmac.new(
-            self.secret_key.encode(),
-            f"{entity}:{value}".encode(),
-            hashlib.sha256
-        ).digest()
-        token = base64.urlsafe_b64encode(digest)[:10].decode()
-        return f"<{entity}_{token}>"
-
-    def _age_anonymizer(self, age_str: str) -> str:
-        """
-        Anonymizes age information by categorizing or masking the value.
-        
-        Ages over 89 are replaced with "<AGE_90+>", others with "<AGE>".
-        Invalid inputs are also masked as "<AGE>".
-        
-        Args:
-            age_str (str): The age string to anonymize.
-        
-        Returns:
-            str: The anonymized age representation.
-        """
-        try:
-            age = int(age_str)
-            if age > 89:
-                return "<AGE_90+>"
-            else:
-                return "<AGE>"
-        except (ValueError, TypeError):
-            return "<AGE>"
-
     def _create_anonymized_entity_operators(self):
         """
         Creates and configures custom recognizers and entity operators for anonymization.
@@ -109,12 +61,6 @@ class TranscriptAnonymizer:
 
         # define entities to be anonymized (these come from Presidio)
         ENTITY_OPERATORS = {
-            # "PERSON": OperatorConfig("custom", {
-            #     "lambda": lambda x: self._pseudonymize(x, "PERSON") Uncomment if we want to reversible anonymization
-            # }),
-            # "AGE": OperatorConfig("custom", {
-            #     "lambda": lambda x: self._age_anonymizer(x)
-            # }),
             "DATE_TIME": OperatorConfig("replace", {"new_value": "<ANON>"}),
             "PERSON": OperatorConfig("replace", {"new_value": "<ANON>"}),
             "AGE": OperatorConfig("replace", {"new_value": "<ANON>"}),
