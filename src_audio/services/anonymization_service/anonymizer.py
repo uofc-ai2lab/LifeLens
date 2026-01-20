@@ -60,19 +60,11 @@ class TranscriptAnonymizer:
         self.analyzer.registry.add_recognizer(case_number_recognizer)
 
         # define entities to be anonymized (these come from Presidio)
-        ENTITY_OPERATORS = {
-            "DATE_TIME": OperatorConfig("replace", {"new_value": "<ANON>"}),
-            "PERSON": OperatorConfig("replace", {"new_value": "<ANON>"}),
-            "AGE": OperatorConfig("replace", {"new_value": "<ANON>"}),
-            "LOCATION": OperatorConfig("replace", {"new_value": "<ANON>"}),
-            "GPE": OperatorConfig("replace", {"new_value": "<ANON>"}),
-            "PHONE_NUMBER": OperatorConfig("replace", {"new_value": "<ANON>"}),
-            "EMAIL_ADDRESS": OperatorConfig("replace", {"new_value": "<ANON>"}),
-            "ORGANIZATION": OperatorConfig("replace", {"new_value": "<ANON>"}),
-            "EMS_UNIT": OperatorConfig("replace", {"new_value": "<ANON>"}),
-            "CASE_NUMBER": OperatorConfig("replace", {"new_value": "<ANON>"}),
-            "DEFAULT": OperatorConfig("replace", {"new_value": "<ANON>"})
-        }
+        ENTITY_OPERATORS = {k: OperatorConfig("replace", {"new_value": "<ANON>"}) for k in [
+            "DATE_TIME", "PERSON", "AGE", "LOCATION", "GPE", "PHONE_NUMBER",
+            "EMAIL_ADDRESS", "ORGANIZATION", "EMS_UNIT", "CASE_NUMBER", "DEFAULT"
+        ]}
+
 
         return ENTITY_OPERATORS
 
