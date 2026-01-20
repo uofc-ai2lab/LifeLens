@@ -32,6 +32,7 @@ class TranscriptAnonymizer:
         Raises:
             RuntimeError: If the PHI_PSEUDONYM_KEY environment variable is not set.
         """
+<<<<<<< HEAD
 =======
 =======
 >>>>>>> b7d2a9d (Add Function Docs, Update Vague Readme Instructions (For Windows))
@@ -55,10 +56,13 @@ class TranscriptAnonymizer:
         # if not self.secret_key:
         #     raise RuntimeError("PHI_PSEUDONYM_KEY environment variable not set.") # putting this here for now as a 'safeguard' but need to have response behavior if this ever fails -> anonmyzation won't run but then we gotta be extra secure w/ the transript
 >>>>>>> 99c39cf (PR Comments)
+=======
+>>>>>>> b78fd73 (PR Comments)
         self.analyzer = AnalyzerEngine()
         self.anonymizer = AnonymizerEngine()
         self.entity_operators = self._create_anonymized_entity_operators()
     
+<<<<<<< HEAD
 <<<<<<< HEAD
     def _create_anonymized_entity_operators(self):
         """
@@ -116,6 +120,8 @@ class TranscriptAnonymizer:
         except (ValueError, TypeError):
             return "<AGE>"
 
+=======
+>>>>>>> b78fd73 (PR Comments)
     def _create_anonymized_entity_operators(self):
 <<<<<<< HEAD
 >>>>>>> 3eb8813 (Implement Transcript Anonymization Code in Audio Pipeline (Working))
@@ -156,12 +162,6 @@ class TranscriptAnonymizer:
         ]}
 =======
         ENTITY_OPERATORS = {
-            # "PERSON": OperatorConfig("custom", {
-            #     "lambda": lambda x: self._pseudonymize(x, "PERSON") Uncomment if we want to reversible anonymization
-            # }),
-            # "AGE": OperatorConfig("custom", {
-            #     "lambda": lambda x: self._age_anonymizer(x)
-            # }),
             "DATE_TIME": OperatorConfig("replace", {"new_value": "<ANON>"}),
             "PERSON": OperatorConfig("replace", {"new_value": "<ANON>"}),
             "AGE": OperatorConfig("replace", {"new_value": "<ANON>"}),
