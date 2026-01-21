@@ -81,14 +81,6 @@ def show_camera():
     else:
         print("Error: Unable to open camera")
 
-<<<<<<< HEAD
-
-if __name__ == "__main__":
-    show_camera()
-
-
-=======
->>>>>>> 023d10a (Scrum 186 add image capture to directory (#23))
 async def run_show_camera():
     show_camera()
         

@@ -5,12 +5,6 @@ This file is meant to be runnable directly (e.g. press **Run** in VS Code):
 
 It executes the full video pipeline using `config/video_settings.py`.
 """
-<<<<<<< HEAD
-
-from __future__ import annotations
-from src_video.services.camera_capture_service.capture_img import run_show_camera
-=======
->>>>>>> 023d10a (Scrum 186 add image capture to directory (#23))
 from pathlib import Path
 import sys
 from __future__ import annotations
@@ -19,10 +13,6 @@ from src_video.services.camera_capture_service.capture_img import run_show_camer
 from src_video.services.detection_service.detect_body_parts import run_detection
 from src_video.services.classification_service.infer_injuries_on_crops import (predict_injuries_on_detection_crops,)
 from src_video.services.deidentification_service.deidentify import run_deidentification
-<<<<<<< HEAD
-from src_video.services.camera_capture_service.capture_img import run_show_camera
-=======
->>>>>>> 023d10a (Scrum 186 add image capture to directory (#23))
 
 def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")

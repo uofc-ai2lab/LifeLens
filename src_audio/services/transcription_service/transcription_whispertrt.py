@@ -5,15 +5,7 @@ import pandas as pd
 import soundfile as sf
 from src_audio.domain.constants import bcolors
 from src_audio.utils.export_to_csv import export_to_csv
-<<<<<<< HEAD
-<<<<<<< HEAD
 from config.audio_settings import (
-=======
-from config.settings import (
->>>>>>> 63b642c (SCRUM-175 Split up data folder into processed and unprocessed. Transcription now only takes all files from processed folder if AUDIO_FILES env variable is empty. (#25))
-=======
-from config.audio_settings import (
->>>>>>> 023d10a (Scrum 186 add image capture to directory (#23))
     AUDIO_FILES_LIST,
     IS_JETSON,
     MODEL_SIZE,
@@ -22,7 +14,7 @@ from config.audio_settings import (
     DATA_DIR,
 )
 # extra config needed for speaker diarization - unused otherwise
-# from config.audio_settings import USE_OFFLINE_MODELS, PYANNOTE_CACHE_DIR, HUGGING_FACE_TOKEN, DEVICE
+# from config.settings import USE_OFFLINE_MODELS, PYANNOTE_CACHE_DIR, HUGGING_FACE_TOKEN, DEVICE
 # from download_pyannote import download_pyannote_models
 # from pyannote.audio import Pipeline
 
@@ -163,8 +155,6 @@ async def transcribe_audio(audio_file: str, model):
         traceback.print_exc()
         raise
 
-<<<<<<< HEAD
-=======
 async def move_file_to_processed(audio_file: Path):
     """Move processed audio file to 'processed' subdirectory"""
     processed_dir = DATA_DIR / "audio_files" / "processed"
@@ -317,7 +307,6 @@ async def move_file_to_processed(audio_file: Path):
 
 #     return result
 
->>>>>>> 63b642c (SCRUM-175 Split up data folder into processed and unprocessed. Transcription now only takes all files from processed folder if AUDIO_FILES env variable is empty. (#25))
 async def run_transcription():
     print_formatting("title", "TRANSCRIPTION PIPELINE")
     

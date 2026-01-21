@@ -38,8 +38,6 @@ def run_anonymization(transcript_path: str, anonymizer: TranscriptAnonymizer) ->
     )
 
 async def run_anonymization_service():
-<<<<<<< HEAD
-<<<<<<< HEAD
     """
     Async wrapper to run the transcript anonymization script
     
@@ -48,24 +46,6 @@ async def run_anonymization_service():
     
     Returns: 
         None
-=======
-    """Async wrapper to run the transcript anonymization script
-=======
-    """
-    Async wrapper to run the transcript anonymization script
->>>>>>> b7d2a9d (Add Function Docs, Update Vague Readme Instructions (For Windows))
-    
-    Args: 
-        None
-    
-<<<<<<< HEAD
-    Returns: None
-    # will implement this
->>>>>>> 3eb8813 (Implement Transcript Anonymization Code in Audio Pipeline (Working))
-=======
-    Returns: 
-        None
->>>>>>> b7d2a9d (Add Function Docs, Update Vague Readme Instructions (For Windows))
     """
     anonymizer = TranscriptAnonymizer()
     for transcript in TRANSCRIPT_FILES_LIST:
