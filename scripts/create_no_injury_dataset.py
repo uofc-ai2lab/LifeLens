@@ -27,7 +27,21 @@ import random
 import shutil
 from collections import defaultdict
 from pathlib import Path
+import sys
 from typing import Dict, List
+
+
+# Ensure repo root is on sys.path so `import config...` works even when running:
+#   python scripts/create_no_injury_dataset.py
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from config.video_settings import VIDEO_OUTPUT_DIR, VIDEO_SOURCE_DIR  # noqa: E402
+
+
+DEFAULT_CROPS_ROOT = VIDEO_OUTPUT_DIR / "DetectionOutput" / "crops"
+DEFAULT_OUTPUT_DIR = VIDEO_SOURCE_DIR / "Images" / "Wound_dataset" / "no_injury"
 
 
 def _collect_crops_by_source(crops_root: str) -> Dict[str, List[Path]]:
@@ -109,13 +123,13 @@ def _parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--crops-root",
-        default="data/video/output_files/DetectionOutput/crops",
-        help="Path to detection crops directory",
+        default=str(DEFAULT_CROPS_ROOT),
+        help="Path to detection crops directory (default: derived from config/video_settings.py)",
     )
     p.add_argument(
         "--output-dir",
-        default="data/video/source_files/Images/Wound_dataset/no_injury",
-        help="Output directory for no_injury class (training set)",
+        default=str(DEFAULT_OUTPUT_DIR),
+        help="Output directory for no_injury class (training set) (default: derived from config/video_settings.py)",
     )
     p.add_argument(
         "--train-ratio",
