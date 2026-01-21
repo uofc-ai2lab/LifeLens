@@ -9,6 +9,7 @@ It executes the full video pipeline using `config/video_settings.py`.
 import argparse
 from pathlib import Path
 import sys
+import asyncio
 from config.video_settings import load_video_pipeline_settings
 from src_video.services.camera_capture_service.capture_img import run_show_camera
 from src_video.services.detection_service.detect_body_parts import run_detection
@@ -33,11 +34,16 @@ async def main() -> int:
     settings = load_video_pipeline_settings()
 
     if args.service == "detect_marker":
+        print("running marker detection")
         await run_marker_detection()
+        return 0
+    elif args.service == "camera":
+        print("in camera service")
+        await run_show_camera()
         return 0
     
     # else run full pipeline
-    await run_show_camera()
+    print("running full pipeline...")
 
     detection_output = Path(settings["DETECTION_OUTPUT"])
     crops_root = Path(settings["CROPS_ROOT"])
@@ -138,4 +144,4 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(asyncio.run(main()))
