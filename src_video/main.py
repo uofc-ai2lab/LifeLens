@@ -5,25 +5,14 @@ This file is meant to be runnable directly (e.g. press **Run** in VS Code):
 
 It executes the full video pipeline using `config/video_settings.py`.
 """
-
-from __future__ import annotations
-from src_video.services.camera_capture_service.capture_img import run_show_camera
 from pathlib import Path
 import sys
-
-# Allow running as a script (e.g. `python src_video/main.py`) without requiring
-# package/module invocation.
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
+from __future__ import annotations
 from config.video_settings import load_video_pipeline_settings
-from src_video.services.detection_service.detect_body_parts import run_detection
-from src_video.services.classification_service.infer_injuries_on_crops import (
-    predict_injuries_on_detection_crops,
-)
-from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.camera_capture_service.capture_img import run_show_camera
+from src_video.services.detection_service.detect_body_parts import run_detection
+from src_video.services.classification_service.infer_injuries_on_crops import (predict_injuries_on_detection_crops,)
+from src_video.services.deidentification_service.deidentify import run_deidentification
 
 def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")

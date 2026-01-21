@@ -81,11 +81,6 @@ def show_camera():
     else:
         print("Error: Unable to open camera")
 
-
-if __name__ == "__main__":
-    show_camera()
-
-
 async def run_show_camera():
     show_camera()
         
