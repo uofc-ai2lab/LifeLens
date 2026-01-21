@@ -6,10 +6,14 @@ import soundfile as sf
 from src_audio.domain.constants import bcolors
 from src_audio.utils.export_to_csv import export_to_csv
 <<<<<<< HEAD
+<<<<<<< HEAD
 from config.audio_settings import (
 =======
 from config.settings import (
 >>>>>>> 63b642c (SCRUM-175 Split up data folder into processed and unprocessed. Transcription now only takes all files from processed folder if AUDIO_FILES env variable is empty. (#25))
+=======
+from config.audio_settings import (
+>>>>>>> 023d10a (Scrum 186 add image capture to directory (#23))
     AUDIO_FILES_LIST,
     IS_JETSON,
     MODEL_SIZE,
