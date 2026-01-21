@@ -25,6 +25,37 @@ VIDEO_OUTPUT_DIR = VIDEO_DIR / "output_files"
 IMAGE_SAVE_DIR = VIDEO_DIR / "saved_imgs"
 os.makedirs(IMAGE_SAVE_DIR, exist_ok=True)
 
+# april tag detection
+
+# Tag Detection Settings
+TAG_SIZE = float(os.getenv('TAG_SIZE', '0.025'))  # Tag size in meters
+TAG_FAMILY = os.getenv('TAG_FAMILY', 'tag16h5')
+
+# Parse TARGET_TAG_IDS (empty string or comma-separated list)
+_target_ids = os.getenv('TARGET_TAG_IDS', '')
+if _target_ids.strip():
+    TARGET_TAG_IDS = [int(x.strip()) for x in _target_ids.split(',')]
+else:
+    TARGET_TAG_IDS = None  # Detect all tags
+
+# Camera Settings (for gstreamer pipeline)
+CAPTURE_WIDTH = int(os.getenv('CAPTURE_WIDTH', '1920'))
+CAPTURE_HEIGHT = int(os.getenv('CAPTURE_HEIGHT', '1080'))
+DISPLAY_WIDTH = int(os.getenv('DISPLAY_WIDTH', '960'))
+DISPLAY_HEIGHT = int(os.getenv('DISPLAY_HEIGHT', '540'))
+
+# Camera Calibration Parameters (for distance estimation)
+CAMERA_PARAMS = [
+    float(os.getenv('CAMERA_FX', '1225.0')),  # fx
+    float(os.getenv('CAMERA_FY', '1225.0')),  # fy
+    float(os.getenv('CAMERA_CX', '960.0')),   # cx
+    float(os.getenv('CAMERA_CY', '540.0'))    # cy
+]
+
+# performance settings for april tags
+NTHREADS = int(os.getenv('NTHREADS', '4'))
+QUAD_DECIMATE = float(os.getenv('QUAD_DECIMATE', '2.0'))
+
 def _env_bool(name: str, default: bool) -> bool:
     raw = os.getenv(name)
     if raw is None:
@@ -83,6 +114,7 @@ def load_video_pipeline_settings() -> dict:
     annotated_dir = detection_output_path / "annotated"
     vis_dir = detection_output_path / "vis"
 
+
     return {
         "DETECTION_SOURCE": os.getenv("PIPELINE_DETECTION_SOURCE", str(VIDEO_SOURCE_DIR)).replace("\\", "/"),
         "PIPELINE_ROOT": pipeline_root,
@@ -121,5 +153,5 @@ def load_video_pipeline_settings() -> dict:
         # Crop filename parsing
         # Crops are named like: <origstem>_<body_part>_<idx>.jpg
         # This controls which token is interpreted as body-part label.
-        "BODY_PART_LABEL_POSITION": _env_int("PIPELINE_BODY_PART_LABEL_POSITION", -2),
+        "BODY_PART_LABEL_POSITION": _env_int("PIPELINE_BODY_PART_LABEL_POSITION", -2)
     }

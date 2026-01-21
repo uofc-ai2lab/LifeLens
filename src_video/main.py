@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Video pipeline entrypoint.
 
 This file is meant to be runnable directly (e.g. press **Run** in VS Code):
@@ -5,22 +6,38 @@ This file is meant to be runnable directly (e.g. press **Run** in VS Code):
 
 It executes the full video pipeline using `config/video_settings.py`.
 """
+import argparse
 from pathlib import Path
 import sys
-from __future__ import annotations
 from config.video_settings import load_video_pipeline_settings
 from src_video.services.camera_capture_service.capture_img import run_show_camera
 from src_video.services.detection_service.detect_body_parts import run_detection
 from src_video.services.classification_service.infer_injuries_on_crops import (predict_injuries_on_detection_crops,)
 from src_video.services.deidentification_service.deidentify import run_deidentification
+from src_video.services.detect_marker_service.detect_marker import run_marker_detection
 
 def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")
 
 
-def main() -> int:
+async def main() -> int:
+    parser = argparse.ArgumentParser(description="Run microservices")
+    parser.add_argument(
+        "service",
+        nargs="?",
+        type=str,
+        choices=["camera", "detect_marker"],
+        default=None
+    )
+    args = parser.parse_args()
     settings = load_video_pipeline_settings()
-    run_show_camera()
+
+    if args.service == "detect_marker":
+        await run_marker_detection()
+        return 0
+    
+    # else run full pipeline
+    await run_show_camera()
 
     detection_output = Path(settings["DETECTION_OUTPUT"])
     crops_root = Path(settings["CROPS_ROOT"])
