@@ -113,7 +113,7 @@ If operating on a jetson-nano, also install jetson-specific dependencies:
 pip install -r requirements-jetson.txt
 ```
 
-###  Download MedCAT Model (One-Time Setup)
+###  Download MedCAT Model (One-Time Setup) - for Medication Intervention
 To keep setup simple and cross-platform, we provide a Python script that:
 - Creates the required data directory
 - Downloads the MedCAT model
@@ -124,11 +124,9 @@ From the project root, run the setup script:
 python -m scripts.setup_medcat
 ```
 
-## Depenedencies for video pipeline:
-Dataset for training classifier:
-Download the `wounds_dataset` (Classification)
+### Download Dataset for Training Classifier
+Download the `wounds_dataset` (Classification) from Kaggle:
 
-Download the dataset from Kaggle:
 https://www.kaggle.com/datasets/yasinpratomo/wound-dataset?resource=download
 
 Extract the downloaded folder so the images end up at:
@@ -143,11 +141,15 @@ data/video/source_files/Images/Wound_dataset/
   Stab_wound/
   Normal skin/
 ```
-Note that imageSamples is a subset of this dataset
+Note that ImageSamples is a subset of this dataset
 
 
-Dataset for object detection:
-Image set link: https://github.com/xiaojie1017/Human-Parts Object detection link: https://huggingface.co/MnLgt/yolo-human-parse/tree/main Dataset Assets (Priv_personpart):
+### Download Dataset for Object Detection
+Image set link: https://github.com/xiaojie1017/Human-Parts 
+
+Object detection link: https://huggingface.co/MnLgt/yolo-human-parse/tree/main 
+
+Dataset Assets (Priv_personpart):
 
 ## .ENV Setup
 
@@ -197,7 +199,7 @@ All files are named in the format: `"{timestamp}_{service}_{input_filename}.csv"
 - The `service` here is either `medX`, `intervention`,`semantic`, or `output` (the combined output file)
 - The `input_filename` is whatever audio file was transcribed or transcription file was processed.
 
-## Running AUDIO Services (Pipeline)
+## Running Audio Services (Pipeline)
 
 ### Run All Audio Services
 
@@ -276,7 +278,7 @@ Create your local `.env` in the repo root (as described above) and set at minimu
 Run the full video pipeline (no arguments) from the **root folder**:
 
 ```sh
-python src_video/main.py
+python -m src_video.main
 ```
 
 This will run:

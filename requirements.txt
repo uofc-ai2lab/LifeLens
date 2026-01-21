@@ -49,3 +49,5 @@ tqdm>=4.65.0
 scikit-image==0.19.3
 imageio>=2.25
 imageio-ffmpeg>=0.4.6
+ultralytics
+timm

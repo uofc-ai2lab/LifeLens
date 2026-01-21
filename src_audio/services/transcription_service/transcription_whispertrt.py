@@ -5,7 +5,7 @@ import pandas as pd
 import soundfile as sf
 from src_audio.domain.constants import bcolors
 from src_audio.utils.export_to_csv import export_to_csv
-from config.settings import (
+from config.audio_settings import (
     AUDIO_FILES_LIST,
     IS_JETSON,
     MODEL_SIZE,

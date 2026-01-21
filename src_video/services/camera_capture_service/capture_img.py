@@ -3,16 +3,15 @@
 
 import cv2
 import os
+import time 
+from config.video_settings import IMAGE_SAVE_DIR
+
 """ 
 gstreamer_pipeline returns a GStreamer pipeline for capturing from the CSI camera
 Flip the image by setting the flip_method (most common values: 0 and 2)
 display_width and display_height determine the size of each camera pane in the window on the screen
 Default 1920x1080 displayd in a 1/4 size window
 """
-
-script_dir = os.path.dirname(os.path.abspath(__file__))  
-save_dir = os.path.join(script_dir, "saved_imgs")
-os.makedirs(save_dir, exist_ok=True)
 
 def gstreamer_pipeline(
     sensor_id=0,
@@ -66,16 +65,22 @@ def show_camera():
                     break
                 #Save a snapshot of the video stream when on the 'e'
                 elif keyCode == ord('e'):
-                    timestamp = cv2.getTickCount()
-                    filename = os.path.join(save_dir, f"captured_img_{timestamp}.jpg")
-                    cv2.imwrite(filename, frame)
-                    print(f"Image saved as {filename}")
+                    num_snaps = 0 
+                    while num_snaps != 10:
+                        timestamp = cv2.getTickCount()
+                        filename = os.path.join(IMAGE_SAVE_DIR, f"captured_img_{timestamp}.jpg")
+                        cv2.imwrite(filename, frame)
+                        print(f"Image saved as {filename}")
+                        num_snaps += 1 
+                        time.sleep(2)
+
+
         finally:
             video_capture.release()
             cv2.destroyAllWindows()
     else:
         print("Error: Unable to open camera")
 
-
-if __name__ == "__main__":
+async def run_show_camera():
     show_camera()
+        

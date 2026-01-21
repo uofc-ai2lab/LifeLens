@@ -5,7 +5,7 @@ import spacy
 import re
 from src_audio.utils.export_to_csv import export_to_csv
 from src_audio.utils.load_csv_file import load_csv_file 
-from config.settings import TRANSCRIPT_FILES_LIST, MEANING_DIR, MODEL_PACK
+from config.audio_settings import TRANSCRIPT_FILES_LIST, MEANING_DIR, MODEL_PACK
 from src_audio.domain.constants import INTERVENTIONS, REPLACEMENTS, INTER_COLUMNS
 
 def normalize_text(text):

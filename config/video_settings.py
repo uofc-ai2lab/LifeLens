@@ -22,6 +22,8 @@ VIDEO_DIR = DATA_DIR / "video"
 VIDEO_SOURCE_DIR = VIDEO_DIR / "source_files"
 VIDEO_OUTPUT_DIR = VIDEO_DIR / "output_files"
 
+IMAGE_SAVE_DIR = VIDEO_DIR / "saved_imgs"
+os.makedirs(IMAGE_SAVE_DIR, exist_ok=True)
 
 def _env_bool(name: str, default: bool) -> bool:
     raw = os.getenv(name)
