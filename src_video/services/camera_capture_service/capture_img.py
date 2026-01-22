@@ -4,7 +4,14 @@
 import cv2
 import os
 import time 
-from config.video_settings import IMAGE_SAVE_DIR
+from config.video_settings import (
+    # Camera settings
+    CAPTURE_WIDTH,
+    CAPTURE_HEIGHT,
+    DISPLAY_WIDTH,
+    DISPLAY_HEIGHT,
+    IMAGE_SAVE_DIR,
+)
 
 """ 
 gstreamer_pipeline returns a GStreamer pipeline for capturing from the CSI camera
@@ -13,12 +20,13 @@ display_width and display_height determine the size of each camera pane in the w
 Default 1920x1080 displayd in a 1/4 size window
 """
 
+
 def gstreamer_pipeline(
     sensor_id=0,
-    capture_width=1920,
-    capture_height=1080,
-    display_width=960,
-    display_height=540,
+    capture_width=CAPTURE_WIDTH,
+    capture_height=CAPTURE_HEIGHT,
+    display_width=DISPLAY_WIDTH,
+    display_height=DISPLAY_HEIGHT,
     framerate=30,
     flip_method=0,
 ):
@@ -41,11 +49,23 @@ def gstreamer_pipeline(
     )
 
 
-def show_camera():
+def capture_images(video_capture, count=10, interval=2):
+    ret_val, frame = video_capture.read()
+
+    num_snaps = 0
+    while num_snaps != count:
+        timestamp = cv2.getTickCount()
+        filename = os.path.join(IMAGE_SAVE_DIR, f"captured_img_{timestamp}.jpg")
+        cv2.imwrite(filename, frame)
+        print(f"Image saved as {filename}")
+        num_snaps += 1
+        time.sleep(interval)
+
+
+def video_stream():
     window_title = "CSI Camera"
 
     # To flip the image, modify the flip_method parameter (0 and 2 are the most common)
-    print(gstreamer_pipeline(flip_method=0))
     video_capture = cv2.VideoCapture(gstreamer_pipeline(flip_method=0), cv2.CAP_GSTREAMER)
     if video_capture.isOpened():
         try:
@@ -63,17 +83,12 @@ def show_camera():
                 # Stop the program on the ESC key or 'q'
                 if keyCode == 27 or keyCode == ord('q'):
                     break
-                #Save a snapshot of the video stream when on the 'e'
+                # Save a snapshot of the video stream when on the 'e'
                 elif keyCode == ord('e'):
-                    num_snaps = 0 
-                    while num_snaps != 10:
-                        timestamp = cv2.getTickCount()
-                        filename = os.path.join(IMAGE_SAVE_DIR, f"captured_img_{timestamp}.jpg")
-                        cv2.imwrite(filename, frame)
-                        print(f"Image saved as {filename}")
-                        num_snaps += 1 
-                        time.sleep(2)
-
+                    try:
+                        capture_images(frame, count=10, interval=2)
+                    except Exception as e:
+                        print(f"Error saving image: {e}")
 
         finally:
             video_capture.release()
@@ -81,6 +96,4 @@ def show_camera():
     else:
         print("Error: Unable to open camera")
 
-async def run_show_camera():
-    show_camera()
-        
+    return video_capture

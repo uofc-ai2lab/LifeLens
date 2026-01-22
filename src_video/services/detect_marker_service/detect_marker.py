@@ -7,26 +7,24 @@ import cv2
 import numpy as np
 from pupil_apriltags import Detector
 import time
-import os
-import sys
 from src_video.domain.entities import AprilTagDetection
 from config.video_settings import (
     # tag settings
     TAG_FAMILY,
     TAG_SIZE,
     TARGET_TAG_IDS,
-    # Camera settings
-    CAPTURE_WIDTH,
-    CAPTURE_HEIGHT,
-    DISPLAY_WIDTH,
-    DISPLAY_HEIGHT,
     CAMERA_PARAMS,
     # Performance
     NTHREADS,
     QUAD_DECIMATE,
     # Image save directory
-    IMAGE_SAVE_DIR
-)  
+    IMAGE_SAVE_DIR,
+)
+from src_video.services.camera_capture_service.capture_img import (
+    gstreamer_pipeline,
+    capture_images,
+    video_stream,
+)
 
 COLOR_OUTLINE = (0, 255, 0)
 COLOR_CORNERS = (255, 0, 0)
@@ -51,38 +49,6 @@ at_detector = Detector(
     debug=0
 )
 print("AprilTag detector initialized successfully!")
-
-# ==================== GSTREAMER PIPELINE ====================
-
-def gstreamer_pipeline(
-    sensor_id=0,
-    capture_width=CAPTURE_WIDTH,
-    capture_height=CAPTURE_HEIGHT,
-    display_width=DISPLAY_WIDTH,
-    display_height=DISPLAY_HEIGHT,
-    framerate=30,
-    flip_method=0,
-):
-    """
-    GStreamer pipeline for CSI camera capture on Jetson
-    """
-    return (
-        "nvarguscamerasrc sensor-id=%d ! "
-        "video/x-raw(memory:NVMM), width=(int)%d, height=(int)%d, framerate=(fraction)%d/1 ! "
-        "nvvidconv flip-method=%d ! "
-        "video/x-raw, width=(int)%d, height=(int)%d, format=(string)BGRx ! "
-        "videoconvert ! "
-        "video/x-raw, format=(string)BGR ! appsink"
-        % (
-            sensor_id,
-            capture_width,
-            capture_height,
-            framerate,
-            flip_method,
-            display_width,
-            display_height,
-        )
-    )
 
 # ==================== DETECTION FUNCTIONS ====================
 
@@ -181,32 +147,10 @@ def print_tag_info(tags):
         print(f"  Hamming distance: {tag.hamming}")
         print("-" * 50)
 
-
-def capture_images(video_capture, count=10, interval=2):
-    """Capture multiple images at intervals and save to disk. Returns 0 on success, -1 on failure."""
-    print("\n[RECORDING] Capturing 10 frames at 2-second intervals...")
-    for i in range(count):
-        ret_val, record_frame = video_capture.read()
-        if ret_val:
-            tags_record = detect_apriltags(record_frame, show_visualization=True)
-            timestamp = int(time.time() * 1000)
-            filename = os.path.join(
-                IMAGE_SAVE_DIR, f"marker_record_{timestamp}_{i}.jpg"
-            )
-            cv2.imwrite(filename, record_frame)
-            print(f"  [{i+1}/10] Saved: {filename} (Tags: {len(tags_record)})")
-            time.sleep(interval)
-        else:
-            print(f"  [{i+1}/10] Failed to capture frame")
-            return -1
-    print("[RECORDING] Complete!")
-    return 0
-
-
 # ==================== MAIN SERVICE ====================
 
 
-async def run_marker_detection():
+async def run_marker_detection() -> bool:
     """Main detection service"""
     window_title = "AprilTag Marker Detection Service"
 
@@ -216,14 +160,12 @@ async def run_marker_detection():
     print(f"Tag Family: {TAG_FAMILY}")
     print(f"Tag Size: {TAG_SIZE * 100}cm")
     print(f"Target IDs: {'All tags' if TARGET_TAG_IDS is None else TARGET_TAG_IDS}")
-    print(f"Resolution: {CAPTURE_WIDTH}x{CAPTURE_HEIGHT} → {DISPLAY_WIDTH}x{DISPLAY_HEIGHT}")
     print(f"Save Directory: {IMAGE_SAVE_DIR}")
     print(f"Threads: {NTHREADS}, Quad Decimate: {QUAD_DECIMATE}")
     print("\nControls:")
     print("  'q' or ESC  - Quit")
     print("  'e'         - Save current frame (single)")
     print("  'r'         - Record 10 frames (2s intervals)")
-    print("  's'         - Toggle visualization")
     print("  'i'         - Toggle info printing")
     print("=" * 60 + "\n")
 
@@ -231,7 +173,7 @@ async def run_marker_detection():
     pipeline = gstreamer_pipeline()
     print(f"GStreamer Pipeline:\n{pipeline}\n")
 
-    video_capture = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
+    video_capture = video_stream()
 
     if not video_capture.isOpened():
         print("ERROR: Unable to open camera!")
@@ -257,7 +199,7 @@ async def run_marker_detection():
         while True:
             if DETECTED_TAG:
                 # take photos, pause detection, call next service
-                capture_images(video_capture, count=10, interval=2)
+                capture_images(count=10, interval=2)
                 detect_tags: list[AprilTagDetection] = []
                 for tag in tags:
                     detect_tags.append(
@@ -331,18 +273,6 @@ async def run_marker_detection():
                 print("\nQuitting...")
                 break
 
-            elif keyCode == ord('e'):  # Save single frame
-                timestamp = int(time.time() * 1000)
-                filename = os.path.join(IMAGE_SAVE_DIR, f"marker_detection_{timestamp}.jpg")
-                cv2.imwrite(filename, frame)
-                print(f"\n[SAVED] Image saved: {filename}")
-
-            elif keyCode == ord("r"):  # Record 10
-                captured_images = capture_images(video_capture, count=10, interval=2)
-                if captured_images == -1:
-                    print("ERROR: Failed to record images.")
-                    break
-
             elif keyCode == ord('s'):  # Toggle visualization
                 show_visualization = not show_visualization
                 status = "ON" if show_visualization else "OFF"
@@ -367,6 +297,4 @@ async def run_marker_detection():
         print("\n" + "=" * 60)
         print("Camera stopped. Service terminated.")
         print("=" * 60)
-
-        # if detected tag, then call next service
-        # TODO: what service call? Change shared boolean value?
+        return DETECTED_TAG

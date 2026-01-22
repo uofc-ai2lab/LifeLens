@@ -11,11 +11,14 @@ from pathlib import Path
 import sys
 import asyncio
 from config.video_settings import load_video_pipeline_settings
-from src_video.services.camera_capture_service.capture_img import run_show_camera
 from src_video.services.detection_service.detect_body_parts import run_detection
 from src_video.services.classification_service.infer_injuries_on_crops import (predict_injuries_on_detection_crops,)
 from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.detect_marker_service.detect_marker import run_marker_detection
+from src_video.services.camera_capture_service.capture_img import (
+    video_stream,
+    capture_images,
+)
 
 def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")
@@ -32,16 +35,16 @@ async def main() -> int:
     )
     args = parser.parse_args()
     settings = load_video_pipeline_settings()
+    detected_tag = False
+
+    video_capture = video_stream()
+    detected_tag = await run_marker_detection()
+    if detected_tag:
+        capture_images(video_capture, count=1)
 
     if args.service == "detect_marker":
         print("running marker detection")
-        await run_marker_detection()
-        return 0
-    elif args.service == "camera":
-        print("in camera service")
-        await run_show_camera()
-        return 0
-    
+
     # else run full pipeline
     print("running full pipeline...")
 
