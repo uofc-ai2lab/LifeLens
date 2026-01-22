@@ -9,6 +9,7 @@ from pupil_apriltags import Detector
 import time
 import os
 import sys
+from src_video.domain.entities import AprilTagDetection
 from config.video_settings import (
     # tag settings
     TAG_FAMILY,
@@ -159,7 +160,7 @@ def print_tag_info(tags):
     """Print detailed information about detected tags"""
     if not tags:
         return
-    
+
     print("\n" + "=" * 50)
     for tag in tags:
         print(f"[DETECTED] Tag ID: {tag.tag_id}")
@@ -167,25 +168,48 @@ def print_tag_info(tags):
         print(f"  Corners:")
         for i, corner in enumerate(tag.corners):
             print(f"    Corner {i}: ({corner[0]:.1f}, {corner[1]:.1f})")
-        
+
         if tag.pose_t is not None:
             distance = np.linalg.norm(tag.pose_t) * 100
             print(f"  Distance: {distance:.1f} cm")
             print(f"  Translation (x, y, z): ({tag.pose_t[0][0]:.3f}, {tag.pose_t[1][0]:.3f}, {tag.pose_t[2][0]:.3f})")
-        
+
         if tag.pose_R is not None:
             print(f"  Rotation matrix available: Yes")
-        
+
         print(f"  Decision margin: {tag.decision_margin:.2f}")
         print(f"  Hamming distance: {tag.hamming}")
         print("-" * 50)
 
+
+def capture_images(video_capture, count=10, interval=2):
+    """Capture multiple images at intervals and save to disk. Returns 0 on success, -1 on failure."""
+    print("\n[RECORDING] Capturing 10 frames at 2-second intervals...")
+    for i in range(count):
+        ret_val, record_frame = video_capture.read()
+        if ret_val:
+            tags_record = detect_apriltags(record_frame, show_visualization=True)
+            timestamp = int(time.time() * 1000)
+            filename = os.path.join(
+                IMAGE_SAVE_DIR, f"marker_record_{timestamp}_{i}.jpg"
+            )
+            cv2.imwrite(filename, record_frame)
+            print(f"  [{i+1}/10] Saved: {filename} (Tags: {len(tags_record)})")
+            time.sleep(interval)
+        else:
+            print(f"  [{i+1}/10] Failed to capture frame")
+            return -1
+    print("[RECORDING] Complete!")
+    return 0
+
+
 # ==================== MAIN SERVICE ====================
+
 
 async def run_marker_detection():
     """Main detection service"""
     window_title = "AprilTag Marker Detection Service"
-    
+
     print("\n" + "=" * 60)
     print("APRILTAG MARKER DETECTION SERVICE")
     print("=" * 60)
@@ -202,13 +226,13 @@ async def run_marker_detection():
     print("  's'         - Toggle visualization")
     print("  'i'         - Toggle info printing")
     print("=" * 60 + "\n")
-    
+
     # Initialize camera using GStreamer pipeline
     pipeline = gstreamer_pipeline()
     print(f"GStreamer Pipeline:\n{pipeline}\n")
-    
+
     video_capture = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
-    
+
     if not video_capture.isOpened():
         print("ERROR: Unable to open camera!")
         print("Please check:")
@@ -216,10 +240,10 @@ async def run_marker_detection():
         print("  2. GStreamer is installed")
         print("  3. nvarguscamerasrc is available")
         return
-    
+
     try:
         window_handle = cv2.namedWindow(window_title, cv2.WINDOW_AUTOSIZE)
-        
+
         # State variables
         frame_count = 0
         start_time = time.time()
@@ -227,39 +251,55 @@ async def run_marker_detection():
         show_visualization = True
         print_info = True
         DETECTED_TAG = False
-        
+
         print("Camera started successfully! Detecting markers...\n")
-        
+
         while True:
             if DETECTED_TAG:
-                # take photo, pause detection, call next service
-                timestamp = int(time.time() * 1000)
-                filename = os.path.join(IMAGE_SAVE_DIR, f"marker_detection_{timestamp}.jpg")
-                cv2.imwrite(filename, frame)
-                print(f"\n[SAVED] Image saved: {filename}")
-                time.sleep(5)
+                # take photos, pause detection, call next service
+                capture_images(video_capture, count=10, interval=2)
+                detect_tags: list[AprilTagDetection] = []
+                for tag in tags:
+                    detect_tags.append(
+                        AprilTagDetection(
+                            tag_id=tag.tag_id,
+                            center_x=tag.center[0],
+                            center_y=tag.center[1],
+                            corners=[(corner[0], corner[1]) for corner in tag.corners],
+                            distance=(
+                                np.linalg.norm(tag.pose_t)
+                                if tag.pose_t is not None
+                                else -1
+                            ),
+                            decision_margin=tag.decision_margin,
+                        )
+                    )
+
+                for dt in detect_tags:
+                    dt.print_info()
                 # pause
+                time.sleep(5)
                 break
 
             ret_val, frame = video_capture.read()
-            
+
             if not ret_val:
                 print("ERROR: Failed to grab frame")
                 break
-            
+
             # Detect AprilTags
             tags = detect_apriltags(frame, show_visualization=show_visualization)
-            
+
             # Filter by target IDs if specified
             if TARGET_TAG_IDS is not None:
                 tags = [tag for tag in tags if tag.tag_id in TARGET_TAG_IDS]
-            
+
             # Print detection information
             if tags and print_info:
                 # if we are here then we have detected tag!
                 DETECTED_TAG = True
                 print_tag_info(tags)
-            
+
             # Calculate FPS
             frame_count += 1
             elapsed = time.time() - start_time
@@ -269,7 +309,7 @@ async def run_marker_detection():
                     print(f"\n[PERFORMANCE] FPS: {fps:.1f}")
                 frame_count = 0
                 start_time = time.time()
-            
+
             # Draw FPS and tag count on frame
             cv2.putText(frame, f"FPS: {fps:.1f}", (10, 30),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, COLOR_TEXT, 2)
@@ -277,60 +317,50 @@ async def run_marker_detection():
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, COLOR_TEXT, 2)
             cv2.putText(frame, f"Viz: {'ON' if show_visualization else 'OFF'}", (10, 90),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, COLOR_TEXT, 2)
-            
+
             # Display frame
             if cv2.getWindowProperty(window_title, cv2.WND_PROP_AUTOSIZE) >= 0:
                 cv2.imshow(window_title, frame)
             else:
                 break
-            
+
             # Handle keyboard input
             keyCode = cv2.waitKey(10) & 0xFF
-            
+
             if keyCode == 27 or keyCode == ord('q'):  # ESC or 'q' to quit
                 print("\nQuitting...")
                 break
-            
+
             elif keyCode == ord('e'):  # Save single frame
                 timestamp = int(time.time() * 1000)
                 filename = os.path.join(IMAGE_SAVE_DIR, f"marker_detection_{timestamp}.jpg")
                 cv2.imwrite(filename, frame)
                 print(f"\n[SAVED] Image saved: {filename}")
-            
-            elif keyCode == ord('r'):  # Record 10 frames
-                print("\n[RECORDING] Capturing 10 frames at 2-second intervals...")
-                for i in range(10):
-                    ret_val, record_frame = video_capture.read()
-                    if ret_val:
-                        tags_record = detect_apriltags(record_frame, show_visualization=True)
-                        timestamp = int(time.time() * 1000)
-                        filename = os.path.join(IMAGE_SAVE_DIR, f"marker_record_{timestamp}_{i}.jpg")
-                        cv2.imwrite(filename, record_frame)
-                        print(f"  [{i+1}/10] Saved: {filename} (Tags: {len(tags_record)})")
-                        time.sleep(2)
-                    else:
-                        print(f"  [{i+1}/10] Failed to capture frame")
-                        break
-                print("[RECORDING] Complete!")
-            
+
+            elif keyCode == ord("r"):  # Record 10
+                captured_images = capture_images(video_capture, count=10, interval=2)
+                if captured_images == -1:
+                    print("ERROR: Failed to record images.")
+                    break
+
             elif keyCode == ord('s'):  # Toggle visualization
                 show_visualization = not show_visualization
                 status = "ON" if show_visualization else "OFF"
                 print(f"\n[TOGGLE] Visualization: {status}")
-            
+
             elif keyCode == ord('i'):  # Toggle info printing
                 print_info = not print_info
                 status = "ON" if print_info else "OFF"
                 print(f"\n[TOGGLE] Info printing: {status}")
-    
+
     except KeyboardInterrupt:
         print("\n\nInterrupted by user (Ctrl+C)")
-    
+
     except Exception as e:
         print(f"\n\nERROR: {e}")
         import traceback
         traceback.print_exc()
-    
+
     finally:
         video_capture.release()
         cv2.destroyAllWindows()
@@ -340,4 +370,3 @@ async def run_marker_detection():
 
         # if detected tag, then call next service
         # TODO: what service call? Change shared boolean value?
-
