@@ -55,9 +55,6 @@ imageio-ffmpeg>=0.4.6
 # ultralytics
 timm
 
-# detect AprilTag Marker
-pupil-apriltags>=1.0.4
-
 
 # Note: install WhisperTRT separately with:
 # cd /path/to/WhisperTRT && pip3 install -e .
