@@ -34,6 +34,8 @@ COLOR_TEXT = (0, 255, 255)
 COLOR_ID_TEXT = (0, 255, 0)
 COLOR_DISTANCE_TEXT = (255, 0, 0)
 
+MIN_DECISION_MARGIN = 20  # Adjust based on environment
+
 # ==================== APRILTAG DETECTOR ====================
 
 # Initialize AprilTag detector
@@ -104,6 +106,8 @@ def detect_apriltags(frame, show_visualization=True):
         camera_params=CAMERA_PARAMS,
         tag_size=TAG_SIZE
     )
+
+    tags = [tag for tag in tags if tag.decision_margin > MIN_DECISION_MARGIN]
     
     if show_visualization:
         draw_detections(frame, tags)
@@ -222,10 +226,21 @@ async def run_marker_detection():
         fps = 0.0
         show_visualization = True
         print_info = True
+        DETECTED_TAG = False
         
         print("Camera started successfully! Detecting markers...\n")
         
         while True:
+            if DETECTED_TAG:
+                # take photo, pause detection, call next service
+                timestamp = int(time.time() * 1000)
+                filename = os.path.join(IMAGE_SAVE_DIR, f"marker_detection_{timestamp}.jpg")
+                cv2.imwrite(filename, frame)
+                print(f"\n[SAVED] Image saved: {filename}")
+                time.sleep(5)
+                # pause
+                break
+
             ret_val, frame = video_capture.read()
             
             if not ret_val:
@@ -241,6 +256,8 @@ async def run_marker_detection():
             
             # Print detection information
             if tags and print_info:
+                # if we are here then we have detected tag!
+                DETECTED_TAG = True
                 print_tag_info(tags)
             
             # Calculate FPS
@@ -320,4 +337,7 @@ async def run_marker_detection():
         print("\n" + "=" * 60)
         print("Camera stopped. Service terminated.")
         print("=" * 60)
+
+        # if detected tag, then call next service
+        # TODO: what service call? Change shared boolean value?
 
