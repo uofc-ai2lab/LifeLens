@@ -56,6 +56,13 @@ async def main():
                 print("Anonymization failed:", e)
 
             try:
+                print("Starting anonymization...\n")
+                await run_anonymization_service()
+                print("Anonymization finished.\n")
+            except Exception as e:
+                print("Anonymization failed:", e)
+
+            try:
                 print("Starting medication extraction...\n")
                 await run_medication_extraction()
                 print("Medication extraction finished\n")

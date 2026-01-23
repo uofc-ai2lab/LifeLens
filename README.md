@@ -69,7 +69,7 @@ Once you have the expected output, create a **dedicated virtual environment**:
 
 Create venv (ensure you're using Python 3.11):
 ```bash
-python3.11 -m venv .venv
+python -m venv --system-site-packages .venv
 ```
 
 Activate on Windows:
