@@ -67,7 +67,7 @@ You are now ready to create and activate a virtual environment.
 ### Step 2: Setup Virtual Environment
 Once you have the expected output, create a **dedicated virtual environment**:
 
-Create venv (ensure you're using Python 3.11):
+Create venv (ensure you're using Python 3.11 if on laptop):
 ```bash
 python -m venv --system-site-packages .venv
 ```
