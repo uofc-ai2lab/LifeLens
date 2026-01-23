@@ -3,15 +3,14 @@
 
 import cv2
 import os
-import time 
-from config.video_settings import (
+from config.video_settings import IMAGE_SAVE_DIR
+from src_video.domain.constants import (
     # Camera settings
     CAPTURE_WIDTH,
     CAPTURE_HEIGHT,
     DISPLAY_WIDTH,
-    DISPLAY_HEIGHT,
-    IMAGE_SAVE_DIR,
-)
+    DISPLAY_HEIGHT
+    )
 
 """ 
 gstreamer_pipeline returns a GStreamer pipeline for capturing from the CSI camera

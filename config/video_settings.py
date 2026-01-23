@@ -25,14 +25,6 @@ VIDEO_OUTPUT_DIR = VIDEO_DIR / "output_files"
 SNAPSHOT_COUNT = int(os.getenv('SNAPSHOT_COUNT', '10'))  # number of snapshots to capture
 SNAPSHOT_INTERVAL = int(os.getenv('SNAPSHOT_INTERVAL', '2'))  # seconds between snapshots
 
-# camera colour annotations
-COLOR_OUTLINE = os.getenv('COLOR_OUTLINE', '(0, 255, 0)')
-COLOR_CORNERS = os.getenv('COLOR_CORNERS', '(255, 0, 0)')
-COLOR_CENTER = os.getenv('COLOR_CENTER', '(0, 0, 255)')
-COLOR_TEXT = os.getenv('COLOR_TEXT', '(0, 255, 255)')
-COLOR_ID_TEXT = os.getenv('COLOR_ID_TEXT', '(0, 255, 0)')
-COLOR_DISTANCE_TEXT = os.getenv('COLOR_DISTANCE_TEXT', '(255, 0, 0)')
-
 IMAGE_SAVE_DIR = VIDEO_DIR / "saved_imgs"
 os.makedirs(IMAGE_SAVE_DIR, exist_ok=True)
 
@@ -48,20 +40,6 @@ if _target_ids.strip():
     TARGET_TAG_IDS = [int(x.strip()) for x in _target_ids.split(',')]
 else:
     TARGET_TAG_IDS = None  # Detect all tags
-
-# Camera Settings (for gstreamer pipeline)
-CAPTURE_WIDTH = int(os.getenv('CAPTURE_WIDTH', '1920'))
-CAPTURE_HEIGHT = int(os.getenv('CAPTURE_HEIGHT', '1080'))
-DISPLAY_WIDTH = int(os.getenv('DISPLAY_WIDTH', '960'))
-DISPLAY_HEIGHT = int(os.getenv('DISPLAY_HEIGHT', '540'))
-
-# Camera Calibration Parameters (for distance estimation)
-CAMERA_PARAMS = [
-    float(os.getenv('CAMERA_FX', '1225.0')),  # fx
-    float(os.getenv('CAMERA_FY', '1225.0')),  # fy
-    float(os.getenv('CAMERA_CX', '960.0')),   # cx
-    float(os.getenv('CAMERA_CY', '540.0'))    # cy
-]
 
 # performance settings for april tags
 NTHREADS = int(os.getenv('NTHREADS', '4'))

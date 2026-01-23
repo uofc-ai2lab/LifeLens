@@ -11,12 +11,13 @@ import argparse
 from pathlib import Path
 import asyncio
 import cv2
-from config.video_settings import load_video_pipeline_settings, SNAPSHOT_COUNT, SNAPSHOT_INTERVAL, COLOR_TEXT
+from config.video_settings import load_video_pipeline_settings, SNAPSHOT_COUNT, SNAPSHOT_INTERVAL
 from src_video.services.detection_service.detect_body_parts import run_detection
 from src_video.services.classification_service.infer_injuries_on_crops import (predict_injuries_on_detection_crops,)
 from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
 from src_video.services.camera_capture_service.capture_img import gstreamer_pipeline, capture_images
+from src_video.domain.constants import COLOR_TEXT
 
 def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")
@@ -24,17 +25,8 @@ def _as_posix(path: str) -> str:
 IMAGE_COUNT = 10
 INTERVAL = 2
 
-async def main() -> int:
-    parser = argparse.ArgumentParser(description="Run microservices")
-    parser.add_argument(
-        "service",
-        nargs="?",
-        type=str,
-        choices=["camera", "detect_marker"],
-        default=None
-    )
 
-    args = parser.parse_args()
+async def main() -> int:
     settings = load_video_pipeline_settings()
 
     window_title = "CSI Camera"

@@ -12,18 +12,21 @@ from config.video_settings import (
     TAG_FAMILY,
     TAG_SIZE,
     TARGET_TAG_IDS,
-    CAMERA_PARAMS,
     # Performance
     NTHREADS,
     QUAD_DECIMATE,
+)
+
+# ==================== CONSTANTS ====================
+from src_video.domain.constants import (
     # Visualization colors
     COLOR_OUTLINE,
     COLOR_CORNERS,
     COLOR_CENTER,
     COLOR_ID_TEXT,
     COLOR_DISTANCE_TEXT,
+    CAMERA_PARAMS
 )
-
 MIN_DECISION_MARGIN = 20  # Adjust based on environment
 
 # ==================== APRILTAG DETECTOR ====================
