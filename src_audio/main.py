@@ -6,6 +6,7 @@ from src_audio.services.semantic_filtering_service.semantic_filtering import run
 from src_audio.services.anonymization_service.transcript_anonymization import run_anonymization_service
 from scripts.trim_audio import run_audio_trimming
 from src_audio.utils.metadata import setup_metadata, finalize_metadata
+from datetime import datetime
 
 async def main():
     """
@@ -21,9 +22,11 @@ async def main():
     )
     args = parser.parse_args()
     
+    start_time = datetime.now()
+    end_time = start_time
     await run_audio_trimming()
     setup_metadata()
-
+    
     try:
         if args.service == "transcribe":
             await run_transcription()
@@ -75,6 +78,16 @@ async def main():
                 
     finally:
         finalize_metadata()
+    
+    end_time = datetime.now()
+    
+    total_time = end_time - start_time
+    
+    total_seconds = int(total_time.total_seconds())
+    minutes, seconds = divmod(total_seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+
+    print(f"Complete pipeline time: {hours} hours, {minutes} minutes, and {seconds} seconds")
     
 if __name__ == "__main__":
     import asyncio

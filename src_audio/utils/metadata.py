@@ -167,12 +167,12 @@ def finalize_metadata():
         if not med_path.exists() or not inter_path.exists():
             continue
         
-        
+        med_df = pd.DataFrame()
+        inter_df = pd.DataFrame()
         try:
             med_df = pd.read_csv(med_path)
             if med_df.empty:
                 print(f"Warning: Medications CSV is empty → {med_path}")
-                med_df = pd.DataFrame()
         except Exception as e:
             print(f"ERROR: Failed to read Medications CSV at {med_path}: {e}")
             
@@ -180,25 +180,25 @@ def finalize_metadata():
             inter_df = pd.read_csv(inter_path)
             if inter_df.empty:
                 print(f"Warning: Interventions CSV is empty → {inter_path}")
-                inter_df = pd.DataFrame()
         except Exception as e:
             print(f"ERROR: Failed to read Interventions CSV at {inter_path}: {e}")
-            
+
         all_columns = []
         for col in INTER_COLUMNS + MED_COLUMNS:
             if col not in all_columns:
                 all_columns.append(col)
-                if col not in med_df:
-                    med_df[col] = None
-                if col not in inter_df:
-                    inter_df[col] = None
-
         
+        for df in [med_df, inter_df]:
+            for col in all_columns:
+                if col not in df.columns:
+                    df[col] = None  # Fill missing columns with None
+
+        # Now this is safe:
         combined_df = pd.concat(
             [med_df[all_columns], inter_df[all_columns]],
             ignore_index=True
         )
-
+        
         combined_df.sort_values("start_time", inplace=True, ignore_index=True)
 
         base_name = meta.chunk_audio_path or meta.transcript_path

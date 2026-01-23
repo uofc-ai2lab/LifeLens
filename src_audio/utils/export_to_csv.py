@@ -59,33 +59,49 @@ def export_to_csv(
     full_output_path = generate_export_filename(input_file_path, service)
     full_output_path.parent.mkdir(parents=True, exist_ok=True)
     
-    if data is None or (isinstance(data, list) and len(data) == 0):
+    # Determine columns for empty CSV
+    if columns:
+        cols_to_write = columns
+    elif isinstance(data, pd.DataFrame):
+        cols_to_write = data.columns.tolist()
+    elif isinstance(data, list) and len(data) > 0:
+        cols_to_write = list(data[0].keys())
+    else:
+        # No data → fallback to header parameter or empty list
+        cols_to_write = header or []
+    
+    # Warn if data is empty
+    if not data or (isinstance(data, list) and len(data) == 0) or (isinstance(data, pd.DataFrame) and data.empty):
         if not empty_ok:
             print(bcolors.FAIL + "ERROR: No data to export." + bcolors.ENDC)
             return
-        print(bcolors.WARNING + "WARNING: Exporting empty CSV." + bcolors.ENDC)
+        print(bcolors.WARNING + f"WARNING: Exporting empty CSV → {full_output_path}" + bcolors.ENDC)
     
     try:
         # Case 1: DataFrame
         if isinstance(data, pd.DataFrame):
+            # Ensure all requested columns exist
             if columns: 
+                for col in columns:
+                    if col not in data:
+                        data[col] = None
                 data = data[columns]
             data.to_csv(full_output_path, index=False)
             
         # Case 2: List[Dict]
         else:
             rows = _transform_row_fn(data, columns)
-            
-            if columns:
-                rows = [{k: r.get(k,"") for k in columns} for r in rows]
+            # Ensure all columns exist for empty rows
+            for r in rows:
+                for col in cols_to_write:
+                    if col not in r:
+                        r[col] = ""
             
             with full_output_path.open("w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                
-                if header:  writer.writerow(header)
-                elif rows:  writer.writerow(rows[0].keys())
-                
-                for row in rows:  writer.writerow(row.values())
+                writer.writerow(cols_to_write)  # always write header
+                for row in rows:
+                    writer.writerow([row.get(c, "") for c in cols_to_write])
                 
         print(bcolors.OKGREEN + f"CSV exported successfully -> {full_output_path.resolve()}" + bcolors.ENDC)
         
