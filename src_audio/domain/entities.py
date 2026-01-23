@@ -4,13 +4,14 @@ from pathlib import Path
 
 @dataclass
 class AudioFileMetaData:
-    audio_file: Optional[str] = None
-    transcript_filename: Optional[Path] = None
-    anonymization_filename: Optional[Path] = None
-    medication_filename: Optional[Path] = None
-    semantic_filename: Optional[Path] = None
-    intervention_filename: Optional[Path] = None
-    output_file: Optional[Path] = None
+    parent_audio_path: Optional[Path] = None
+    chunk_audio_path: Optional[Path] = None
+    transcript_path: Optional[Path] = None
+    anonymization_path: Optional[Path] = None
+    medication_path: Optional[Path] = None
+    semantic_path: Optional[Path] = None
+    intervention_path: Optional[Path] = None
+    output_path: Optional[Path] = None
     
 AUDIO_PIPELINE_METADATA: list[AudioFileMetaData] = []
 

@@ -1,6 +1,6 @@
 from pathlib import Path
 import sys
-from config.audio_settings import GENAI_CLIENT, GENAI_MODEL, MEANING_DIR, TRANSCRIPT_FILES_LIST
+from config.audio_settings import GENAI_CLIENT, GENAI_MODEL, TRANSCRIPT_FILES_LIST
 from google import genai
 from google.genai import types
 import json, time
@@ -88,8 +88,8 @@ async def run_semantic_filtering():
 
         export_to_csv(
             data=csv_rows,
-            output_path=MEANING_DIR,
-            input_filename=Path(input_transcript).name,
+            output_path=Path(input_transcript).parent,
+            input_file_path=Path(input_transcript),
             service="semantic",
             columns=["start_time", "end_time", "intervention"],
             empty_ok=True

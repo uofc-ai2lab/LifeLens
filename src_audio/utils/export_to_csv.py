@@ -35,8 +35,8 @@ def _transform_row_fn(data, columns):
 
 def export_to_csv(
     data: Union[List[Dict],pd.DataFrame],
-    output_path: str,
-    input_filename: str,
+    output_path: Path,
+    input_file_path: Path,
     service: str = "",
     columns: Optional[List[str]] = None,
     header: Optional[List[str]] = None,
@@ -56,10 +56,8 @@ def export_to_csv(
     - empty_ok: whether to write empty CSV if data is empty
     """
 
-    full_output_name = generate_export_filename(input_filename, service)
-    full_output_path=f"{output_path}/{full_output_name}"
-    os.makedirs(os.path.dirname(full_output_path), exist_ok=True)
-    
+    full_output_path = generate_export_filename(input_file_path, service)
+    full_output_path.parent.mkdir(parents=True, exist_ok=True)
     
     if data is None or (isinstance(data, list) and len(data) == 0):
         if not empty_ok:
@@ -81,14 +79,15 @@ def export_to_csv(
             if columns:
                 rows = [{k: r.get(k,"") for k in columns} for r in rows]
             
-            with open(full_output_path, "w", newline="", encoding="utf-8") as f:
+            with full_output_path.open("w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 
                 if header:  writer.writerow(header)
                 elif rows:  writer.writerow(rows[0].keys())
                 
-                for row in rows:    writer.writerow(row.values())
-        print(bcolors.OKGREEN + f"CSV exported successfully -> {os.path.abspath(full_output_path)}"+bcolors.ENDC)
+                for row in rows:  writer.writerow(row.values())
+                
+        print(bcolors.OKGREEN + f"CSV exported successfully -> {full_output_path.resolve()}" + bcolors.ENDC)
         
     except Exception as e:
         print(bcolors.FAIL + f"ERROR exporting CSV: {e}" + bcolors.ENDC)

@@ -1,5 +1,5 @@
 from pathlib import Path
-from config.audio_settings import TRANSCRIPT_FILES_LIST, MEANING_DIR
+from config.audio_settings import TRANSCRIPT_FILES_LIST
 from src_audio.utils.export_to_csv import export_to_csv
 from src_audio.utils.load_csv_file import load_csv_file 
 from src_audio.utils.calculate_mean import mean
@@ -165,8 +165,8 @@ def medication_extraction_pipeline(transcript_path: str, extractor: MedicationEx
 
     export_to_csv(
         data=rows,
-        output_path=MEANING_DIR,
-        input_filename=Path(transcript_path).name,
+        output_path=Path(transcript_path).parent,
+        input_file_path=Path(transcript_path),
         service="medX",
         columns=MED_COLUMNS,
         empty_ok=True,

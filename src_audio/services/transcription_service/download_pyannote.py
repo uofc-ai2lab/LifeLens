@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import Path
-from config.settings import HUGGING_FACE_TOKEN, PYANNOTE_CACHE_DIR
+from config.audio_settings import HUGGING_FACE_TOKEN, PYANNOTE_CACHE_DIR
 
 
 def download_models():

@@ -1,145 +1,22 @@
 [
   {
-    "audio_file": "2025-12-01 IMG_0278.mp3",
-    "transcript_filename": null,
-    "anonymization_filename": null,
-    "medication_filename": null,
-    "semantic_filename": null,
-    "intervention_filename": null,
-    "output_file": null
+    "parent_audio_path": "/Users/ishahaider/Desktop/uni/Capstone (ENEL500)/LifeLens/LifeLens/data/audio/processed_audio/trauma_simulation.mp3",
+    "chunk_audio_path": "/Users/ishahaider/Desktop/uni/Capstone (ENEL500)/LifeLens/LifeLens/data/audio/processed_audio/trauma_simulation/trauma_simulation_chunk_0/trauma_simulation_chunk_0.mp3",
+    "transcript_path": "/Users/ishahaider/Desktop/uni/Capstone (ENEL500)/LifeLens/LifeLens/data/audio/processed_audio/trauma_simulation/trauma_simulation_chunk_0/transcript_trauma_simulation_chunk_0.csv",
+    "anonymization_path": "/Users/ishahaider/Desktop/uni/Capstone (ENEL500)/LifeLens/LifeLens/data/audio/processed_audio/trauma_simulation/trauma_simulation_chunk_0/anonymization_trauma_simulation_chunk_0.csv",
+    "medication_path": "/Users/ishahaider/Desktop/uni/Capstone (ENEL500)/LifeLens/LifeLens/data/audio/processed_audio/trauma_simulation/trauma_simulation_chunk_0/medX_trauma_simulation_chunk_0.csv",
+    "semantic_path": null,
+    "intervention_path": "/Users/ishahaider/Desktop/uni/Capstone (ENEL500)/LifeLens/LifeLens/data/audio/processed_audio/trauma_simulation/trauma_simulation_chunk_0/intervention_trauma_simulation_chunk_0.csv",
+    "output_path": "/Users/ishahaider/Desktop/uni/Capstone (ENEL500)/LifeLens/LifeLens/data/audio/processed_audio/trauma_simulation/trauma_simulation_chunk_0/final_trauma_simulation_chunk_0.csv"
   },
   {
-    "audio_file": "2025-12-01 IMG_4505.mp3",
-    "transcript_filename": null,
-    "anonymization_filename": null,
-    "medication_filename": null,
-    "semantic_filename": null,
-    "intervention_filename": null,
-    "output_file": null
-  },
-  {
-    "audio_file": "2025-12-01 IMG_4507.mp3",
-    "transcript_filename": null,
-    "anonymization_filename": null,
-    "medication_filename": null,
-    "semantic_filename": null,
-    "intervention_filename": null,
-    "output_file": null
-  },
-  {
-    "audio_file": "2025-12-08 IMG_0308.mp3",
-    "transcript_filename": null,
-    "anonymization_filename": null,
-    "medication_filename": null,
-    "semantic_filename": null,
-    "intervention_filename": null,
-    "output_file": null
-  },
-  {
-    "audio_file": "2025-12-08 IMG_0310.mp3",
-    "transcript_filename": null,
-    "anonymization_filename": null,
-    "medication_filename": null,
-    "semantic_filename": null,
-    "intervention_filename": null,
-    "output_file": null
-  },
-  {
-    "audio_file": "2025-12-08 IMG_4535.mp3",
-    "transcript_filename": null,
-    "anonymization_filename": null,
-    "medication_filename": null,
-    "semantic_filename": null,
-    "intervention_filename": null,
-    "output_file": null
-  },
-  {
-    "audio_file": "2025-12-08 IMG_4536.mp3",
-    "transcript_filename": null,
-    "anonymization_filename": null,
-    "medication_filename": null,
-    "semantic_filename": null,
-    "intervention_filename": null,
-    "output_file": null
-  },
-  {
-    "audio_file": "2025-12-08 Interventions A-Z-01.mp3",
-    "transcript_filename": null,
-    "anonymization_filename": null,
-    "medication_filename": null,
-    "semantic_filename": null,
-    "intervention_filename": null,
-    "output_file": null
-  },
-  {
-    "audio_file": "2025-12-08 Interventions A-Z-02.mp3",
-    "transcript_filename": null,
-    "anonymization_filename": null,
-    "medication_filename": null,
-    "semantic_filename": null,
-    "intervention_filename": null,
-    "output_file": null
-  },
-  {
-    "audio_file": "call_268.mp3",
-    "transcript_filename": null,
-    "anonymization_filename": null,
-    "medication_filename": null,
-    "semantic_filename": null,
-    "intervention_filename": null,
-    "output_file": null
-  },
-  {
-    "audio_file": "HeartAttack5Minutes.wav",
-    "transcript_filename": null,
-    "anonymization_filename": null,
-    "medication_filename": null,
-    "semantic_filename": null,
-    "intervention_filename": null,
-    "output_file": null
-  },
-  {
-    "audio_file": "IMG_0286 (1).mp3",
-    "transcript_filename": null,
-    "anonymization_filename": null,
-    "medication_filename": null,
-    "semantic_filename": null,
-    "intervention_filename": null,
-    "output_file": null
-  },
-  {
-    "audio_file": "ShortParamedicClip.wav",
-    "transcript_filename": null,
-    "anonymization_filename": null,
-    "medication_filename": null,
-    "semantic_filename": null,
-    "intervention_filename": null,
-    "output_file": null
-  },
-  {
-    "audio_file": "trauma_simulation.mp3",
-    "transcript_filename": null,
-    "anonymization_filename": null,
-    "medication_filename": null,
-    "semantic_filename": null,
-    "intervention_filename": null,
-    "output_file": null
-  },
-  {
-    "audio_file": null,
-    "transcript_filename": "20260112_140413_transcript_trauma_simulation.csv",
-<<<<<<< HEAD
-<<<<<<< HEAD
-    "anonymization_filename": "20260119_155441_anonymization_20260112_140413_transcript_trauma_simulation.csv",
-=======
-    "anonymization_filename": "20260118_155903_anonymization_20260112_140413_transcript_trauma_simulation.csv",
->>>>>>> 3eb8813 (Implement Transcript Anonymization Code in Audio Pipeline (Working))
-=======
-    "anonymization_filename": "20260119_155441_anonymization_20260112_140413_transcript_trauma_simulation.csv",
->>>>>>> 99c39cf (PR Comments)
-    "medication_filename": null,
-    "semantic_filename": null,
-    "intervention_filename": null,
-    "output_file": null
+    "parent_audio_path": "/Users/ishahaider/Desktop/uni/Capstone (ENEL500)/LifeLens/LifeLens/data/audio/processed_audio/trauma_simulation.mp3",
+    "chunk_audio_path": "/Users/ishahaider/Desktop/uni/Capstone (ENEL500)/LifeLens/LifeLens/data/audio/processed_audio/trauma_simulation/trauma_simulation_chunk_1/trauma_simulation_chunk_1.mp3",
+    "transcript_path": "/Users/ishahaider/Desktop/uni/Capstone (ENEL500)/LifeLens/LifeLens/data/audio/processed_audio/trauma_simulation/trauma_simulation_chunk_1/transcript_trauma_simulation_chunk_1.csv",
+    "anonymization_path": "/Users/ishahaider/Desktop/uni/Capstone (ENEL500)/LifeLens/LifeLens/data/audio/processed_audio/trauma_simulation/trauma_simulation_chunk_1/anonymization_trauma_simulation_chunk_1.csv",
+    "medication_path": "/Users/ishahaider/Desktop/uni/Capstone (ENEL500)/LifeLens/LifeLens/data/audio/processed_audio/trauma_simulation/trauma_simulation_chunk_1/medX_trauma_simulation_chunk_1.csv",
+    "semantic_path": null,
+    "intervention_path": "/Users/ishahaider/Desktop/uni/Capstone (ENEL500)/LifeLens/LifeLens/data/audio/processed_audio/trauma_simulation/trauma_simulation_chunk_1/intervention_trauma_simulation_chunk_1.csv",
+    "output_path": "/Users/ishahaider/Desktop/uni/Capstone (ENEL500)/LifeLens/LifeLens/data/audio/processed_audio/trauma_simulation/trauma_simulation_chunk_1/final_trauma_simulation_chunk_1.csv"
   }
 ]
