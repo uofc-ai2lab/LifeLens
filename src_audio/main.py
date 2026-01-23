@@ -1,4 +1,5 @@
 import argparse
+from src_audio.services.audio_input_service.record import record_audio
 from src_audio.services.transcription_service.transcription_whispertrt import run_transcription
 from src_audio.services.medication_extraction_service.medication_extraction import run_medication_extraction
 from src_audio.services.intervention_extraction_service.intervention_extraction import run_intervention_extraction
@@ -15,7 +16,7 @@ async def main():
         "service",
         nargs="?",
         type=str,
-        choices=["transcribe", "meds", "inter", "sem", "anonymize"],
+        choices=["transcribe", "meds", "inter", "sem", "anonymize", "record"],
         default=None
     )
     args = parser.parse_args()
@@ -33,6 +34,8 @@ async def main():
             await run_semantic_filtering()
         elif args.service == "anonymize":
             await run_anonymization_service()
+        elif args.service == "record":
+            record_audio()
         else:  
             try:
                 print("Starting transcription...\n")
