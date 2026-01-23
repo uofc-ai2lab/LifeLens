@@ -9,10 +9,9 @@ It executes the full video pipeline using `config/video_settings.py`.
 """
 import argparse
 from pathlib import Path
-import sys
 import asyncio
 import cv2
-from config.video_settings import TARGET_TAG_IDS, load_video_pipeline_settings
+from config.video_settings import load_video_pipeline_settings, SNAPSHOT_COUNT, SNAPSHOT_INTERVAL, COLOR_TEXT
 from src_video.services.detection_service.detect_body_parts import run_detection
 from src_video.services.classification_service.infer_injuries_on_crops import (predict_injuries_on_detection_crops,)
 from src_video.services.deidentification_service.deidentify import run_deidentification
@@ -21,13 +20,6 @@ from src_video.services.camera_capture_service.capture_img import gstreamer_pipe
 
 def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")
-
-COLOR_OUTLINE = (0, 255, 0)
-COLOR_CORNERS = (255, 0, 0)
-COLOR_CENTER = (0, 0, 255)
-COLOR_TEXT = (0, 255, 255)
-COLOR_ID_TEXT = (0, 255, 0)
-COLOR_DISTANCE_TEXT = (255, 0, 0)
 
 IMAGE_COUNT = 10
 INTERVAL = 2
@@ -104,12 +96,12 @@ async def main() -> int:
                     print(f"[INFO] Tags detected? {DETECTED_TAG}. Continuing to monitor...\n")                       
                 # if we detect tags then we run capture image service
                 if DETECTED_TAG:
-                    if num_initial_snaps < IMAGE_COUNT and (last_snap_time == -1 or time.time() - last_snap_time >= INTERVAL):
+                    if num_initial_snaps < SNAPSHOT_COUNT and (last_snap_time == -1 or time.time() - last_snap_time >= SNAPSHOT_INTERVAL):
                         capture_images(video_capture)
                         num_initial_snaps += 1
                         last_snap_time = time.time()
-                    elif num_initial_snaps == IMAGE_COUNT:
-                        print(f"\n[INFO] Captured {IMAGE_COUNT} images. Exiting camera service.\n")
+                    elif num_initial_snaps == SNAPSHOT_COUNT:
+                        print(f"\n[INFO] Captured {SNAPSHOT_COUNT} images. Exiting camera service.\n")
                         break
         finally:
             video_capture.release()

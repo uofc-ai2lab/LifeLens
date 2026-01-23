@@ -6,7 +6,6 @@
 import cv2
 import numpy as np
 from pupil_apriltags import Detector
-import time
 from src_video.domain.entities import AprilTagDetection
 from config.video_settings import (
     # tag settings
@@ -17,21 +16,13 @@ from config.video_settings import (
     # Performance
     NTHREADS,
     QUAD_DECIMATE,
-    # Image save directory
-    IMAGE_SAVE_DIR,
+    # Visualization colors
+    COLOR_OUTLINE,
+    COLOR_CORNERS,
+    COLOR_CENTER,
+    COLOR_ID_TEXT,
+    COLOR_DISTANCE_TEXT,
 )
-from src_video.services.camera_capture_service.capture_img import (
-    gstreamer_pipeline,
-    capture_images,
-    video_stream,
-)
-
-COLOR_OUTLINE = (0, 255, 0)
-COLOR_CORNERS = (255, 0, 0)
-COLOR_CENTER = (0, 0, 255)
-COLOR_TEXT = (0, 255, 255)
-COLOR_ID_TEXT = (0, 255, 0)
-COLOR_DISTANCE_TEXT = (255, 0, 0)
 
 MIN_DECISION_MARGIN = 20  # Adjust based on environment
 
@@ -163,158 +154,7 @@ def print_tag_info(tags):
         print(f"  Hamming distance: {tag.hamming}")
         print("-" * 50)
 
-# # ==================== MAIN SERVICE ====================
 
-
-# async def run_marker_detection() -> bool:
-#     """Main detection service"""
-#     window_title = "AprilTag Marker Detection Service"
-
-#     print("\n" + "=" * 60)
-#     print("APRILTAG MARKER DETECTION SERVICE")
-#     print("=" * 60)
-#     print(f"Tag Family: {TAG_FAMILY}")
-#     print(f"Tag Size: {TAG_SIZE * 100}cm")
-#     print(f"Target IDs: {'All tags' if TARGET_TAG_IDS is None else TARGET_TAG_IDS}")
-#     print(f"Save Directory: {IMAGE_SAVE_DIR}")
-#     print(f"Threads: {NTHREADS}, Quad Decimate: {QUAD_DECIMATE}")
-#     print("\nControls:")
-#     print("  'q' or ESC  - Quit")
-#     print("  'e'         - Save current frame (single)")
-#     print("  'r'         - Record 10 frames (2s intervals)")
-#     print("  'i'         - Toggle info printing")
-#     print("=" * 60 + "\n")
-
-#     # Initialize camera using GStreamer pipeline
-#     pipeline = gstreamer_pipeline()
-#     print(f"GStreamer Pipeline:\n{pipeline}\n")
-
-#     video_capture = video_stream()
-
-#     if not video_capture.isOpened():
-#         print("ERROR: Unable to open camera!")
-#         print("Please check:")
-#         print("  1. Camera is properly connected")
-#         print("  2. GStreamer is installed")
-#         print("  3. nvarguscamerasrc is available")
-#         return
-
-#     try:
-#         window_handle = cv2.namedWindow(window_title, cv2.WINDOW_AUTOSIZE)
-
-#         # State variables
-#         frame_count = 0
-#         start_time = time.time()
-#         fps = 0.0
-#         show_visualization = True
-#         print_info = True
-#         DETECTED_TAG = False
-
-#         print("Camera started successfully! Detecting markers...\n")
-
-#         while True:
-#             if DETECTED_TAG:
-#                 # take photos, pause detection, call next service
-#                 capture_images(count=10, interval=2)
-#                 detect_tags: list[AprilTagDetection] = []
-#                 for tag in tags:
-#                     detect_tags.append(
-#                         AprilTagDetection(
-#                             tag_id=tag.tag_id,
-#                             center_x=tag.center[0],
-#                             center_y=tag.center[1],
-#                             corners=[(corner[0], corner[1]) for corner in tag.corners],
-#                             distance=(
-#                                 np.linalg.norm(tag.pose_t)
-#                                 if tag.pose_t is not None
-#                                 else -1
-#                             ),
-#                             decision_margin=tag.decision_margin,
-#                         )
-#                     )
-
-#                 for dt in detect_tags:
-#                     dt.print_info()
-#                 # pause
-#                 time.sleep(5)
-#                 break
-
-#             ret_val, frame = video_capture.read()
-
-#             if not ret_val:
-#                 print("ERROR: Failed to grab frame")
-#                 break
-
-#             # Detect AprilTags
-#             tags = detect_apriltags(frame, show_visualization=show_visualization)
-
-#             # Filter by target IDs if specified
-#             if TARGET_TAG_IDS is not None:
-#                 tags = [tag for tag in tags if tag.tag_id in TARGET_TAG_IDS]
-
-#             # Print detection information
-#             if tags and print_info:
-#                 # if we are here then we have detected tag!
-#                 DETECTED_TAG = True
-#                 print_tag_info(tags)
-
-#             # Calculate FPS
-#             frame_count += 1
-#             elapsed = time.time() - start_time
-#             if elapsed > 2.0:
-#                 fps = frame_count / elapsed
-#                 if print_info:
-#                     print(f"\n[PERFORMANCE] FPS: {fps:.1f}")
-#                 frame_count = 0
-#                 start_time = time.time()
-
-#             # Draw FPS and tag count on frame
-#             cv2.putText(frame, f"FPS: {fps:.1f}", (10, 30),
-#                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, COLOR_TEXT, 2)
-#             cv2.putText(frame, f"Tags: {len(tags)}", (10, 60),
-#                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, COLOR_TEXT, 2)
-#             cv2.putText(frame, f"Viz: {'ON' if show_visualization else 'OFF'}", (10, 90),
-#                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, COLOR_TEXT, 2)
-
-#             # Display frame
-#             if cv2.getWindowProperty(window_title, cv2.WND_PROP_AUTOSIZE) >= 0:
-#                 cv2.imshow(window_title, frame)
-#             else:
-#                 break
-
-#             # Handle keyboard input
-#             keyCode = cv2.waitKey(10) & 0xFF
-
-#             if keyCode == 27 or keyCode == ord('q'):  # ESC or 'q' to quit
-#                 print("\nQuitting...")
-#                 break
-
-#             elif keyCode == ord('s'):  # Toggle visualization
-#                 show_visualization = not show_visualization
-#                 status = "ON" if show_visualization else "OFF"
-#                 print(f"\n[TOGGLE] Visualization: {status}")
-
-#             elif keyCode == ord('i'):  # Toggle info printing
-#                 print_info = not print_info
-#                 status = "ON" if print_info else "OFF"
-#                 print(f"\n[TOGGLE] Info printing: {status}")
-
-#     except KeyboardInterrupt:
-#         print("\n\nInterrupted by user (Ctrl+C)")
-
-#     except Exception as e:
-#         print(f"\n\nERROR: {e}")
-#         import traceback
-#         traceback.print_exc()
-
-#     finally:
-#         video_capture.release()
-#         cv2.destroyAllWindows()
-#         print("\n" + "=" * 60)
-#         print("Camera stopped. Service terminated.")
-#         print("=" * 60)
-#         return DETECTED_TAG
-    
 
 def detect_tags(tags):
     # take photos, pause detection, call next service
@@ -337,27 +177,3 @@ def detect_tags(tags):
 
         for dt in detect_tags:
             dt.print_info()
-        # pause
-        # time.sleep(5)
-# def main():
-
-
-#     detect_tags: list[AprilTagDetection] = []
-#     for tag in tags:
-#         detect_tags.append(
-#             AprilTagDetection(
-#                 tag_id=tag.tag_id,
-#                 center_x=tag.center[0],
-#                 center_y=tag.center[1],
-#                 corners=[(corner[0], corner[1]) for corner in tag.corners],
-#                 distance=(
-#                     np.linalg.norm(tag.pose_t)
-#                     if tag.pose_t is not None
-#                     else -1
-#                 ),
-#                 decision_margin=tag.decision_margin,
-#             )
-#         )
-
-#     for dt in detect_tags:
-#         dt.print_info()
