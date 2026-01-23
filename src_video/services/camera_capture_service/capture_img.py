@@ -49,17 +49,12 @@ def gstreamer_pipeline(
     )
 
 
-def capture_images(video_capture, count=10, interval=2):
+def capture_images(video_capture):
     ret_val, frame = video_capture.read()
-
-    num_snaps = 0
-    while num_snaps != count:
-        timestamp = cv2.getTickCount()
-        filename = os.path.join(IMAGE_SAVE_DIR, f"captured_img_{timestamp}.jpg")
-        cv2.imwrite(filename, frame)
-        print(f"Image saved as {filename}")
-        num_snaps += 1
-        time.sleep(interval)
+    timestamp = cv2.getTickCount()
+    filename = os.path.join(IMAGE_SAVE_DIR, f"captured_img_{timestamp}.jpg")
+    cv2.imwrite(filename, frame)
+    print(f"Image saved as {filename}")
 
 
 def video_stream():

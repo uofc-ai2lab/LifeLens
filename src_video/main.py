@@ -29,6 +29,9 @@ COLOR_TEXT = (0, 255, 255)
 COLOR_ID_TEXT = (0, 255, 0)
 COLOR_DISTANCE_TEXT = (255, 0, 0)
 
+IMAGE_COUNT = 10
+INTERVAL = 2
+
 async def main() -> int:
     parser = argparse.ArgumentParser(description="Run microservices")
     parser.add_argument(
@@ -52,9 +55,12 @@ async def main() -> int:
         frame_count = 0
         start_time = time.time()
         fps = 0.0
-        show_visualization = False
-        print_info = False
+        show_visualization = True
+        print_info = True
         DETECTED_TAG = False
+        num_initial_snaps = 0
+        last_snap_time = -1
+
 
         print("Camera started successfully! Detecting markers...\n")
         try:
@@ -65,12 +71,6 @@ async def main() -> int:
                     print("ERROR: Failed to grab frame")
                     break
                 # Check to see if the user closed the window
-                # Under GTK+ (Jetson Default), WND_PROP_VISIBLE does not work correctly. Under Qt it does
-                # GTK - Substitute WND_PROP_AUTOSIZE to detect if window has been closed by user
-                if cv2.getWindowProperty(window_title, cv2.WND_PROP_AUTOSIZE) >= 0:
-                    cv2.imshow(window_title, frame)
-                else:
-                    break 
                 keyCode = cv2.waitKey(10) & 0xFF
                 # Stop the program on the ESC key or 'q'
                 if keyCode == 27 or keyCode == ord('q'):
@@ -99,13 +99,18 @@ async def main() -> int:
                     break
 
                 #  Detect AprilTags
-                DETECTED_TAG = detect_apriltags(video_capture, show_visualization=show_visualization, print_info=print_info)
-
+                if not DETECTED_TAG:
+                    DETECTED_TAG = detect_apriltags(video_capture, show_visualization=show_visualization, print_info=print_info)
+                    print(f"[INFO] Tags detected? {DETECTED_TAG}. Continuing to monitor...\n")                       
                 # if we detect tags then we run capture image service
                 if DETECTED_TAG:
-                    # capture_images(video_capture, count=10, interval=2)
-                    DETECTED_TAG = False  # reset after capturing images
-
+                    if num_initial_snaps < IMAGE_COUNT and (last_snap_time == -1 or time.time() - last_snap_time >= INTERVAL):
+                        capture_images(video_capture)
+                        num_initial_snaps += 1
+                        last_snap_time = time.time()
+                    elif num_initial_snaps == IMAGE_COUNT:
+                        print(f"\n[INFO] Captured {IMAGE_COUNT} images. Exiting camera service.\n")
+                        break
         finally:
             video_capture.release()
             cv2.destroyAllWindows()
