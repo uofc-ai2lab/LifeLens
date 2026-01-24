@@ -1,7 +1,7 @@
 from src_audio.utils.load_csv_file import load_csv_file 
 from src_audio.utils.export_to_csv import export_to_csv
 from src_audio.services.anonymization_service.anonymizer import TranscriptAnonymizer
-from config.settings import TRANSCRIPT_FILES_LIST, ANONYMIZED_DIR
+from config.audio_settings import TRANSCRIPT_FILES_LIST, ANONYMIZED_DIR
 from pathlib import Path
 
 def run_anonymization(transcript_path: str, anonymizer: TranscriptAnonymizer) -> None:
