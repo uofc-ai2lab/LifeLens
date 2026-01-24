@@ -1,7 +1,10 @@
 import pyaudio
 import wave
+from config.audio_settings import AUDIO_DIR
 
-def record_audio(duration=5, output_filename="output.wav", rate=16000, channels=6, width=2, index=2, chunk=1024):
+OUTPUT = AUDIO_DIR / "test1.wav"
+
+def record_audio(duration=5, output_filename=OUTPUT, rate=16000, channels=6, width=2, index=2, chunk=1024):
     """
     Records audio from the ReSpeaker microphone and saves it to a WAV file.
 
