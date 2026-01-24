@@ -1,6 +1,5 @@
 import argparse
-#from src_audio.services.audio_input_service.record import record_audio
-from src_audio.services.audio_input_service.record_functions import wait_for_recording
+from src_audio.services.audio_input_service.record_functions import run_recording_service
 from src_audio.services.transcription_service.transcription_whispertrt import run_transcription
 from src_audio.services.medication_extraction_service.medication_extraction import run_medication_extraction
 from src_audio.services.intervention_extraction_service.intervention_extraction import run_intervention_extraction
@@ -36,8 +35,15 @@ async def main():
         elif args.service == "anonymize":
             await run_anonymization_service()
         elif args.service == "record":
-            wait_for_recording()
-        else:  
+            await run_recording_service()
+        else: 
+            try:
+                print("Starting recording...\n")
+                await run_recording_service()
+                print("Recording finished.\n")
+            except Exception as e:
+                print("Recording failed:", e)
+ 
             try:
                 print("Starting transcription...\n")
                 await run_transcription()

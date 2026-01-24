@@ -149,3 +149,6 @@ MED_COLUMNS = [
     "route (confidence score)",
     "full_text"
 ]
+
+MAX_RECORD_SECONDS = 300  # 5 minutes
+

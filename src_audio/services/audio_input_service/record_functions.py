@@ -3,6 +3,9 @@ from config.audio_settings import AUDIO_DIR
 import os
 import time
 import shutil
+import signal
+import asyncio
+from src_audio.domain.constants import MAX_RECORD_SECONDS
 
 # Path to the directory where the recording is saved
 recording_dir = "/home/capstone/recordings"
@@ -10,44 +13,63 @@ signal_file = os.path.join(recording_dir, "recording_done.flag")
 
 # Target directory where the next service expects the file
 target_dir = AUDIO_DIR
+def start_recording():
+    """
+    Start the recording using `arecord` command. It will record until stopped.
+    """
+    # Define output file name with timestamp
+    output_file = os.path.join(recording_dir, f"holding_{time.strftime('%Y%m%d_%H%M%S')}.wav")
 
-def wait_for_recording():
-    # Path to the script
-    script_path = '/home/capstone/LifeLens/src_audio/services/audio_input_service/create_audio.sh'
+    # Start the arecord process
+    print(f"Starting recording to {output_file}")
+    process = subprocess.Popen(
+        ["arecord", "-D", "hw:CARD=ArrayUAC10,DEV=0", "-f", "S16_LE", "-r", "16000", "-c", "6", output_file],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
 
-    # Run the script
-    subprocess.run([script_path])
+    return process, output_file
 
+def stop_recording(process):
+    """
+    Stop the recording process.
+    """
+    print("Stopping recording...")
+    # Send a SIGINT to stop the arecord process (equivalent to pressing Ctrl+C)
+    process.send_signal(signal.SIGINT)
+
+def wait_for_recording(output_file=None):
     # Wait for the signal file to appear (indicating the recording is done)
     while not os.path.exists(signal_file):
         print("Waiting for recording to finish...")
-        time.sleep(5)  # Check every 5 seconds
+        time.sleep(5)
 
-    # Signal file exists, recording is done
     print("Recording complete. Processing the file...")
 
-    # Copy all .wav files from recording_dir (if multiple, copy them all; if one, proceed as before)
-    wav_files = [f for f in os.listdir(recording_dir)
-                 if f.lower().endswith('.wav') and os.path.isfile(os.path.join(recording_dir, f))]
+    # Case 1: output_file was explicitly provided
+    if output_file is not None:
+        if os.path.isfile(output_file):
+            print(f"Copying specified recording: {output_file}")
+            copy_to_target(output_file)
+        else:
+            print(f"Specified output file does not exist: {output_file}")
+        return
+
+    # Case 2: output_file is None → copy all .wav files in recording_dir
+    wav_files = [
+        os.path.join(recording_dir, f)
+        for f in os.listdir(recording_dir)
+        if f.lower().endswith(".wav")
+        and os.path.isfile(os.path.join(recording_dir, f))
+    ]
 
     if not wav_files:
         print("No .wav files found in recording_dir.")
         return
 
-    if len(wav_files) == 1:
-        recording_path = os.path.join(recording_dir, wav_files[0])
-    else:
-        for fname in wav_files:
-            path = os.path.join(recording_dir, fname)
-            print(f"Copying recording: {path}")
-            copy_to_target(path)
-        return
-
-    print(f"Using recording: {recording_path}")
-
-    # Copy the file to the target directory for the next service
-    copy_to_target(recording_path)
-
+    for path in wav_files:
+        print(f"Copying recording: {path}")
+        copy_to_target(path)
+    
 
 def copy_to_target(recording_path):
     """
@@ -66,3 +88,52 @@ def copy_to_target(recording_path):
         print(f"File successfully copied to {target_path}")
     except Exception as e:
         print(f"Error copying file: {e}")
+
+async def run_recording_service():
+    """
+    Starts recording and stops on:
+    - ENTER keypress
+    - 5 minute timeout
+    Recording is saved and pipeline continues.
+
+    Args:
+        None
+
+    Returns:
+        None
+    """
+    process, output_file = start_recording()
+
+    print("\nRecording started.")
+    print("→ Press ENTER to stop recording and continue pipeline")
+    print("→ Auto-stop after 5 minutes")
+
+    loop = asyncio.get_running_loop()
+
+    # Future that completes when ENTER is pressed
+    enter_future = loop.run_in_executor(None, input)
+
+    # Future that completes after timeout
+    timeout_future = asyncio.sleep(MAX_RECORD_SECONDS)
+
+    # Wait for whichever happens first
+    done, pending = await asyncio.wait(
+        [enter_future, timeout_future],
+        return_when=asyncio.FIRST_COMPLETED
+    )
+
+    # Cancel whichever future didn't fire
+    for task in pending:
+        task.cancel()
+
+    if enter_future in done:
+        print("Manual stop requested.")
+    else:
+        print("Auto-stop reached (5 minutes).")
+
+    stop_recording(process)
+
+    # Ensure arecord exits cleanly
+    process.wait()
+
+    wait_for_recording(output_file)
