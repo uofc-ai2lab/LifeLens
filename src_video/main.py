@@ -3,6 +3,7 @@ import time
 import asyncio
 from pathlib import Path
 from typing import Dict, Any
+import threading
 
 import cv2
 
@@ -51,100 +52,30 @@ def update_fps(frame_count: int, start_time: float, print_info: bool) -> tuple[i
     return frame_count, start_time, 0.0
 
 
-def draw_overlay(frame, fps: float, show_visualization: bool) -> None:
+def draw_overlay(frame, fps: float, show_visualization: bool, processing: bool = False) -> None:
     """Draw FPS and visualization status on the frame."""
-    cv2.putText(
-        frame, f"FPS: {fps:.1f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, COLOR_TEXT, 2
+    cv2.putText(frame, f"FPS: {fps:.1f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, COLOR_TEXT, 2
     )
     cv2.putText(
         frame,
         f"Viz: {'ON' if show_visualization else 'OFF'}",
-        (10, 90),
+        (10, 60),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.7,
         COLOR_TEXT,
         2,
     )
-
-
-def run_camera_capture() -> bool:
-    """
-    Run the camera capture loop to detect markers and capture images.
-    
-    Returns:
-        True if capture completed successfully, False otherwise.
-    """
-    window_title = "CSI Camera"
-    video_capture = None
-
-    try:
-        video_capture = initialize_camera(flip_method=0)
-        cv2.namedWindow(window_title, cv2.WINDOW_AUTOSIZE)
-
-        # State variables
-        frame_count = 0
-        start_time = time.time()
-        fps = 0.0
-        show_visualization = True
-        print_info = True
-        detected_tag = False
-        num_initial_snaps = 0
-        last_snap_time = -1
-
-        while True:
-            ret_val, frame = video_capture.read()
-            if not ret_val:
-                print("ERROR: Failed to grab frame")
-                return False
-
-            # Check for user exit
-            keyCode = cv2.waitKey(10) & 0xFF
-            if keyCode == 27 or keyCode == ord("q"):
-                break
-
-            # Update FPS
-            frame_count += 1
-            frame_count, start_time, new_fps = update_fps(frame_count, start_time, print_info)
-            if new_fps > 0:
-                fps = new_fps
-
-            # Draw overlay and display frame
-            draw_overlay(frame, fps, show_visualization)
-            if cv2.getWindowProperty(window_title, cv2.WND_PROP_AUTOSIZE) >= 0:
-                cv2.imshow(window_title, frame)
-            else:
-                break
-
-            # Detect AprilTags
-            if not detected_tag:
-                detected_tag = detect_apriltags(video_capture, show_visualization=show_visualization,print_info=print_info,)
-                print(f"[INFO] Tags detected? {detected_tag}. Continuing to monitor...\n")
-
-            # Capture images after tag detection
-            if detected_tag:
-                current_time = time.time()
-                should_capture = num_initial_snaps < SNAPSHOT_COUNT and (
-                    last_snap_time == -1 or current_time - last_snap_time >= SNAPSHOT_INTERVAL
-                )
-
-                if should_capture:
-                    capture_images(video_capture)
-                    num_initial_snaps += 1
-                    last_snap_time = current_time
-                elif num_initial_snaps == SNAPSHOT_COUNT:
-                    print(f"\n[INFO] Captured {SNAPSHOT_COUNT} images. Exiting camera service.\n")
-                    break
-
-        return True
-
-    except Exception as e:
-        print(f"Camera capture error: {e}")
-        return False
-
-    finally:
-        if video_capture is not None:
-            video_capture.release()
-        cv2.destroyAllWindows()
+    # puts processing text on the frame when detection is running
+    if processing:
+        cv2.putText(
+            frame,
+            "PROCESSING...",
+            (10, 90),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 165, 255),  # Orange
+            2,
+        )
 
 
 def run_detection_pipeline(settings: Dict[str, Any]) -> bool:
@@ -160,7 +91,7 @@ def run_detection_pipeline(settings: Dict[str, Any]) -> bool:
     try:
         run_detection(
             model=settings["DETECTION_MODEL"],
-            source=settings["DETECTION_SOURCE"],
+            source=settings["IMAGE_SAVE_DIR"],
             output=_as_posix(settings["DETECTION_OUTPUT"]),
             classes=settings["CLASSES"],
             margin=float(settings["MARGIN"]),
@@ -272,35 +203,132 @@ def print_summary(settings: Dict[str, Any], crop_count: int, infer_summary: Dict
         "injury_report_csv": str(infer_summary.get("out_csv")),
     })
 
-async def main() -> int:
-    settings = load_video_pipeline_settings()
 
-    print("Starting camera capture\n")
-
-
-    if not run_camera_capture():
-        print("Error: Camera capture failed.")
-        return 1
-
-    print("Running visual pipeline...\n")
-
+def process_single_image(settings: Dict[str, Any]) -> bool:
+    """
+    Process a single captured image through the full pipeline.
+    
+    Returns:
+        True if processing succeeded, False otherwise.
+    """
+    # Run detection
     if not run_detection_pipeline(settings):
-        print("Error: Body part detection pipeline failed.")
-        return 1
+        print("Error: Detection pipeline failed for this image.")
+        return False
 
+    # Run injury inference
     success, crop_count, infer_summary = run_injury_inference(settings)
     if not success:
-        print("Error: Injury inference failed.")
-        return 1
+        print("Error: Injury inference failed for this image.")
+        return False
 
+    # Run de-identification
     if not run_deidentification_pipeline(settings):
-        print("Error: De-identification failed.")
+        print("Error: De-identification failed for this image.")
+        return False
+
+    # Print summary for this image
+    print_summary(settings, crop_count, infer_summary)
+    print("[video] Image processing complete.\n")
+    
+    return True
+
+
+async def main() -> int:
+
+    settings = load_video_pipeline_settings()
+    
+    window_title = "CSI Camera"
+    video_capture = None
+
+    try:
+        video_capture = initialize_camera(flip_method=0)
+        cv2.namedWindow(window_title, cv2.WINDOW_AUTOSIZE)
+
+        # State variables
+        frame_count = 0
+        start_time = time.time()
+        fps = 0.0
+        show_visualization = True
+        print_info = True
+        detected_tag = False
+        last_snap_time = -1
+        total_images_processed = 0
+        is_processing = False
+
+        print("Starting camera monitoring...\n")
+
+        while True:
+            ret_val, frame = video_capture.read()
+            if not ret_val:
+                print("ERROR: Failed to grab frame")
+                return 1
+
+            # Check for user exit
+            keyCode = cv2.waitKey(10) & 0xFF
+            if keyCode == 27 or keyCode == ord("q"):
+                print("\n[INFO] User requested exit.\n")
+                break
+
+            # Update FPS
+            frame_count += 1
+            frame_count, start_time, new_fps = update_fps(frame_count, start_time, print_info)
+            if new_fps > 0:
+                fps = new_fps
+
+            # Draw overlay and display frame
+            draw_overlay(frame, fps, show_visualization, is_processing)
+            if cv2.getWindowProperty(window_title, cv2.WND_PROP_AUTOSIZE) >= 0:
+                cv2.imshow(window_title, frame)
+            else:
+                break
+
+            # Detect AprilTag 
+            detected_tag = detect_apriltags(video_capture, show_visualization=show_visualization, print_info=print_info)
+
+            # If tag detected and not currently processing
+            if detected_tag and not is_processing:
+                current_time = time.time()
+                should_capture = (last_snap_time == -1 or 
+                                current_time - last_snap_time >= SNAPSHOT_INTERVAL)
+
+                if should_capture:
+                    print(f"\n[INFO] Tag detected! Capturing and processing image #{total_images_processed + 1}...\n")
+                    
+                    # Capture the image
+                    if not capture_images(video_capture):
+                        print("ERROR: Failed to capture image")
+                        return 1
+                    
+                    # Set processing flag to prevent overlapping captures
+                    is_processing = True
+                    
+                    # Process the captured image through full pipeline
+                    if process_single_image(settings):
+                        total_images_processed += 1
+                        print(f"[INFO] Successfully processed {total_images_processed} images total.\n")
+                    else:
+                        print("[WARNING] Image processing failed, continuing monitoring...\n")
+                    
+                    # Reset processing flag
+                    is_processing = False
+                    last_snap_time = current_time
+
+            elif not detected_tag and total_images_processed > 0:
+                print("[INFO] Tag lost. Continuing to monitor...\n")
+
+        print(f"\n[INFO] Session complete. Processed {total_images_processed} images total.\n")
+        return 0
+
+    except Exception as e:
+        print(f"Camera error: {e}")
         return 1
 
-    print_summary(settings, crop_count, infer_summary)
+    finally:
+        if video_capture is not None:
+            video_capture.release()
+        cv2.destroyAllWindows()
 
-    print("[video] Done.")
-    return 0
 
 if __name__ == "__main__":
     raise SystemExit(asyncio.run(main()))

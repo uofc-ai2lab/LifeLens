@@ -52,5 +52,9 @@ def capture_images(video_capture):
     ret_val, frame = video_capture.read()
     timestamp = cv2.getTickCount()
     filename = os.path.join(IMAGE_SAVE_DIR, f"captured_img_{timestamp}.jpg")
-    cv2.imwrite(filename, frame)
+    if not cv2.imwrite(filename, frame):
+        print("Error: Failed to save image.")
+        return False
     print(f"Image saved as {filename}")
+    return True
+
