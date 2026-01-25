@@ -111,6 +111,7 @@ pyannote_models/
 #MedCat models
 nlpPipeline/data_p3.2
 
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
