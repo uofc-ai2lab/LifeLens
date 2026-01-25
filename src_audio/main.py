@@ -17,7 +17,7 @@ async def main():
         "service",
         nargs="?",
         type=str,
-        choices=["transcribe", "meds", "inter", "sem", "anonymize", "trim"],
+        choices=["transcribe", "meds", "inter", "sem", "anonymize", "trim", "record"],
         default=None
     )
     args = parser.parse_args()
@@ -38,8 +38,11 @@ async def main():
             await run_semantic_filtering()
         elif args.service == "anonymize":
             await run_anonymization_service()
+        elif args.service == "record":
+            await run_recording_service()
         elif args.service == "trim":
             pass
+        
         else:  
             try:
                 print("Starting transcription...\n")
