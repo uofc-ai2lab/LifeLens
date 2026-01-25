@@ -1,39 +1,85 @@
 from __future__ import annotations
 import time
-"""Video pipeline entrypoint.
-
-This file is meant to be runnable directly (e.g. press **Run** in VS Code):
-    python src_video/main.py
-
-It executes the full video pipeline using `config/video_settings.py`.
-"""
-import argparse
-from pathlib import Path
 import asyncio
+from pathlib import Path
+from typing import Dict, Any
+
 import cv2
-from config.video_settings import load_video_pipeline_settings, SNAPSHOT_COUNT, SNAPSHOT_INTERVAL
+
+from config.video_settings import (
+    load_video_pipeline_settings,
+    SNAPSHOT_COUNT,
+    SNAPSHOT_INTERVAL,
+)
 from src_video.services.detection_service.detect_body_parts import run_detection
-from src_video.services.classification_service.infer_injuries_on_crops import (predict_injuries_on_detection_crops,)
+from src_video.services.classification_service.infer_injuries_on_crops import (
+    predict_injuries_on_detection_crops,
+)
 from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
-from src_video.services.camera_capture_service.capture_img import gstreamer_pipeline, capture_images
+from src_video.services.camera_capture_service.capture_img import (
+    gstreamer_pipeline,
+    capture_images,
+)
 from src_video.domain.constants import COLOR_TEXT
 
+
 def _as_posix(path: str) -> str:
+    """Convert path to POSIX format."""
     return str(path).replace("\\", "/")
 
-IMAGE_COUNT = 10
-INTERVAL = 2
+
+def initialize_camera(flip_method: int = 0) -> cv2.VideoCapture:
+    """Initialize and return the camera capture object."""
+    video_capture = cv2.VideoCapture(
+        gstreamer_pipeline(flip_method=flip_method), cv2.CAP_GSTREAMER
+    )
+    if not video_capture.isOpened():
+        raise RuntimeError("Error: Unable to open camera")
+    print("Camera started successfully! Detecting markers...\n")
+    return video_capture
 
 
-async def main() -> int:
-    settings = load_video_pipeline_settings()
+def update_fps(frame_count: int, start_time: float, print_info: bool) -> tuple[int, float, float]:
+    """Calculate and return updated FPS metrics."""
+    elapsed = time.time() - start_time
+    if elapsed > 2.0:
+        fps = frame_count / elapsed
+        if print_info:
+            print(f"\n[PERFORMANCE] FPS: {fps:.1f}")
+        return 0, time.time(), fps
+    return frame_count, start_time, 0.0
 
+
+def draw_overlay(frame, fps: float, show_visualization: bool) -> None:
+    """Draw FPS and visualization status on the frame."""
+    cv2.putText(
+        frame, f"FPS: {fps:.1f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, COLOR_TEXT, 2
+    )
+    cv2.putText(
+        frame,
+        f"Viz: {'ON' if show_visualization else 'OFF'}",
+        (10, 90),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        COLOR_TEXT,
+        2,
+    )
+
+
+def run_camera_capture() -> bool:
+    """
+    Run the camera capture loop to detect markers and capture images.
+    
+    Returns:
+        True if capture completed successfully, False otherwise.
+    """
     window_title = "CSI Camera"
+    video_capture = None
 
-    # To flip the image, modify the flip_method parameter (0 and 2 are the most common)
-    video_capture = cv2.VideoCapture(gstreamer_pipeline(flip_method=0), cv2.CAP_GSTREAMER)
-    if video_capture.isOpened():
+    try:
+        video_capture = initialize_camera(flip_method=0)
+        cv2.namedWindow(window_title, cv2.WINDOW_AUTOSIZE)
 
         # State variables
         frame_count = 0
@@ -41,74 +87,77 @@ async def main() -> int:
         fps = 0.0
         show_visualization = True
         print_info = True
-        DETECTED_TAG = False
+        detected_tag = False
         num_initial_snaps = 0
         last_snap_time = -1
 
+        while True:
+            ret_val, frame = video_capture.read()
+            if not ret_val:
+                print("ERROR: Failed to grab frame")
+                return False
 
-        print("Camera started successfully! Detecting markers...\n")
-        try:
-            cv2.namedWindow(window_title, cv2.WINDOW_AUTOSIZE)
-            while True:
-                ret_val, frame = video_capture.read()
-                if not ret_val:
-                    print("ERROR: Failed to grab frame")
+            # Check for user exit
+            keyCode = cv2.waitKey(10) & 0xFF
+            if keyCode == 27 or keyCode == ord("q"):
+                break
+
+            # Update FPS
+            frame_count += 1
+            frame_count, start_time, new_fps = update_fps(frame_count, start_time, print_info)
+            if new_fps > 0:
+                fps = new_fps
+
+            # Draw overlay and display frame
+            draw_overlay(frame, fps, show_visualization)
+            if cv2.getWindowProperty(window_title, cv2.WND_PROP_AUTOSIZE) >= 0:
+                cv2.imshow(window_title, frame)
+            else:
+                break
+
+            # Detect AprilTags
+            if not detected_tag:
+                detected_tag = detect_apriltags(video_capture, show_visualization=show_visualization,print_info=print_info,)
+                print(f"[INFO] Tags detected? {detected_tag}. Continuing to monitor...\n")
+
+            # Capture images after tag detection
+            if detected_tag:
+                current_time = time.time()
+                should_capture = num_initial_snaps < SNAPSHOT_COUNT and (
+                    last_snap_time == -1 or current_time - last_snap_time >= SNAPSHOT_INTERVAL
+                )
+
+                if should_capture:
+                    capture_images(video_capture)
+                    num_initial_snaps += 1
+                    last_snap_time = current_time
+                elif num_initial_snaps == SNAPSHOT_COUNT:
+                    print(f"\n[INFO] Captured {SNAPSHOT_COUNT} images. Exiting camera service.\n")
                     break
-                # Check to see if the user closed the window
-                keyCode = cv2.waitKey(10) & 0xFF
-                # Stop the program on the ESC key or 'q'
-                if keyCode == 27 or keyCode == ord('q'):
-                    break
 
-                # Calculate FPS
-                frame_count += 1
-                elapsed = time.time() - start_time
-                if elapsed > 2.0:
-                    fps = frame_count / elapsed
-                    if print_info:
-                        print(f"\n[PERFORMANCE] FPS: {fps:.1f}")
-                    frame_count = 0
-                    start_time = time.time()
+        return True
 
-                # Draw FPS and tag count on frame
-                cv2.putText(frame, f"FPS: {fps:.1f}", (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, COLOR_TEXT, 2)
-                cv2.putText(frame, f"Viz: {'ON' if show_visualization else 'OFF'}", (10, 90),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, COLOR_TEXT, 2)
+    except Exception as e:
+        print(f"Camera capture error: {e}")
+        return False
 
-                # Display frame
-                if cv2.getWindowProperty(window_title, cv2.WND_PROP_AUTOSIZE) >= 0:
-                    cv2.imshow(window_title, frame)
-                else:
-                    break
-
-                #  Detect AprilTags
-                if not DETECTED_TAG:
-                    DETECTED_TAG = detect_apriltags(video_capture, show_visualization=show_visualization, print_info=print_info)
-                    print(f"[INFO] Tags detected? {DETECTED_TAG}. Continuing to monitor...\n")                       
-                # if we detect tags then we run capture image service
-                if DETECTED_TAG:
-                    if num_initial_snaps < SNAPSHOT_COUNT and (last_snap_time == -1 or time.time() - last_snap_time >= SNAPSHOT_INTERVAL):
-                        capture_images(video_capture)
-                        num_initial_snaps += 1
-                        last_snap_time = time.time()
-                    elif num_initial_snaps == SNAPSHOT_COUNT:
-                        print(f"\n[INFO] Captured {SNAPSHOT_COUNT} images. Exiting camera service.\n")
-                        break
-        finally:
+    finally:
+        if video_capture is not None:
             video_capture.release()
-            cv2.destroyAllWindows()
-    else:
-        print("Error: Unable to open camera")
+        cv2.destroyAllWindows()
 
-    # else run full pipeline
-    print("running full pipeline...")
 
+def run_detection_pipeline(settings: Dict[str, Any]) -> bool:
+    """
+    Run the body part detection pipeline.
+    
+    Returns:
+        True if detection succeeded, False otherwise.
+    """
+    print("[video] Starting detection...\n")
     detection_output = Path(settings["DETECTION_OUTPUT"])
-    crops_root = Path(settings["CROPS_ROOT"])
 
     try:
-        print("[video] Starting detection...\n")
         run_detection(
             model=settings["DETECTION_MODEL"],
             source=settings["DETECTION_SOURCE"],
@@ -125,30 +174,42 @@ async def main() -> int:
         )
         print("\n[video] Detection finished.\n")
 
-        # Make it very obvious where outputs landed.
+        # Log output statistics
         annotated_dir = Path(settings["ANNOTATED_DIR"])
         vis_dir = Path(settings["VIS_DIR"])
-        annotated_count = sum(1 for _ in annotated_dir.rglob("*.jpg")) if annotated_dir.exists() else 0
-        crop_count_now = sum(1 for _ in crops_root.rglob("*.jpg")) if crops_root.exists() else 0
-        vis_count = sum(1 for _ in vis_dir.rglob("*.jpg")) if vis_dir.exists() else 0
-        print(
-            {
-                "detection_output": str(detection_output),
-                "annotated_jpg": int(annotated_count),
-                "crop_jpg": int(crop_count_now),
-                "vis_jpg": int(vis_count),
-            }
-        )
-    except Exception as e:
-        print("[video] Detection failed:", e)
-        return 1
+        crops_root = Path(settings["CROPS_ROOT"])
 
-    crop_count = 0
+        annotated_count = sum(1 for _ in annotated_dir.rglob("*.jpg")) if annotated_dir.exists() else 0
+        crop_count = sum(1 for _ in crops_root.rglob("*.jpg")) if crops_root.exists() else 0
+        vis_count = sum(1 for _ in vis_dir.rglob("*.jpg")) if vis_dir.exists() else 0
+
+        print({
+            "detection_output": str(detection_output),
+            "annotated_jpg": int(annotated_count),
+            "crop_jpg": int(crop_count),
+            "vis_jpg": int(vis_count),
+        })
+        return True
+
+    except Exception as e:
+        print(f"[video] Detection failed: {e}")
+        return False
+
+
+def run_injury_inference(settings: Dict[str, Any]) -> tuple[bool, int, Dict[str, Any]]:
+    """
+    Run injury classification inference on detected crops.
+    
+    Returns:
+        Tuple of (success, crop_count, inference_summary).
+    """
+    print("[video] Starting injury inference...\n")
+    crops_root = Path(settings["CROPS_ROOT"])
+
     try:
-        print("[video] Starting injury inference...\n")
         if not crops_root.exists():
             raise FileNotFoundError(
-                f"No crops directory found at {crops_root}. Run detection first or set PIPELINE_DETECTION_OUTPUT."
+                f"No crops directory found at {crops_root}. Run detection first."
             )
 
         crop_count = sum(1 for _ in crops_root.rglob("*.jpg"))
@@ -168,39 +229,78 @@ async def main() -> int:
             body_part_label_position=int(settings["BODY_PART_LABEL_POSITION"]),
         )
         print("\n[video] Injury inference finished.\n")
-    except Exception as e:
-        print("[video] Injury inference failed:", e)
-        return 1
+        return True, crop_count, infer_summary
 
-    # Placeholder only. Intentionally disabled by default.
+    except Exception as e:
+        print(f"[video] Injury inference failed: {e}")
+        return False, 0, {}
+
+
+def run_deidentification_pipeline(settings: Dict[str, Any]) -> bool:
+    """
+    Run de-identification pipeline (currently disabled by default).
+    
+    Returns:
+        True if succeeded (or skipped), False on error.
+    """
+    print("[video] De-identification step (placeholder)...\n")
+
     try:
-        print("[video] De-identification step (placeholder)...\n")
         run_deidentification(
             input_dir=_as_posix(settings["DETECTION_OUTPUT"]),
             output_dir=_as_posix(str(Path(settings["DETECTION_OUTPUT"]) / "deidentified")),
             enabled=False,
         )
         print("[video] De-identification skipped (disabled).\n")
+        return True
+
     except Exception as e:
-        print("[video] De-identification failed:", e)
+        print(f"[video] De-identification failed: {e}")
+        return False
+
+
+def print_summary(settings: Dict[str, Any], crop_count: int, infer_summary: Dict[str, Any]) -> None:
+    """Print final pipeline summary."""
+    print("[video] Summary:")
+    print({
+        "pipeline_root": settings["PIPELINE_ROOT"],
+        "detection_output": str(Path(settings["DETECTION_OUTPUT"])),
+        "crops_used": str(Path(settings["CROPS_ROOT"])),
+        "crop_count": int(crop_count),
+        "injury_checkpoint": str(settings["INJURY_CHECKPOINT_PATH"]),
+        "injury_report_json": str(infer_summary.get("out_json")),
+        "injury_report_csv": str(infer_summary.get("out_csv")),
+    })
+
+async def main() -> int:
+    settings = load_video_pipeline_settings()
+
+    print("Starting camera capture\n")
+
+
+    if not run_camera_capture():
+        print("Error: Camera capture failed.")
         return 1
 
-    print("[video] Summary:")
-    print(
-        {
-            "pipeline_root": settings["PIPELINE_ROOT"],
-            "detection_output": str(detection_output),
-            "crops_used": str(crops_root),
-            "crop_count": int(crop_count),
-            "injury_checkpoint": str(settings["INJURY_CHECKPOINT_PATH"]),
-            "injury_report_json": str(infer_summary.get("out_json")),
-            "injury_report_csv": str(infer_summary.get("out_csv")),
-        }
-    )
+    print("Running visual pipeline...\n")
+
+    if not run_detection_pipeline(settings):
+        print("Error: Body part detection pipeline failed.")
+        return 1
+
+    success, crop_count, infer_summary = run_injury_inference(settings)
+    if not success:
+        print("Error: Injury inference failed.")
+        return 1
+
+    if not run_deidentification_pipeline(settings):
+        print("Error: De-identification failed.")
+        return 1
+
+    print_summary(settings, crop_count, infer_summary)
 
     print("[video] Done.")
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(asyncio.run(main()))
