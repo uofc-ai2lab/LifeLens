@@ -9,8 +9,15 @@ from config.audio_settings import (
     AUDIO_DIR
 )
 
+AUDIO_EXTS = {".wav", ".mp3", ".m4a", ".flac"}
+
 def trim_audio(parent_audio_file):
     parent_audio_location = AUDIO_DIR / Path(parent_audio_file).name # find the parent audio file in audio_files dir
+    
+    # skip junk files (.DS_Store, etc.)
+    if parent_audio_location.suffix.lower() not in AUDIO_EXTS:
+        return
+
     audio, sr = librosa.load(parent_audio_location, sr=None)
     chunk_duration = 180  # seconds (3 minutes)
     chunk_size = chunk_duration * sr

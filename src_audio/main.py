@@ -39,7 +39,7 @@ async def main():
         elif args.service == "anonymize":
             await run_anonymization_service()
         elif args.service == "trim":
-            await run_audio_trimming()
+            pass
         else:  
             try:
                 print("Starting transcription...\n")
