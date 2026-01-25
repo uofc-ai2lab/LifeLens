@@ -51,3 +51,6 @@ imageio>=2.25
 imageio-ffmpeg>=0.4.6
 ultralytics
 timm
+
+# detect AprilTag Marker
+pupil-apriltags>=1.0.4
