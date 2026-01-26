@@ -124,6 +124,14 @@ def load_video_pipeline_settings() -> dict:
         ),
         "DEVICE": os.getenv("PIPELINE_DEVICE", None),
         "DEBUG": _env_bool("PIPELINE_DEBUG", False),
+        # Orientation handling
+        # - EXIF_ORIENT: apply EXIF transpose (common for phones)
+        # - ROTATE_DEGREES: force-rotate (0/90/180/270) for cameras mounted upside down
+        "EXIF_ORIENT": _env_bool("PIPELINE_EXIF_ORIENT", True),
+        "ROTATE_DEGREES": _env_int("PIPELINE_ROTATE_DEGREES", 0),
+        # If the camera is fixed but the person may appear upside-down in frame,
+        # enable a lightweight test-time augmentation that tries 0 vs 180.
+        "AUTO_ROTATE_SUBJECT": _env_bool("PIPELINE_AUTO_ROTATE_SUBJECT", False),
         "INJURY_CHECKPOINT_PATH": os.getenv(
             "PIPELINE_INJURY_CHECKPOINT",
             "checkpoints/classificationModel/injury/best_swin_tiny_patch4_window7_224.pt",

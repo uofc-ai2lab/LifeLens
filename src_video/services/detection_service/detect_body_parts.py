@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 from ultralytics import YOLO
 from huggingface_hub import snapshot_download, hf_hub_download
 import dill  # required for some legacy checkpoints
@@ -71,6 +71,101 @@ def load_model(model_path: str):
 
 def ensure_dir(path: str | Path):
     Path(path).mkdir(parents=True, exist_ok=True)
+
+
+def polygon_to_mask(poly: np.ndarray, image_shape: tuple[int, int]) -> np.ndarray:
+    """Rasterize a polygon (Nx2) into a binary mask in original image coordinates."""
+    H, W = image_shape
+    mask_img = Image.new("L", (W, H), 0)
+    if poly is None or len(poly) == 0:
+        return np.zeros((H, W), dtype=np.uint8)
+    pts = [(float(x), float(y)) for x, y in poly]
+    ImageDraw.Draw(mask_img).polygon(pts, outline=1, fill=1)
+    return np.array(mask_img, dtype=np.uint8)
+
+
+def polygon_to_bbox(poly: np.ndarray, margin: float, image_shape: tuple[int, int]) -> tuple[int, int, int, int]:
+    """Compute bounding rectangle for a polygon (Nx2) and expand by margin.
+
+    Returns (x1, y1, x2, y2) in image coordinates.
+    """
+    H, W = image_shape
+    if poly is None or len(poly) == 0:
+        return 0, 0, 0, 0
+    xs = poly[:, 0]
+    ys = poly[:, 1]
+    x1 = int(np.floor(xs.min()))
+    x2 = int(np.ceil(xs.max()))
+    y1 = int(np.floor(ys.min()))
+    y2 = int(np.ceil(ys.max()))
+    h = y2 - y1 + 1
+    w = x2 - x1 + 1
+    pad_h = int(h * margin)
+    pad_w = int(w * margin)
+    x1 = max(0, x1 - pad_w)
+    y1 = max(0, y1 - pad_h)
+    x2 = min(W - 1, x2 + pad_w)
+    y2 = min(H - 1, y2 + pad_h)
+    return x1, y1, x2, y2
+
+
+def polygon_area(poly: np.ndarray) -> float:
+    """Compute polygon area (shoelace formula). Returns area in pixel^2."""
+    if poly is None or len(poly) < 3:
+        return 0.0
+    x = poly[:, 0]
+    y = poly[:, 1]
+    return float(0.5 * abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))))
+
+
+def rotate_image_np(image: np.ndarray, degrees: int) -> np.ndarray:
+    """Rotate HxWxC image by 0/90/180/270 degrees."""
+    if degrees not in (0, 90, 180, 270):
+        raise ValueError(f"degrees must be one of 0/90/180/270, got {degrees}")
+    if degrees == 0:
+        return image
+    if degrees == 90:
+        return np.rot90(image, k=1)
+    if degrees == 180:
+        return np.rot90(image, k=2)
+    return np.rot90(image, k=3)
+
+
+def choose_best_rotation(
+    model,
+    image_np: np.ndarray,
+    device: Optional[str],
+    candidate_degrees: List[int],
+) -> int:
+    """Pick a rotation that yields the strongest segmentation signal.
+
+    Uses sum of polygon areas across all masks as a simple heuristic.
+    """
+    best_deg = 0
+    best_score = -1.0
+
+    for deg in candidate_degrees:
+        rotated = rotate_image_np(image_np, deg)
+        predict_kwargs = {"source": rotated, "verbose": False}
+        if device is not None:
+            predict_kwargs["device"] = device
+        results = model.predict(**predict_kwargs)
+
+        score = 0.0
+        for result in results:
+            if getattr(result, "masks", None) is None or getattr(result.masks, "xy", None) is None:
+                continue
+            for poly_pts in result.masks.xy:
+                if poly_pts is None:
+                    continue
+                poly = np.array(poly_pts, dtype=np.float32)
+                score += polygon_area(poly)
+
+        if score > best_score:
+            best_score = score
+            best_deg = deg
+
+    return best_deg
 
 
 def mask_to_bbox(mask: np.ndarray, margin: float, image_shape: tuple[int, int]) -> tuple[int, int, int, int]:
@@ -150,19 +245,44 @@ def process_image(
     add_head: bool,
     alpha_png: bool,
     device: Optional[str] = None,
+    auto_orient: bool = True,
+    rotate_degrees: int = 0,
+    auto_rotate_subject: bool = False,
     classification_export_dir: Optional[Path] = None,
     save_annotated: bool = True,
     debug: bool = False,
     debug_print: bool = False,
 ):
-    image = Image.open(image_path).convert("RGB")  # load as RGB
-    image_np = np.array(image)
+    image_pil = Image.open(image_path)
+    if auto_orient:
+        # Respect EXIF orientation tags (common for phone/camera images).
+        image_pil = ImageOps.exif_transpose(image_pil)
+    image_pil = image_pil.convert("RGB")
 
-    # Run inference. If a device is provided, use Ultralytics predict() so device selection is honored.
-    if device is None:
-        results = model(str(image_path))
-    else:
-        results = model.predict(source=str(image_path), device=device, verbose=False)
+    if rotate_degrees not in (0, 90, 180, 270):
+        raise ValueError(f"rotate_degrees must be one of 0/90/180/270, got {rotate_degrees}")
+    if rotate_degrees:
+        # Apply a deterministic rotation when the camera is physically mounted upside down
+        # or when images are saved without correct EXIF orientation.
+        image_pil = image_pil.rotate(rotate_degrees, expand=True)
+
+    image_np = np.array(image_pil)
+
+    # If the camera is fixed but the *person* may appear upside-down (e.g., head-of-bed camera),
+    # optionally try 0 vs 180 and pick the rotation that produces the strongest segmentation.
+    if auto_rotate_subject:
+        best_deg = choose_best_rotation(model, image_np, device=device, candidate_degrees=[0, 180])
+        if best_deg != 0:
+            if debug:
+                print(f"[detect] auto_rotate_subject: using {best_deg} degrees for {image_path.name}")
+            image_np = rotate_image_np(image_np, best_deg)
+
+    # Run inference on the transformed image (not the original file), otherwise EXIF/rotation fixes
+    # won't be reflected in the model output.
+    predict_kwargs = {"source": image_np, "verbose": False}
+    if device is not None:
+        predict_kwargs["device"] = device
+    results = model.predict(**predict_kwargs)
     print(f"Processing {image_path.name}: {len(results)} result(s)")
     vis_boxes = []
     vis_labels = []
@@ -196,12 +316,43 @@ def process_image(
         if getattr(result, "masks", None) is None:
             print("Warning: result has no segmentation masks; skipping mask-derived crops.")
             continue
-        masks = result.masks.data.cpu().numpy()  # shape: (N, H, W)
+        # Prefer polygons in original image coordinates so crops/vis align with result.plot().
+        has_polys = getattr(result.masks, "xy", None) is not None
+        masks = result.masks.data.cpu().numpy()  # may be resized/model-space
         cls_ids = result.boxes.cls.cpu().numpy().astype(int)
         for idx, cls_id in enumerate(cls_ids): # index the list 
             cls_name = names_map.get(cls_id, str(cls_id))
-            mask = masks[idx]
-            mask_bin_all = (mask > 0.5).astype(np.uint8)
+            # Build a binary mask + bbox in original image resolution.
+            if has_polys and idx < len(result.masks.xy) and result.masks.xy[idx] is not None:
+                poly = np.array(result.masks.xy[idx], dtype=np.float32)
+                mask_bin_all = polygon_to_mask(poly, image_np.shape[:2])
+                bbox = polygon_to_bbox(poly, margin=margin, image_shape=image_np.shape[:2])
+            else:
+                # Fallback: threshold tensor mask. If it doesn't match image resolution, scale bbox and resize mask.
+                mask = masks[idx]
+                mask_bin_all = (mask > 0.5).astype(np.uint8)
+                if mask_bin_all.shape != image_np.shape[:2]:
+                    mh, mw = mask_bin_all.shape
+                    ih, iw = image_np.shape[:2]
+
+                    x1m, y1m, x2m, y2m = mask_to_bbox(mask_bin_all, margin=margin, image_shape=(mh, mw))
+                    sx = iw / float(mw)
+                    sy = ih / float(mh)
+                    x1 = int(round(x1m * sx))
+                    x2 = int(round(x2m * sx))
+                    y1 = int(round(y1m * sy))
+                    y2 = int(round(y2m * sy))
+                    x1 = max(0, min(iw - 1, x1))
+                    x2 = max(0, min(iw - 1, x2))
+                    y1 = max(0, min(ih - 1, y1))
+                    y2 = max(0, min(ih - 1, y2))
+                    bbox = (x1, y1, x2, y2)
+
+                    mask_img = Image.fromarray(mask_bin_all * 255)
+                    mask_img = mask_img.resize((iw, ih), resample=Image.NEAREST)
+                    mask_bin_all = (np.array(mask_img) > 0).astype(np.uint8)
+                else:
+                    bbox = mask_to_bbox(mask_bin_all, margin=margin, image_shape=image_np.shape[:2])
             if cls_name in composite_parts:
                 composite_parts[cls_name].append(mask_bin_all)
             if classes_filter and cls_name not in classes_filter:
@@ -210,7 +361,6 @@ def process_image(
             area = mask_bin.sum()
             if area < min_area:
                 continue
-            bbox = mask_to_bbox(mask_bin, margin=margin, image_shape=image_np.shape[:2])
             filename = f"{image_path.stem}_{cls_name}_{idx}.jpg"
             saved = save_crop(image_np, bbox, crops_root / filename)
             if alpha_png and saved:
@@ -276,6 +426,9 @@ def iterate_source(
     alpha_png: bool,
     max_images: int,
     device: Optional[str] = None,
+    auto_orient: bool = True,
+    rotate_degrees: int = 0,
+    auto_rotate_subject: bool = False,
     classification_export_dir: Optional[Path] = None,
     save_annotated: bool = True,
     debug: bool = False,
@@ -292,6 +445,9 @@ def iterate_source(
             add_head,
             alpha_png,
             device=device,
+            auto_orient=auto_orient,
+            rotate_degrees=rotate_degrees,
+            auto_rotate_subject=auto_rotate_subject,
             classification_export_dir=classification_export_dir,
             save_annotated=save_annotated,
             debug=debug,
@@ -315,6 +471,9 @@ def iterate_source(
                 add_head,
                 alpha_png,
                 device=device,
+                auto_orient=auto_orient,
+                rotate_degrees=rotate_degrees,
+                auto_rotate_subject=auto_rotate_subject,
                 classification_export_dir=classification_export_dir,
                 save_annotated=save_annotated,
                 debug=debug,
@@ -334,6 +493,9 @@ def run_detection(
     debug: bool = False,
     alpha_png: bool = False,
     max_images: int = 200,
+    auto_orient: bool = True,
+    rotate_degrees: int = 0,
+    auto_rotate_subject: bool = False,
     classification_export_dir: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run YOLO segmentation + crop extraction.
@@ -368,6 +530,9 @@ def run_detection(
         alpha_png,
         max_images,
         device=device,
+        auto_orient=auto_orient,
+        rotate_degrees=rotate_degrees,
+        auto_rotate_subject=auto_rotate_subject,
         classification_export_dir=export_dir_path,
         save_annotated=True,
         debug=debug,

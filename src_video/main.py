@@ -121,6 +121,9 @@ async def main() -> int:
             debug=bool(settings["DEBUG"]),
             alpha_png=bool(settings["ALPHA_PNG"]),
             max_images=int(settings["MAX_IMAGES"]),
+            auto_orient=bool(settings.get("EXIF_ORIENT", True)),
+            rotate_degrees=int(settings.get("ROTATE_DEGREES", 0)),
+            auto_rotate_subject=bool(settings.get("AUTO_ROTATE_SUBJECT", False)),
             classification_export_dir=None,
         )
         print("\n[video] Detection finished.\n")
