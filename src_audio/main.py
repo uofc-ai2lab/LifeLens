@@ -51,12 +51,12 @@ async def main():
         
         else:  
             
-            try:
-                print("Starting recording...\n")
-                await run_recording_service()
-                print("Recording finished.\n")
-            except Exception as e:
-                print("Recording failed:", e)
+            # try:
+            #     print("Starting recording...\n")
+            #     await run_recording_service()
+            #     print("Recording finished.\n")
+            # except Exception as e:
+            #     print("Recording failed:", e)
             
             try:
                 print("Starting audio trimming...\n")
