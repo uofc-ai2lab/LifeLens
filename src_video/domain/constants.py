@@ -29,3 +29,20 @@ CAMERA_CX=960.0
 CAMERA_CY=540.0
 
 CAMERA_PARAMS = (CAMERA_FX, CAMERA_FY, CAMERA_CX, CAMERA_CY)
+
+#basic body parts that will be updated with real patient info
+BODY_PARTS_TEMPLATE = {
+    "head": {"image_id": None, "injury_pred": None, "accuracy": None},
+    "face": {"image_id": None, "injury_pred": None, "accuracy": None},
+    "neck": {"image_id": None, "injury_pred": None, "accuracy": None},
+    "arm1": {"image_id": None, "injury_pred": None, "accuracy": None},
+    "arm2": {"image_id": None, "injury_pred": None, "accuracy": None},
+    "hand1": {"image_id": None, "injury_pred": None, "accuracy": None},
+    "hand2": {"image_id": None, "injury_pred": None, "accuracy": None},
+    "chest": {"image_id": None, "injury_pred": None, "accuracy": None},
+    "abdomen": {"image_id": None, "injury_pred": None, "accuracy": None},
+    "back": {"image_id": None, "injury_pred": None, "accuracy": None},
+    "leg1": {"image_id": None, "injury_pred": None, "accuracy": None},
+    "leg2": {"image_id": None, "injury_pred": None, "accuracy": None},
+    "foot": {"image_id": None, "injury_pred": None, "accuracy": None},
+}

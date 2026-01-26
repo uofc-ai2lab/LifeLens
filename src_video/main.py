@@ -4,7 +4,7 @@ import asyncio
 from pathlib import Path
 from typing import Dict, Any
 import threading
-
+import shutil
 import cv2
 
 from config.video_settings import (
@@ -22,7 +22,7 @@ from src_video.services.camera_capture_service.capture_img import (
     gstreamer_pipeline,
     capture_images,
 )
-from src_video.domain.constants import COLOR_TEXT
+from src_video.domain.constants import COLOR_TEXT, BODY_PARTS_TEMPLATE
 
 
 def _as_posix(path: str) -> str:
@@ -189,7 +189,6 @@ def run_deidentification_pipeline(settings: Dict[str, Any]) -> bool:
         print(f"[video] De-identification failed: {e}")
         return False
 
-
 def print_summary(settings: Dict[str, Any], crop_count: int, infer_summary: Dict[str, Any]) -> None:
     """Print final pipeline summary."""
     print("[video] Summary:")
@@ -203,6 +202,93 @@ def print_summary(settings: Dict[str, Any], crop_count: int, infer_summary: Dict
         "injury_report_csv": str(infer_summary.get("out_csv")),
     })
 
+def body_ranking(settings: Dict[str, Any]) -> bool:
+    """
+    Track best injury predictions per body part across multiple captures.
+    Creates and updates visual_output.json and visual_output.csv with 
+    the highest confidence prediction for each body part.
+    
+    Returns:
+        True if successful, False otherwise.
+    """
+    import json
+    import csv
+    
+    classification_output = Path(settings["CLASSIFICATION_OUTPUT"])
+    prediction_json = classification_output / "injury_predictions.json"
+    template_json = classification_output / "visual_output.json"
+    output_csv = classification_output / "visual_output.csv"
+    
+    
+    try:
+        if not prediction_json.exists():
+            print(f"[WARNING] Prediction file not found: {prediction_json}")
+            return False
+        
+        # predictions of classified injuries of body parts 
+        with open(prediction_json, 'r') as f:
+            predictions_data = json.load(f)
+        
+        # Load existing or create a visual output file 
+        if template_json.exists():
+            with open(template_json, 'r') as f:
+                best_results = json.load(f)
+        else:
+            print(f"[INFO] Creating new visual_output file: {template_json}")
+            best_results = BODY_PARTS_TEMPLATE.copy()
+        
+        # Update best results with new predictions
+        updated_count = 0
+        for pred in predictions_data.get("predictions", []):
+            body_part = pred.get("body_part")
+            injury_pred = pred.get("injury_pred")
+            injury_prob = pred.get("injury_prob", 0.0)
+            image_id = pred.get("image_id")
+            
+            # Skip if body part not in template
+            #TODO: should this be a predefined file or continuously add to it if our model gets a new body part? 
+            if body_part not in best_results:
+                continue
+            
+            current_accuracy = best_results[body_part].get("accuracy")
+            
+            # Update if no existing prediction or new prediction has higher accuracy
+            if current_accuracy is None or injury_prob > current_accuracy:
+                best_results[body_part] = {
+                    "image_id": image_id,
+                    "injury_pred": injury_pred,
+                    "accuracy": injury_prob
+                }
+                updated_count += 1
+                print(f"[UPDATE] {body_part}: {injury_pred} ({injury_prob:.3f})")
+        
+        # Save updated JSON
+        with open(template_json, 'w') as f:
+            json.dump(best_results, f, indent=2)
+        
+        # Generate CSV
+        with open(output_csv, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(["body_part", "image_id", "injury_pred", "accuracy"])
+            
+            for body_part, data in best_results.items():
+                writer.writerow([
+                    body_part,
+                    data.get("image_id") or "",
+                    data.get("injury_pred") or "",
+                    data.get("accuracy") or ""
+                ])
+        
+        print(f"\n[INFO] Body ranking complete. Updated {updated_count} body parts.")
+        print(f"[INFO] JSON output: {template_json}")
+        print(f"[INFO] CSV output: {output_csv}\n")
+        
+        return True
+        
+    except Exception as e:
+        print(f"[ERROR] Body ranking failed: {e}")
+        return False
+
 
 def process_single_image(settings: Dict[str, Any]) -> bool:
     """
@@ -211,6 +297,7 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
     Returns:
         True if processing succeeded, False otherwise.
     """
+
     # Run detection
     if not run_detection_pipeline(settings):
         print("Error: Detection pipeline failed for this image.")
@@ -222,13 +309,29 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
         print("Error: Injury inference failed for this image.")
         return False
 
+    # Update body part rankings with best predictions
+    if not body_ranking(settings):
+        print("Warning: Body ranking update failed, but continuing...")
+
     # Run de-identification
     if not run_deidentification_pipeline(settings):
         print("Error: De-identification failed for this image.")
         return False
-
+        
     # Print summary for this image
     print_summary(settings, crop_count, infer_summary)
+
+    # deleting the crops folder to prevent accumulation
+    crops_root = Path(settings["CROPS_ROOT"])
+
+    if crops_root.exists():
+        try:
+            shutil.rmtree(crops_root)
+            crops_root.mkdir(parents=True, exist_ok=True)
+            print(f"[INFO] Cleaned crops folder: {crops_root}")
+        except Exception as e:
+            print(f"[WARNING] Failed to clean crops folder: {e}")
+    
     print("[video] Image processing complete.\n")
     
     return True
