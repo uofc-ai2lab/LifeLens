@@ -25,53 +25,54 @@ async def main():
     
     start_time = datetime.now()
     end_time = start_time
-    await run_audio_trimming()
-    setup_metadata()
     
     try:
         if args.service == "transcribe":
+            setup_metadata()
             await run_transcription()
         elif args.service == "meds":
+            setup_metadata()
             await run_medication_extraction()
         elif args.service == "inter":
+            setup_metadata()
             await run_intervention_extraction()
         elif args.service == "sem":
+            setup_metadata()
             await run_semantic_filtering()
         elif args.service == "anonymize":
+            setup_metadata()
             await run_anonymization_service()
         elif args.service == "record":
             await run_recording_service()
+            setup_metadata()
         elif args.service == "trim":
             await run_audio_trimming()
+            setup_metadata()
         
         else:  
-            # try:
-            #     print("Starting recording...\n")
-            #     await run_recording_service()
-            #     print("Recording finished.\n")
-            # except Exception as e:
-            #     print("Recording failed:", e)
             
-            # try:
-            #     print("Starting audio trimming...\n")
-            #     await run_audio_trimming()
-            #     print("Audio trimming finished.\n")
-            # except Exception as e:
-            #     print("Audio trimming failed:", e)
-                
+            try:
+                print("Starting recording...\n")
+                await run_recording_service()
+                print("Recording finished.\n")
+            except Exception as e:
+                print("Recording failed:", e)
+            
+            try:
+                print("Starting audio trimming...\n")
+                await run_audio_trimming()
+                print("Audio trimming finished.\n")
+            except Exception as e:
+                print("Audio trimming failed:", e)
+            
+            setup_metadata()
+            
             try:
                 print("Starting transcription...\n")
                 await run_transcription()
                 print("Transcription finished.\n")
             except Exception as e:
                 print("Transcription failed:", e)
-
-            try:
-                print("Starting anonymization...\n")
-                await run_anonymization_service()
-                print("Anonymization finished.\n")
-            except Exception as e:
-                print("Anonymization failed:", e)
 
             try:
                 print("Starting anonymization...\n")
