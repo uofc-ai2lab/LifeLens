@@ -11,6 +11,7 @@ from config.video_settings import (
     load_video_pipeline_settings,
     SNAPSHOT_COUNT,
     SNAPSHOT_INTERVAL,
+    IMAGE_SAVE_DIR
 )
 from src_video.services.detection_service.detect_body_parts import run_detection
 from src_video.services.classification_service.infer_injuries_on_crops import (
@@ -91,7 +92,7 @@ def run_detection_pipeline(settings: Dict[str, Any]) -> bool:
     try:
         run_detection(
             model=settings["DETECTION_MODEL"],
-            source=settings["IMAGE_SAVE_DIR"],
+            source=_as_posix(IMAGE_SAVE_DIR),
             output=_as_posix(settings["DETECTION_OUTPUT"]),
             classes=settings["CLASSES"],
             margin=float(settings["MARGIN"]),
@@ -299,20 +300,26 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
     """
 
     # Run detection
+    print("[video] Processing captured image through pipeline...\n")
     if not run_detection_pipeline(settings):
         print("Error: Detection pipeline failed for this image.")
         return False
+    
 
+    print("[video] Detection step complete.\n")
+    print("[video] Starting injury inference step...\n")
     # Run injury inference
     success, crop_count, infer_summary = run_injury_inference(settings)
     if not success:
         print("Error: Injury inference failed for this image.")
         return False
 
-    # Update body part rankings with best predictions
-    if not body_ranking(settings):
-        print("Warning: Body ranking update failed, but continuing...")
+    # # Update body part rankings with best predictions
+    # if not body_ranking(settings):
+    #     print("Warning: Body ranking update failed, but continuing...")
 
+    print("[video] Injury inference step complete.\n")
+    print("[video] Starting de-identification step...\n")
     # Run de-identification
     if not run_deidentification_pipeline(settings):
         print("Error: De-identification failed for this image.")

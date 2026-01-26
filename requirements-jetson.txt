@@ -52,7 +52,6 @@ scikit-image==0.19.3
 imageio>=2.25
 imageio-ffmpeg>=0.4.6
 # since we are using system dependencies too, this is already installed on the Jetson
-# ultralytics
 timm
 
 # detect AprilTag Marker
