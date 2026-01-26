@@ -4,6 +4,7 @@ from src_audio.services.medication_extraction_service.medication_extraction impo
 from src_audio.services.intervention_extraction_service.intervention_extraction import run_intervention_extraction
 from src_audio.services.semantic_filtering_service.semantic_filtering import run_semantic_filtering
 from src_audio.services.anonymization_service.transcript_anonymization import run_anonymization_service
+from src_audio.services.audio_input_service.record_functions import run_recording_service
 from scripts.trim_audio import run_audio_trimming
 from src_audio.utils.metadata import setup_metadata, finalize_metadata
 from datetime import datetime
@@ -17,7 +18,7 @@ async def main():
         "service",
         nargs="?",
         type=str,
-        choices=["transcribe", "meds", "inter", "sem", "anonymize", "trim"],
+        choices=["transcribe", "meds", "inter", "sem", "anonymize", "trim", "record"],
         default=None
     )
     args = parser.parse_args()
@@ -38,8 +39,11 @@ async def main():
             await run_semantic_filtering()
         elif args.service == "anonymize":
             await run_anonymization_service()
+        elif args.service == "record":
+            await run_recording_service()
         elif args.service == "trim":
             pass
+        
         else:  
             try:
                 print("Starting transcription...\n")
