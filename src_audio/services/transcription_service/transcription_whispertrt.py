@@ -25,18 +25,18 @@ def print_formatting(type: str, text: str):
     
 def load_whisper_model(model_size: str, model_cache_path: str = None):
     """Transcribe audio using WhisperTRT or fallback to original Whisper"""
-    print_formatting("heading",f"STEP 1: LOADING {MODEL_SIZE.upper()} MODEL")
+    print_formatting("heading", f"STEP 1: LOADING {model_size.upper()} MODEL")
     model = None
     
     # Determine if we should use WhisperTRT or original Whisper
-    use_whispertrt = IS_JETSON and MODEL_SIZE in ["tiny.en", "base.en"]
+    use_whispertrt = IS_JETSON and model_size in ["tiny.en", "base.en"]
     
     if use_whispertrt:
-        from whisper_trt import load_trt_model
-        print(bcolors.OKGREEN + f"Using WhisperTRT for {model_size} (TensorRT accelerated)" + bcolors.ENDC)
-        print(bcolors.WARNING + "Note: First run will build TensorRT engine (takes 2-5 minutes)\n" + bcolors.ENDC)
-        
         try:
+            from whisper_trt import load_trt_model
+            print(bcolors.OKGREEN + f"Using WhisperTRT for {model_size} (TensorRT accelerated)" + bcolors.ENDC)
+            print(bcolors.WARNING + "Note: First run will build TensorRT engine (takes 2-5 minutes)\n" + bcolors.ENDC)
+            
             if model_cache_path:
                 print(bcolors.OKBLUE + f"Using custom cache path: {model_cache_path}" + bcolors.ENDC)
                 model_file_path = os.path.join(model_cache_path, f"{model_size}.pth")
@@ -49,6 +49,9 @@ def load_whisper_model(model_size: str, model_cache_path: str = None):
             print(bcolors.OKGREEN + f"Model loaded successfully" + bcolors.ENDC)
             print(bcolors.OKGREEN + f"  Model type: {type(model)}" + bcolors.ENDC)
             
+        except ImportError:
+            print(bcolors.WARNING + f"WhisperTRT not installed. Falling back to original Whisper..." + bcolors.ENDC)
+            use_whispertrt = False
         except Exception as e:
             print(bcolors.FAIL + f"ERROR loading WhisperTRT model: {e}" + bcolors.ENDC)
             print(bcolors.WARNING + f"Falling back to original Whisper..." + bcolors.ENDC)
@@ -61,7 +64,12 @@ def load_whisper_model(model_size: str, model_cache_path: str = None):
         try:
             import whisper
             print(bcolors.OKBLUE + f"Loading Whisper {model_size} model..." + bcolors.ENDC)
-            model = whisper.load_model(model_size)
+            
+            # Use download_root parameter if cache path is specified
+            if model_cache_path:
+                model = whisper.load_model(model_size, download_root=model_cache_path)
+            else:
+                model = whisper.load_model(model_size)
             
             print(bcolors.OKGREEN + f"Model loaded successfully" + bcolors.ENDC)
             print(bcolors.OKGREEN + f"  Model type: {type(model)}" + bcolors.ENDC)
@@ -70,7 +78,7 @@ def load_whisper_model(model_size: str, model_cache_path: str = None):
             print(bcolors.FAIL + f"ERROR loading model: {e}" + bcolors.ENDC)
             raise
  
-    return model  
+    return model
  
 def verify_audio_file_exists(audio_file: str) -> bool:
     print_formatting("heading",f"STEP 2: VERIFYING INPUT AUDIO FILE ({Path(audio_file).name})")
