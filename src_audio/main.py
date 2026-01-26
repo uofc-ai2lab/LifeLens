@@ -42,9 +42,23 @@ async def main():
         elif args.service == "record":
             await run_recording_service()
         elif args.service == "trim":
-            pass
+            await run_audio_trimming()
         
         else:  
+            # try:
+            #     print("Starting recording...\n")
+            #     await run_recording_service()
+            #     print("Recording finished.\n")
+            # except Exception as e:
+            #     print("Recording failed:", e)
+            
+            # try:
+            #     print("Starting audio trimming...\n")
+            #     await run_audio_trimming()
+            #     print("Audio trimming finished.\n")
+            # except Exception as e:
+            #     print("Audio trimming failed:", e)
+                
             try:
                 print("Starting transcription...\n")
                 await run_transcription()
@@ -98,7 +112,7 @@ async def main():
     minutes, seconds = divmod(total_seconds, 60)
     hours, minutes = divmod(minutes, 60)
 
-    print(f"Complete pipeline time: {hours} hours, {minutes} minutes, and {seconds} seconds")
+    print(f"Complete AUDIO pipeline time: {hours} hours, {minutes} minutes, and {seconds} seconds")
     
 if __name__ == "__main__":
     import asyncio
