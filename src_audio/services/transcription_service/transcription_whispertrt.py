@@ -2,19 +2,16 @@ import os
 from pathlib import Path
 from datetime import datetime
 import pandas as pd
-import soundfile as sf
 from src_audio.domain.constants import bcolors
 from src_audio.utils.export_to_csv import export_to_csv
 from config.audio_settings import (
-    AUDIO_FILES_LIST,
+    AUDIO_FILES_DICT,
     IS_JETSON,
     MODEL_SIZE,
     MODEL_CACHE_PATH,
-    TRANSCRIPT_DIR,
-    DATA_DIR,
 )
 # extra config needed for speaker diarization - unused otherwise
-# from config.settings import USE_OFFLINE_MODELS, PYANNOTE_CACHE_DIR, HUGGING_FACE_TOKEN, DEVICE
+# from config.audio_settings import USE_OFFLINE_MODELS, PYANNOTE_CACHE_DIR, HUGGING_FACE_TOKEN, DEVICE
 # from download_pyannote import download_pyannote_models
 # from pyannote.audio import Pipeline
 
@@ -28,18 +25,18 @@ def print_formatting(type: str, text: str):
     
 def load_whisper_model(model_size: str, model_cache_path: str = None):
     """Transcribe audio using WhisperTRT or fallback to original Whisper"""
-    print_formatting("heading",f"STEP 1: LOADING {MODEL_SIZE.upper()} MODEL")
+    print_formatting("heading", f"STEP 1: LOADING {model_size.upper()} MODEL")
     model = None
     
     # Determine if we should use WhisperTRT or original Whisper
-    use_whispertrt = IS_JETSON and MODEL_SIZE in ["tiny.en", "base.en"]
+    use_whispertrt = IS_JETSON and model_size in ["tiny.en", "base.en"]
     
     if use_whispertrt:
-        from whisper_trt import load_trt_model
-        print(bcolors.OKGREEN + f"Using WhisperTRT for {model_size} (TensorRT accelerated)" + bcolors.ENDC)
-        print(bcolors.WARNING + "Note: First run will build TensorRT engine (takes 2-5 minutes)\n" + bcolors.ENDC)
-        
         try:
+            from whisper_trt import load_trt_model
+            print(bcolors.OKGREEN + f"Using WhisperTRT for {model_size} (TensorRT accelerated)" + bcolors.ENDC)
+            print(bcolors.WARNING + "Note: First run will build TensorRT engine (takes 2-5 minutes)\n" + bcolors.ENDC)
+            
             if model_cache_path:
                 print(bcolors.OKBLUE + f"Using custom cache path: {model_cache_path}" + bcolors.ENDC)
                 model_file_path = os.path.join(model_cache_path, f"{model_size}.pth")
@@ -52,6 +49,9 @@ def load_whisper_model(model_size: str, model_cache_path: str = None):
             print(bcolors.OKGREEN + f"Model loaded successfully" + bcolors.ENDC)
             print(bcolors.OKGREEN + f"  Model type: {type(model)}" + bcolors.ENDC)
             
+        except ImportError:
+            print(bcolors.WARNING + f"WhisperTRT not installed. Falling back to original Whisper..." + bcolors.ENDC)
+            use_whispertrt = False
         except Exception as e:
             print(bcolors.FAIL + f"ERROR loading WhisperTRT model: {e}" + bcolors.ENDC)
             print(bcolors.WARNING + f"Falling back to original Whisper..." + bcolors.ENDC)
@@ -64,7 +64,12 @@ def load_whisper_model(model_size: str, model_cache_path: str = None):
         try:
             import whisper
             print(bcolors.OKBLUE + f"Loading Whisper {model_size} model..." + bcolors.ENDC)
-            model = whisper.load_model(model_size)
+            
+            # Use download_root parameter if cache path is specified
+            if model_cache_path:
+                model = whisper.load_model(model_size, download_root=model_cache_path)
+            else:
+                model = whisper.load_model(model_size)
             
             print(bcolors.OKGREEN + f"Model loaded successfully" + bcolors.ENDC)
             print(bcolors.OKGREEN + f"  Model type: {type(model)}" + bcolors.ENDC)
@@ -73,7 +78,7 @@ def load_whisper_model(model_size: str, model_cache_path: str = None):
             print(bcolors.FAIL + f"ERROR loading model: {e}" + bcolors.ENDC)
             raise
  
-    return model  
+    return model
  
 def verify_audio_file_exists(audio_file: str) -> bool:
     print_formatting("heading",f"STEP 2: VERIFYING INPUT AUDIO FILE ({Path(audio_file).name})")
@@ -154,30 +159,6 @@ async def transcribe_audio(audio_file: str, model):
         import traceback
         traceback.print_exc()
         raise
-
-async def move_file_to_processed(audio_file: Path):
-    """Move processed audio file to 'processed' subdirectory"""
-    processed_dir = DATA_DIR / "audio_files" / "processed"
-    # Create processed directory if it doesn't exist (will not overwrite existing)
-    processed_dir.mkdir(parents=True, exist_ok=True)
-
-    destination = processed_dir / audio_file.name
-    try:
-        os.rename(audio_file, destination)
-        print(
-            bcolors.OKGREEN + f"Moved processed file to: {destination}" + bcolors.ENDC
-        )
-    except Exception as e:
-        print(
-            bcolors.FAIL
-            + f"ERROR moving file to processed directory: {e}"
-            + bcolors.ENDC
-        )
-        import traceback
-
-        traceback.print_exc()
-        raise
-
 
 # def _check_models_exist(cache_dir: Path) -> bool:
 #     """
@@ -313,63 +294,63 @@ async def run_transcription():
     """Main runner function for WhisperTRT (or Whisper) transcription """
     # ==================== VERIFICATION STEP 1: LOAD MODEL ====================
     model = load_whisper_model(MODEL_SIZE, MODEL_CACHE_PATH)
-    
-    for audio_file in AUDIO_FILES_LIST:
-        print(bcolors.OKGREEN + f"Transcribing {Path(audio_file).name}...\n" + bcolors.ENDC)
+
+    for parent_audio, chunk_files in AUDIO_FILES_DICT.items():
+        for audio_chunk_file in chunk_files:
+            print(f"Current audio file path: {audio_chunk_file}")
+            print(bcolors.OKGREEN + f"Transcribing {Path(audio_chunk_file).name}...\n" + bcolors.ENDC)
+            
+            # ==================== VERIFICATION STEP 2: CHECK INPUT FILE ====================
+            if verify_audio_file_exists(audio_chunk_file) is False:
+                print(bcolors.FAIL + f"{audio_chunk_file} does not exist. Stopping transcription, moving to next audio file." + bcolors.ENDC)
+                continue 
         
-        # ==================== VERIFICATION STEP 2: CHECK INPUT FILE ====================
-        if verify_audio_file_exists(audio_file) is False:
-            print(bcolors.FAIL + f"{audio_file} does not exist. Stopping transcription, moving to next audio file." + bcolors.ENDC)
-            continue 
-    
-        # Track total time
-        total_start = datetime.now()
+            # Track total time
+            total_start = datetime.now()
 
-        # ==================== VERIFICATION STEP 3: TRANSCRIBE ====================
-        transcribe_start = datetime.now()
-        result = await transcribe_audio(audio_file, model)
+            # ==================== VERIFICATION STEP 3: TRANSCRIBE ====================
+            transcribe_start = datetime.now()
+            result = await transcribe_audio(audio_chunk_file, model)
 
-        # ==================== VERIFICATION STEP 3.1: Diarize ====================
-        # print_formatting("heading","STEP 3.1: Diarizing with pyannote...")
-        # diarize_start = datetime.now()
-        # result = await assign_speakers(device, audio_file, result, use_offline_models, hugging_face_token)
-        # diarize_end = datetime.now()
-       
-        # ==================== VERIFICATION STEP 4: CHECK OUTPUT ====================
-        verified_result = verify_transcription_output(result)
-        transcribe_end = datetime.now()
-
-        # Check if transcription failed
-        if verified_result is None:
-            print(bcolors.FAIL + "\nTRANSCRIPTION FAILED - STOPPING PIPELINE" + bcolors.ENDC)
-            return
-
-        normalized_result = normalize_whisper_segments(verified_result)
-
-        # ==================== VERIFICATION STEP 5: CHECK EXPORT ====================
-        export_start = datetime.now()
-        columns=["start_time", "end_time", "text", "speaker"]
-        print_formatting("heading","STEP 5: EXPORTING RESULTS")
+            # ==================== VERIFICATION STEP 3.1: Diarize ====================
+            # print_formatting("heading","STEP 3.1: Diarizing with pyannote...")
+            # diarize_start = datetime.now()
+            # result = await assign_speakers(device, audio_file, result, use_offline_models, hugging_face_token)
+            # diarize_end = datetime.now()
         
-        export_to_csv(
-            data=normalized_result,
-            output_path=TRANSCRIPT_DIR,
-            input_filename=Path(audio_file).name,
-            service="transcript",
-            columns=columns,
-        )
+            # ==================== VERIFICATION STEP 4: CHECK OUTPUT ====================
+            verified_result = verify_transcription_output(result)
+            transcribe_end = datetime.now()
 
-        # Move processed audio file
-        await move_file_to_processed(audio_file)
-        export_end = datetime.now()
+            # Check if transcription failed
+            if verified_result is None:
+                print(bcolors.FAIL + "\nTRANSCRIPTION FAILED - STOPPING PIPELINE" + bcolors.ENDC)
+                return
 
-        # Print timing summary
-        time_for_transcription = transcribe_end - transcribe_start
-        time_for_export = export_end - export_start
-        time_total = export_end - total_start
+            normalized_result = normalize_whisper_segments(verified_result)
 
-        print_formatting("title", "TIMING SUMMARY")
-        print(bcolors.OKBLUE + f"Total time: {time_total.seconds // 60} minutes and {time_total.seconds % 60} seconds" + bcolors.ENDC)
-        print(bcolors.OKBLUE + f"  Transcription: {time_for_transcription.seconds // 60} minutes and {time_for_transcription.seconds % 60} seconds" + bcolors.ENDC)
-        print(bcolors.OKBLUE + f"  Export: {time_for_export.seconds // 60} minutes and {time_for_export.seconds % 60} seconds" + bcolors.ENDC)
-        print(bcolors.OKGREEN + bcolors.BOLD + "\nPIPELINE COMPLETED SUCCESSFULLY!" + bcolors.ENDC + "\n")
+            # ==================== VERIFICATION STEP 5: CHECK EXPORT ====================
+            export_start = datetime.now()
+            columns=["start_time", "end_time", "text", "speaker"]
+            print_formatting("heading","STEP 5: EXPORTING RESULTS")
+            
+            export_to_csv(
+                data=normalized_result,
+                output_path=Path(audio_chunk_file).parent,
+                input_file_path=Path(audio_chunk_file),
+                service="transcript",
+                columns=columns,
+            )
+
+            export_end = datetime.now()
+
+            # Print timing summary
+            time_for_transcription = transcribe_end - transcribe_start
+            time_for_export = export_end - export_start
+            time_total = export_end - total_start
+
+            print_formatting("title", "TIMING SUMMARY")
+            print(bcolors.OKBLUE + f"Total time: {time_total.seconds // 60} minutes and {time_total.seconds % 60} seconds" + bcolors.ENDC)
+            print(bcolors.OKBLUE + f"  Transcription: {time_for_transcription.seconds // 60} minutes and {time_for_transcription.seconds % 60} seconds" + bcolors.ENDC)
+            print(bcolors.OKBLUE + f"  Export: {time_for_export.seconds // 60} minutes and {time_for_export.seconds % 60} seconds" + bcolors.ENDC)
+        print(bcolors.OKGREEN + bcolors.BOLD + "\nPIPELINE COMPLETED SUCCESSFULLY!" + bcolors.ENDC + "\n")    

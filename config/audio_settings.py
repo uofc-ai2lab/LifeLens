@@ -13,16 +13,17 @@ load_dotenv()
 BASE_DIR = Path(os.getcwd()).resolve()
 
 SRC_DIR = BASE_DIR / "src_audio"
-DATA_DIR = BASE_DIR / "data/audio"
+DATA_DIR = BASE_DIR / "data"
+AUDIO_DATA_DIR = DATA_DIR / "audio"
 
-AUDIO_DIR = DATA_DIR / "audio_files/unprocessed"
-TRANSCRIPT_DIR = DATA_DIR / "transcript_files"
-MEANING_DIR = DATA_DIR / "meaning_files"
-OUTPUT_DIR = DATA_DIR / "output_files"
-ANONYMIZED_DIR = DATA_DIR / "anonymized_files"
+AUDIO_DIR = AUDIO_DATA_DIR / "audio_files"
+os.makedirs(AUDIO_DIR, exist_ok=True)
+
+PROCESSED_AUDIO_DIR = AUDIO_DATA_DIR / "processed_audio"
+os.makedirs(PROCESSED_AUDIO_DIR, exist_ok=True)
 
 METADATA_FILENAME = "audio_pipeline_metadata.json"
-METADATA_JSON_PATH = DATA_DIR / METADATA_FILENAME
+METADATA_JSON_PATH = AUDIO_DATA_DIR / METADATA_FILENAME
 
 # -------------------------
 # Audio / Transcription
@@ -41,23 +42,30 @@ USE_OFFLINE_MODELS = int(os.getenv("USE_OFFLINE_MODELS", "0"))
 _raw_audio_files = os.getenv("AUDIO_FILES")
 if _raw_audio_files:
     # Explicit list provided via env var
-    AUDIO_FILES_LIST = [AUDIO_DIR / f.strip() for f in _raw_audio_files.split(",") if f.strip()]
+    _audio_files_list = [AUDIO_DIR / f.strip() for f in _raw_audio_files.split(",") if f.strip()]
 else:
     # Default: take ALL files in audio_files directory
-    AUDIO_FILES_LIST = [f for f in AUDIO_DIR.iterdir() if f.is_file()]
+    _audio_files_list = [f for f in AUDIO_DIR.iterdir() if f.is_file()]
+
+AUDIO_FILES_DICT = {}
+for parent_audio in _audio_files_list:
+    parent_audio_dir = PROCESSED_AUDIO_DIR / Path(parent_audio).stem
+    parent_audio_dir.mkdir(parents=True, exist_ok=True)
+    parent_audio_dir_with_ext = parent_audio_dir.with_suffix(Path(parent_audio).suffix)
+    AUDIO_FILES_DICT[parent_audio_dir_with_ext] = []
 
 # -------------------------
 # NLP / Meaning extraction
 # -------------------------
 MEDCAT_DATA_DIR = DATA_DIR / "data_p3.2"
 MODEL_PACK_PATH = MEDCAT_DATA_DIR / "medmen_wstatus_2021_oct.zip"
-ENABLE_MEDCAT = os.getenv("ENABLE_MEDCAT", "0")
+ENABLE_MEDCAT = int(os.getenv("ENABLE_MEDCAT", "0"))
 
-if ENABLE_MEDCAT is True:
+if ENABLE_MEDCAT:
     try:
         from medcat.cat import CAT
     except:
-        print("ERROR: MedCAT not installed or environment broken.")
+        print("ERROR1: MedCAT not installed or environment broken.")
         exit()
 
     MODEL_PACK = CAT.load_model_pack(MODEL_PACK_PATH)
@@ -69,12 +77,15 @@ else:
     NLP = None
 
 _raw_transcript_files = os.getenv("TRANSCRIPT_FILES")
+_unknown_audio_dir = PROCESSED_AUDIO_DIR / "unknown_audio"
+_unknown_audio_dir.mkdir(parents=True, exist_ok=True)
+
 if _raw_transcript_files:
     # Explicit list provided via env var
-    TRANSCRIPT_FILES_LIST = [TRANSCRIPT_DIR / f.strip() for f in _raw_transcript_files.split(",") if f.strip()]
+    TRANSCRIPT_FILES_LIST = [_unknown_audio_dir / f.strip() for f in _raw_transcript_files.split(",") if f.strip()]
 else:
-    # Default: take ALL files in audio_files directory
-    TRANSCRIPT_FILES_LIST = [f for f in TRANSCRIPT_DIR.iterdir() if f.is_file()]
+    # Default: take ALL files in transcript directory
+    TRANSCRIPT_FILES_LIST = [f for f in _unknown_audio_dir.iterdir() if f.is_file()]
 
 ENABLE_SEMANTIC_FILTERING = int(os.getenv("ENABLE_SEMANTIC_FILTERING", "0"))
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", None)

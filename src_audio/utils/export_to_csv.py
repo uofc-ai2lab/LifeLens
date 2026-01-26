@@ -35,8 +35,8 @@ def _transform_row_fn(data, columns):
 
 def export_to_csv(
     data: Union[List[Dict],pd.DataFrame],
-    output_path: str,
-    input_filename: str,
+    output_path: Path,
+    input_file_path: Path,
     service: str = "",
     columns: Optional[List[str]] = None,
     header: Optional[List[str]] = None,
@@ -56,39 +56,54 @@ def export_to_csv(
     - empty_ok: whether to write empty CSV if data is empty
     """
 
-    full_output_name = generate_export_filename(input_filename, service)
-    full_output_path=f"{output_path}/{full_output_name}"
-    os.makedirs(os.path.dirname(full_output_path), exist_ok=True)
+    full_output_path = generate_export_filename(input_file_path, service)
+    full_output_path.parent.mkdir(parents=True, exist_ok=True)
     
+    # Determine columns for empty CSV
+    if columns:
+        cols_to_write = columns
+    elif isinstance(data, pd.DataFrame):
+        cols_to_write = data.columns.tolist()
+    elif isinstance(data, list) and len(data) > 0:
+        cols_to_write = list(data[0].keys())
+    else:
+        # No data → fallback to header parameter or empty list
+        cols_to_write = header or []
     
-    if data is None or (isinstance(data, list) and len(data) == 0):
+    # Warn if data is empty
+    if not data or (isinstance(data, list) and len(data) == 0) or (isinstance(data, pd.DataFrame) and data.empty):
         if not empty_ok:
             print(bcolors.FAIL + "ERROR: No data to export." + bcolors.ENDC)
             return
-        print(bcolors.WARNING + "WARNING: Exporting empty CSV." + bcolors.ENDC)
+        print(bcolors.WARNING + f"WARNING: Exporting empty CSV → {full_output_path}" + bcolors.ENDC)
     
     try:
         # Case 1: DataFrame
         if isinstance(data, pd.DataFrame):
+            # Ensure all requested columns exist
             if columns: 
+                for col in columns:
+                    if col not in data:
+                        data[col] = None
                 data = data[columns]
             data.to_csv(full_output_path, index=False)
             
         # Case 2: List[Dict]
         else:
             rows = _transform_row_fn(data, columns)
+            # Ensure all columns exist for empty rows
+            for r in rows:
+                for col in cols_to_write:
+                    if col not in r:
+                        r[col] = ""
             
-            if columns:
-                rows = [{k: r.get(k,"") for k in columns} for r in rows]
-            
-            with open(full_output_path, "w", newline="", encoding="utf-8") as f:
+            with full_output_path.open("w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
+                writer.writerow(cols_to_write)  # always write header
+                for row in rows:
+                    writer.writerow([row.get(c, "") for c in cols_to_write])
                 
-                if header:  writer.writerow(header)
-                elif rows:  writer.writerow(rows[0].keys())
-                
-                for row in rows:    writer.writerow(row.values())
-        print(bcolors.OKGREEN + f"CSV exported successfully -> {os.path.abspath(full_output_path)}"+bcolors.ENDC)
+        print(bcolors.OKGREEN + f"CSV exported successfully -> {full_output_path.resolve()}" + bcolors.ENDC)
         
     except Exception as e:
         print(bcolors.FAIL + f"ERROR exporting CSV: {e}" + bcolors.ENDC)

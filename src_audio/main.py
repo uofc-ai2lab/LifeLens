@@ -4,7 +4,10 @@ from src_audio.services.medication_extraction_service.medication_extraction impo
 from src_audio.services.intervention_extraction_service.intervention_extraction import run_intervention_extraction
 from src_audio.services.semantic_filtering_service.semantic_filtering import run_semantic_filtering
 from src_audio.services.anonymization_service.transcript_anonymization import run_anonymization_service
+from src_audio.services.audio_input_service.record_functions import run_recording_service
+from scripts.trim_audio import run_audio_trimming
 from src_audio.utils.metadata import setup_metadata, finalize_metadata
+from datetime import datetime
 
 async def main():
     """
@@ -15,25 +18,55 @@ async def main():
         "service",
         nargs="?",
         type=str,
-        choices=["transcribe", "meds", "inter", "sem", "anonymize"],
+        choices=["transcribe", "meds", "inter", "sem", "anonymize", "trim", "record"],
         default=None
     )
     args = parser.parse_args()
     
-    setup_metadata()
-
+    start_time = datetime.now()
+    end_time = start_time
+    
     try:
         if args.service == "transcribe":
+            setup_metadata()
             await run_transcription()
         elif args.service == "meds":
+            setup_metadata()
             await run_medication_extraction()
         elif args.service == "inter":
+            setup_metadata()
             await run_intervention_extraction()
         elif args.service == "sem":
+            setup_metadata()
             await run_semantic_filtering()
         elif args.service == "anonymize":
+            setup_metadata()
             await run_anonymization_service()
+        elif args.service == "record":
+            await run_recording_service()
+            setup_metadata()
+        elif args.service == "trim":
+            await run_audio_trimming()
+            setup_metadata()
+        
         else:  
+            
+            try:
+                print("Starting recording...\n")
+                await run_recording_service()
+                print("Recording finished.\n")
+            except Exception as e:
+                print("Recording failed:", e)
+            
+            try:
+                print("Starting audio trimming...\n")
+                await run_audio_trimming()
+                print("Audio trimming finished.\n")
+            except Exception as e:
+                print("Audio trimming failed:", e)
+            
+            setup_metadata()
+            
             try:
                 print("Starting transcription...\n")
                 await run_transcription()
@@ -71,6 +104,16 @@ async def main():
                 
     finally:
         finalize_metadata()
+    
+    end_time = datetime.now()
+    
+    total_time = end_time - start_time
+    
+    total_seconds = int(total_time.total_seconds())
+    minutes, seconds = divmod(total_seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+
+    print(f"Complete pipeline time: {hours} hours, {minutes} minutes, and {seconds} seconds")
     
 if __name__ == "__main__":
     import asyncio

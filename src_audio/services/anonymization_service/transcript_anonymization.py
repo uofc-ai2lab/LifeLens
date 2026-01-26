@@ -1,7 +1,7 @@
 from src_audio.utils.load_csv_file import load_csv_file 
 from src_audio.utils.export_to_csv import export_to_csv
 from src_audio.services.anonymization_service.anonymizer import TranscriptAnonymizer
-from config.settings import TRANSCRIPT_FILES_LIST, ANONYMIZED_DIR
+from config.audio_settings import TRANSCRIPT_FILES_LIST
 from pathlib import Path
 
 def run_anonymization(transcript_path: str, anonymizer: TranscriptAnonymizer) -> None:
@@ -30,8 +30,8 @@ def run_anonymization(transcript_path: str, anonymizer: TranscriptAnonymizer) ->
     # Export anonymized transcript to CSV
     export_to_csv(
         data=anonymized_texts,
-        output_path=ANONYMIZED_DIR,
-        input_filename=Path(transcript_path).name,
+        output_path=Path(transcript_path).parent,
+        input_file_path=Path(transcript_path),
         service="anonymization",
         columns=["start_time", "end_time", "text"],
         empty_ok=True, # should not be empty unless incoming csv transcript had empty cells which I don't think is possible, so can I set this to False?

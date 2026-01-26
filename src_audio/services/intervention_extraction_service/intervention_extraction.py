@@ -5,7 +5,7 @@ import spacy
 import re
 from src_audio.utils.export_to_csv import export_to_csv
 from src_audio.utils.load_csv_file import load_csv_file 
-from config.audio_settings import TRANSCRIPT_FILES_LIST, MEANING_DIR, MODEL_PACK
+from config.audio_settings import TRANSCRIPT_FILES_LIST, MODEL_PACK
 from src_audio.domain.constants import INTERVENTIONS, REPLACEMENTS, INTER_COLUMNS
 
 def normalize_text(text):
@@ -43,11 +43,11 @@ def has_intervention_keyword(text_norm):
     return False
 
 
-def intervention_extraction_pipeline(transcript_path: str, output_path="interventions_extracted.csv"):
+def intervention_extraction_pipeline(transcript_path: str):
     """Main extraction pipeline for interventions only"""
     df = load_csv_file(transcript_path)
     if MODEL_PACK is None:
-        print("ERROR: MedCAT not installed or environment broken.")
+        print("ERROR2: MedCAT not installed or environment broken.")
         sys.exit(1)
     
     #  dict to group by start_time only (one row per start time)
@@ -113,8 +113,8 @@ def intervention_extraction_pipeline(transcript_path: str, output_path="interven
     
     export_to_csv(
         data=extracted_interventions,
-        output_path=MEANING_DIR,
-        input_filename=Path(transcript_path).name,
+        output_path=Path(transcript_path).parent,
+        input_file_path=Path(transcript_path),
         service="intervention",
         columns=INTER_COLUMNS, 
         empty_ok=True,
