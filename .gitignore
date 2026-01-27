@@ -335,4 +335,4 @@ __marimo__/
 data/video/output_files/
 
 # training set
-data/video/source_files/Images/Wound_dataset/
+# data/video/source_files/Images/Wound_dataset/
