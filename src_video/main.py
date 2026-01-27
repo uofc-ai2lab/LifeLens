@@ -15,7 +15,7 @@ from config.video_settings import load_video_pipeline_settings, SNAPSHOT_COUNT, 
 from src_video.services.detection_service.detect_body_parts import run_detection
 from src_video.services.classification_service.infer_injuries_on_crops import (predict_injuries_on_detection_crops,)
 from src_video.services.deidentification_service.deidentify import run_deidentification
-# from src_video.services.detect_marker_service.detect_marker import detect_apriltags
+from src_video.services.detect_marker_service.detect_marker import detect_apriltags
 from src_video.services.camera_capture_service.capture_img import gstreamer_pipeline, capture_images
 from src_video.domain.constants import COLOR_TEXT
 
@@ -45,63 +45,61 @@ async def main() -> int:
         num_initial_snaps = 0
         last_snap_time = -1
 
+        print("Camera started successfully! Detecting markers...\n")
+        try:
+            cv2.namedWindow(window_title, cv2.WINDOW_AUTOSIZE)
+            while True:
+                ret_val, frame = video_capture.read()
+                if not ret_val:
+                    print("ERROR: Failed to grab frame")
+                    break
+                # Check to see if the user closed the window
+                keyCode = cv2.waitKey(10) & 0xFF
+                # Stop the program on the ESC key or 'q'
+                if keyCode == 27 or keyCode == ord('q'):
+                    break
 
-    #     print("Camera started successfully! Detecting markers...\n")
-    #     try:
-    #         cv2.namedWindow(window_title, cv2.WINDOW_AUTOSIZE)
-    #         while True:
-    #             ret_val, frame = video_capture.read()
-    #             if not ret_val:
-    #                 print("ERROR: Failed to grab frame")
-    #                 break
-    #             # Check to see if the user closed the window
-    #             keyCode = cv2.waitKey(10) & 0xFF
-    #             # Stop the program on the ESC key or 'q'
-    #             if keyCode == 27 or keyCode == ord('q'):
-    #                 break
+                # Calculate FPS
+                frame_count += 1
+                elapsed = time.time() - start_time
+                if elapsed > 2.0:
+                    fps = frame_count / elapsed
+                    if print_info:
+                        print(f"\n[PERFORMANCE] FPS: {fps:.1f}")
+                    frame_count = 0
+                    start_time = time.time()
 
-    #             # Calculate FPS
-    #             frame_count += 1
-    #             elapsed = time.time() - start_time
-    #             if elapsed > 2.0:
-    #                 fps = frame_count / elapsed
-    #                 if print_info:
-    #                     print(f"\n[PERFORMANCE] FPS: {fps:.1f}")
-    #                 frame_count = 0
-    #                 start_time = time.time()
+                # Draw FPS and tag count on frame
+                cv2.putText(frame, f"FPS: {fps:.1f}", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, COLOR_TEXT, 2)
+                cv2.putText(frame, f"Viz: {'ON' if show_visualization else 'OFF'}", (10, 90),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, COLOR_TEXT, 2)
 
-    #             # Draw FPS and tag count on frame
-    #             cv2.putText(frame, f"FPS: {fps:.1f}", (10, 30),
-    #                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, COLOR_TEXT, 2)
-    #             cv2.putText(frame, f"Viz: {'ON' if show_visualization else 'OFF'}", (10, 90),
-    #                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, COLOR_TEXT, 2)
+                # Display frame
+                if cv2.getWindowProperty(window_title, cv2.WND_PROP_AUTOSIZE) >= 0:
+                    cv2.imshow(window_title, frame)
+                else:
+                    break
 
-    #             # Display frame
-    #             if cv2.getWindowProperty(window_title, cv2.WND_PROP_AUTOSIZE) >= 0:
-    #                 cv2.imshow(window_title, frame)
-    #             else:
-    #                 break
+                #  Detect AprilTags
+                if not DETECTED_TAG:
+                    DETECTED_TAG = detect_apriltags(video_capture, show_visualization=show_visualization, print_info=print_info)
+                    print(f"[INFO] Tags detected? {DETECTED_TAG}. Continuing to monitor...\n")                       
+                # if we detect tags then we run capture image service
+                if DETECTED_TAG:
+                    if num_initial_snaps < SNAPSHOT_COUNT and (last_snap_time == -1 or time.time() - last_snap_time >= SNAPSHOT_INTERVAL):
+                        capture_images(video_capture)
+                        num_initial_snaps += 1
+                        last_snap_time = time.time()
+                    elif num_initial_snaps == SNAPSHOT_COUNT:
+                        print(f"\n[INFO] Captured {SNAPSHOT_COUNT} images. Exiting camera service.\n")
+                        break
+        finally:
+            video_capture.release()
+            cv2.destroyAllWindows()
+    else:
+        print("Error: Unable to open camera")
 
-    #             #  Detect AprilTags
-    #             if not DETECTED_TAG:
-    #                 DETECTED_TAG = detect_apriltags(video_capture, show_visualization=show_visualization, print_info=print_info)
-    #                 print(f"[INFO] Tags detected? {DETECTED_TAG}. Continuing to monitor...\n")                       
-    #             # if we detect tags then we run capture image service
-    #             if DETECTED_TAG:
-    #                 if num_initial_snaps < SNAPSHOT_COUNT and (last_snap_time == -1 or time.time() - last_snap_time >= SNAPSHOT_INTERVAL):
-    #                     capture_images(video_capture)
-    #                     num_initial_snaps += 1
-    #                     last_snap_time = time.time()
-    #                 elif num_initial_snaps == SNAPSHOT_COUNT:
-    #                     print(f"\n[INFO] Captured {SNAPSHOT_COUNT} images. Exiting camera service.\n")
-    #                     break
-    #     finally:
-    #         video_capture.release()
-    #         cv2.destroyAllWindows()
-    # else:
-    #     print("Error: Unable to open camera")
-
-    # else run full pipeline
     print("running full pipeline...")
 
     detection_output = Path(settings["DETECTION_OUTPUT"])
