@@ -30,7 +30,7 @@ def trim_audio(parent_audio_file):
         chunk = audio[start:end]  # last chunk may be shorter — that's fine
 
         chunk_filename = f"{Path(parent_audio_file).stem}_chunk_{chunk_idx}{Path(parent_audio_file).suffix}"
-        chunk_audio_dir = parent_audio_file.with_suffix("") / Path(chunk_filename).stem
+        chunk_audio_dir = Path(parent_audio_file).with_suffix("") / Path(chunk_filename).stem
         chunk_audio_dir.mkdir(parents=True, exist_ok=True)
         chunk_audio_path = chunk_audio_dir / chunk_filename
         
@@ -43,6 +43,7 @@ def trim_audio(parent_audio_file):
 
 async def run_audio_trimming():
     """Async wrapper to run the audio trimming."""
+    print(f"Starting audio trimming for {AUDIO_FILES_DICT}..\n")
     for parent_audio in AUDIO_FILES_DICT.keys(): trim_audio(parent_audio)
         
         

@@ -47,12 +47,15 @@ else:
     # Default: take ALL files in audio_files directory
     _audio_files_list = [f for f in AUDIO_DIR.iterdir() if f.is_file()]
 
-AUDIO_FILES_DICT = {}
-for parent_audio in _audio_files_list:
+def create_parent_audio_dir(parent_audio):
     parent_audio_dir = PROCESSED_AUDIO_DIR / Path(parent_audio).stem
     parent_audio_dir.mkdir(parents=True, exist_ok=True)
     parent_audio_dir_with_ext = parent_audio_dir.with_suffix(Path(parent_audio).suffix)
     AUDIO_FILES_DICT[parent_audio_dir_with_ext] = []
+
+AUDIO_FILES_DICT = {}
+for parent_audio in _audio_files_list:
+    create_parent_audio_dir(parent_audio)
 
 # -------------------------
 # NLP / Meaning extraction
