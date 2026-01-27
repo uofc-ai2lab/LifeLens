@@ -117,6 +117,8 @@ pip install -r requirements.txt
 If operating on a jetson-nano, also install jetson-specific dependencies:
 ```sh
 pip install -r requirements-jetson.txt
+sudo pip install ultralytics --no-deps 
+#Need to manually install ultralytics due to dependency issues 
 ```
 
 ###  Download MedCAT Model (One-Time Setup) - for Medication Intervention

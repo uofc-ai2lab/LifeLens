@@ -26,3 +26,19 @@ class AprilTagDetection:
         print(f"Corners: {self.corners}")
         print(f"Distance: {self.distance} meters")
         print(f"Decision Margin: {self.decision_margin}")
+
+#basic body parts that will be updated with real patient info
+def create_body_parts():
+    return {
+        "head": {"image_id": None, "injury_pred": None, "accuracy": None},
+        "face": {"image_id": None, "injury_pred": None, "accuracy": None},
+        "neck": {"image_id": None, "injury_pred": None, "accuracy": None},
+        "arm": {"image_id": None, "injury_pred": None, "accuracy": None},
+        "hand": {"image_id": None, "injury_pred": None, "accuracy": None},
+        "chest": {"image_id": None, "injury_pred": None, "accuracy": None},
+        "abdomen": {"image_id": None, "injury_pred": None, "accuracy": None},
+        "back": {"image_id": None, "injury_pred": None, "accuracy": None},
+        "leg": {"image_id": None, "injury_pred": None, "accuracy": None},
+        "foot": {"image_id": None, "injury_pred": None, "accuracy": None},
+    }
+
