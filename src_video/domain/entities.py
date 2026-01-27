@@ -28,7 +28,6 @@ class AprilTagDetection:
         print(f"Decision Margin: {self.decision_margin}")
 
 #basic body parts that will be updated with real patient info
-@dataclass
 def create_body_parts():
     return {
         "head": {"image_id": None, "injury_pred": None, "accuracy": None},

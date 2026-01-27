@@ -13,7 +13,8 @@ from src_video.services.classification_service.infer_injuries_on_crops import pr
 from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
 from src_video.services.camera_capture_service.capture_img import (gstreamer_pipeline, capture_images,)
-from src_video.domain.constants import COLOR_TEXT, BODY_PARTS_TEMPLATE
+from src_video.domain.constants import COLOR_TEXT
+from src_video.domain.entities import create_body_parts
 
 
 def _as_posix(path: str) -> str:
@@ -226,7 +227,7 @@ def body_ranking(settings: Dict[str, Any]) -> bool:
                 best_results = json.load(f)
         else:
             print(f"[INFO] Creating new visual_output file: {template_json}")
-            best_results = BODY_PARTS_TEMPLATE.copy()
+            best_results = create_body_parts()
         
         # Update best results with new predictions
         updated_count = 0
