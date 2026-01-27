@@ -7,22 +7,12 @@ import threading
 import shutil
 import cv2
 
-from config.video_settings import (
-    load_video_pipeline_settings,
-    SNAPSHOT_COUNT,
-    SNAPSHOT_INTERVAL,
-    IMAGE_SAVE_DIR
-)
+from config.video_settings import ( load_video_pipeline_settings, SNAPSHOT_INTERVAL, IMAGE_SAVE_DIR)
 from src_video.services.detection_service.detect_body_parts import run_detection
-from src_video.services.classification_service.infer_injuries_on_crops import (
-    predict_injuries_on_detection_crops,
-)
+from src_video.services.classification_service.infer_injuries_on_crops import predict_injuries_on_detection_crops
 from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
-from src_video.services.camera_capture_service.capture_img import (
-    gstreamer_pipeline,
-    capture_images,
-)
+from src_video.services.camera_capture_service.capture_img import (gstreamer_pipeline, capture_images,)
 from src_video.domain.constants import COLOR_TEXT, BODY_PARTS_TEMPLATE
 
 
@@ -195,8 +185,8 @@ def print_summary(settings: Dict[str, Any], crop_count: int, infer_summary: Dict
     print("[video] Summary:")
     print({
         "pipeline_root": settings["PIPELINE_ROOT"],
-        "detection_output": str(Path(settings["DETECTION_OUTPUT"])),
-        "crops_used": str(Path(settings["CROPS_ROOT"])),
+        "detection_output": str(settings["DETECTION_OUTPUT"]),
+        "crops_used": str(settings["CROPS_ROOT"]),
         "crop_count": int(crop_count),
         "injury_checkpoint": str(settings["INJURY_CHECKPOINT_PATH"]),
         "injury_report_json": str(infer_summary.get("out_json")),
@@ -300,26 +290,21 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
     """
 
     # Run detection
-    print("[video] Processing captured image through pipeline...\n")
     if not run_detection_pipeline(settings):
         print("Error: Detection pipeline failed for this image.")
         return False
     
-
-    print("[video] Detection step complete.\n")
-    print("[video] Starting injury inference step...\n")
     # Run injury inference
     success, crop_count, infer_summary = run_injury_inference(settings)
     if not success:
         print("Error: Injury inference failed for this image.")
         return False
 
-    # # Update body part rankings with best predictions
+    # # Update body part rankings with best predictions 
     # if not body_ranking(settings):
     #     print("Warning: Body ranking update failed, but continuing...")
 
-    print("[video] Injury inference step complete.\n")
-    print("[video] Starting de-identification step...\n")
+
     # Run de-identification
     if not run_deidentification_pipeline(settings):
         print("Error: De-identification failed for this image.")
