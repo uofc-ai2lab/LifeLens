@@ -70,125 +70,13 @@ def draw_overlay(frame, fps: float, show_visualization: bool, processing: bool =
         )
 
 
-def run_detection_pipeline(settings: Dict[str, Any]) -> bool:
-    """
-    Run the body part detection pipeline.
-    
-    Returns:
-        True if detection succeeded, False otherwise.
-    """
-    print("[video] Starting detection...\n")
-    detection_output = Path(settings["DETECTION_OUTPUT"])
-
-    try:
-        run_detection(
-            model=settings["DETECTION_MODEL"],
-            source=_as_posix(IMAGE_SAVE_DIR),
-            output=_as_posix(settings["DETECTION_OUTPUT"]),
-            classes=settings["CLASSES"],
-            margin=float(settings["MARGIN"]),
-            min_area=int(settings["MIN_AREA"]),
-            device=settings.get("DEVICE"),
-            add_head=bool(settings["ADD_HEAD"]),
-            debug=bool(settings["DEBUG"]),
-            alpha_png=bool(settings["ALPHA_PNG"]),
-            max_images=int(settings["MAX_IMAGES"]),
-            classification_export_dir=None,
-        )
-        print("\n[video] Detection finished.\n")
-
-        # Log output statistics
-        annotated_dir = Path(settings["ANNOTATED_DIR"])
-        vis_dir = Path(settings["VIS_DIR"])
-        crops_root = Path(settings["CROPS_ROOT"])
-
-        annotated_count = sum(1 for _ in annotated_dir.rglob("*.jpg")) if annotated_dir.exists() else 0
-        crop_count = sum(1 for _ in crops_root.rglob("*.jpg")) if crops_root.exists() else 0
-        vis_count = sum(1 for _ in vis_dir.rglob("*.jpg")) if vis_dir.exists() else 0
-
-        print({
-            "detection_output": str(detection_output),
-            "annotated_jpg": int(annotated_count),
-            "crop_jpg": int(crop_count),
-            "vis_jpg": int(vis_count),
-        })
-        return True
-
-    except Exception as e:
-        print(f"[video] Detection failed: {e}")
-        return False
-
-
-def run_injury_inference(settings: Dict[str, Any]) -> tuple[bool, int, Dict[str, Any]]:
-    """
-    Run injury classification inference on detected crops.
-    
-    Returns:
-        Tuple of (success, crop_count, inference_summary).
-    """
-    print("[video] Starting injury inference...\n")
-    crops_root = Path(settings["CROPS_ROOT"])
-
-    try:
-        if not crops_root.exists():
-            raise FileNotFoundError(
-                f"No crops directory found at {crops_root}. Run detection first."
-            )
-
-        crop_count = sum(1 for _ in crops_root.rglob("*.jpg"))
-        if crop_count == 0:
-            raise RuntimeError(f"No crop images found under {crops_root}")
-
-        infer_summary = predict_injuries_on_detection_crops(
-            crops_root=_as_posix(str(crops_root)),
-            checkpoint_path=str(settings["INJURY_CHECKPOINT_PATH"]),
-            out_json_path=str(settings["INJURY_REPORT_JSON"]),
-            out_csv_path=str(settings["INJURY_REPORT_CSV"]),
-            image_size=int(settings["INJURY_IMG_SIZE"]),
-            batch_size=int(settings["INJURY_BATCH_SIZE"]),
-            num_workers=int(settings["INJURY_NUM_WORKERS"]),
-            device=None,
-            filename_delimiter="_",
-            body_part_label_position=int(settings["BODY_PART_LABEL_POSITION"]),
-        )
-        print("\n[video] Injury inference finished.\n")
-        return True, crop_count, infer_summary
-
-    except Exception as e:
-        print(f"[video] Injury inference failed: {e}")
-        return False, 0, {}
-
-
-def run_deidentification_pipeline(settings: Dict[str, Any]) -> bool:
-    """
-    Run de-identification pipeline (currently disabled by default).
-    
-    Returns:
-        True if succeeded (or skipped), False on error.
-    """
-    print("[video] De-identification step (placeholder)...\n")
-
-    try:
-        run_deidentification(
-            input_dir=_as_posix(settings["DETECTION_OUTPUT"]),
-            output_dir=_as_posix(str(Path(settings["DETECTION_OUTPUT"]) / "deidentified")),
-            enabled=False,
-        )
-        print("[video] De-identification skipped (disabled).\n")
-        return True
-
-    except Exception as e:
-        print(f"[video] De-identification failed: {e}")
-        return False
-
-def print_summary(settings: Dict[str, Any], crop_count: int, infer_summary: Dict[str, Any]) -> None:
+def print_summary(settings: Dict[str, Any], infer_summary: Dict[str, Any]) -> None:
     """Print final pipeline summary."""
     print("[video] Summary:")
     print({
         "pipeline_root": settings["PIPELINE_ROOT"],
         "detection_output": str(settings["DETECTION_OUTPUT"]),
         "crops_used": str(settings["CROPS_ROOT"]),
-        "crop_count": int(crop_count),
         "injury_checkpoint": str(settings["INJURY_CHECKPOINT_PATH"]),
         "injury_report_json": str(infer_summary.get("out_json")),
         "injury_report_csv": str(infer_summary.get("out_csv")),
@@ -290,16 +178,46 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
         True if processing succeeded, False otherwise.
     """
 
-    # Run detection
-    if not run_detection_pipeline(settings):
-        print("Error: Detection pipeline failed for this image.")
-        return False
+    # Object detection
+    try:
+        run_detection(
+            model=settings["DETECTION_MODEL"],
+            source=_as_posix(IMAGE_SAVE_DIR),
+            output=_as_posix(settings["DETECTION_OUTPUT"]),
+            classes=settings["CLASSES"],
+            margin=float(settings["MARGIN"]),
+            min_area=int(settings["MIN_AREA"]),
+            device=settings.get("DEVICE"),
+            add_head=bool(settings["ADD_HEAD"]),
+            debug=bool(settings["DEBUG"]),
+            alpha_png=bool(settings["ALPHA_PNG"]),
+            max_images=int(settings["MAX_IMAGES"]),
+            classification_export_dir=None,
+        )
+        print("\n[video] Detection finished.\n")
+
+    except Exception as e:
+        print(f"[video] Object Detection failed: {e}")
     
     # Run injury inference
-    success, crop_count, infer_summary = run_injury_inference(settings)
-    if not success:
-        print("Error: Injury inference failed for this image.")
-        return False
+    crops_root = Path(settings["CROPS_ROOT"])
+    try:
+
+        infer_summary = predict_injuries_on_detection_crops(
+            crops_root=_as_posix(str(crops_root)),
+            checkpoint_path=str(settings["INJURY_CHECKPOINT_PATH"]),
+            out_json_path=str(settings["INJURY_REPORT_JSON"]),
+            out_csv_path=str(settings["INJURY_REPORT_CSV"]),
+            image_size=int(settings["INJURY_IMG_SIZE"]),
+            batch_size=int(settings["INJURY_BATCH_SIZE"]),
+            num_workers=int(settings["INJURY_NUM_WORKERS"]),
+            device=None,
+            filename_delimiter="_",
+            body_part_label_position=int(settings["BODY_PART_LABEL_POSITION"]),
+        )
+
+    except Exception as e:
+        print(f"[video] Injury inference failed: {e}")
 
     # # Update body part rankings with best predictions 
     # if not body_ranking(settings):
@@ -307,12 +225,20 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
 
 
     # Run de-identification
-    if not run_deidentification_pipeline(settings):
-        print("Error: De-identification failed for this image.")
-        return False
-        
+
+    try:
+        run_deidentification(
+            input_dir=_as_posix(settings["DETECTION_OUTPUT"]),
+            output_dir=_as_posix(str(Path(settings["DETECTION_OUTPUT"]) / "deidentified")),
+            enabled=False,
+        )
+        print("[video] De-identification skipped (disabled).\n")
+
+    except Exception as e:
+        print(f"[video] De-identification failed: {e}")
+
     # Print summary for this image
-    print_summary(settings, crop_count, infer_summary)
+    print_summary(settings, infer_summary)
 
     # deleting the crops folder to prevent accumulation
     crops_root = Path(settings["CROPS_ROOT"])
