@@ -5,13 +5,7 @@ import time
 import shutil
 import signal
 import asyncio
-from src_audio.domain.constants import MAX_RECORD_SECONDS
-
-# Recording configuration
-RECORDING_DIR = "/home/capstone/recordings"
-SIGNAL_FILE = os.path.join(RECORDING_DIR, "recording_done.flag")
-ARECORD_DEVICE = "hw:CARD=ArrayUAC10,DEV=0"
-
+from src_audio.domain.constants import MAX_RECORD_SECONDS, RECORDING_DIR, SIGNAL_FILE, ARECORD_DEVICE
 
 def _ensure_recording_dir():
     """Ensure the recording directory exists."""

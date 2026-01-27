@@ -1,10 +1,8 @@
 import librosa
-import IPython.display as ipd
 import soundfile as sf
 from pathlib import Path
 
 from config.audio_settings import (
-    PROCESSED_AUDIO_DIR,
     AUDIO_FILES_DICT,
     AUDIO_DIR
 )

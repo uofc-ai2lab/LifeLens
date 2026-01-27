@@ -5,7 +5,7 @@ from src_audio.services.intervention_extraction_service.intervention_extraction 
 from src_audio.services.semantic_filtering_service.semantic_filtering import run_semantic_filtering
 from src_audio.services.anonymization_service.transcript_anonymization import run_anonymization_service
 from src_audio.services.recording_audio_service.record_functions import run_recording_service
-from scripts.trim_audio import run_audio_trimming
+from src_audio.services.audio_chunking_service.trim_audio import run_audio_trimming
 from src_audio.utils.metadata import setup_metadata, finalize_metadata
 from datetime import datetime
 
