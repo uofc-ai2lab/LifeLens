@@ -1,3 +1,4 @@
+import os
 import re
 
 class bcolors:
@@ -150,5 +151,8 @@ MED_COLUMNS = [
     "full_text"
 ]
 
+### ------------------------------- AUDIO RECORDING SERVICE ------------------------------- ###
 MAX_RECORD_SECONDS = 300  # 5 minutes
-
+RECORDING_DIR = "/home/capstone/recordings"
+SIGNAL_FILE = os.path.join(RECORDING_DIR, "recording_done.flag")
+ARECORD_DEVICE = "hw:CARD=ArrayUAC10,DEV=0"

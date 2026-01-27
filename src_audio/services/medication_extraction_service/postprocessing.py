@@ -80,7 +80,7 @@ def postprocess_entities(entities, sentence):
             entities.append(MedicationEntity(
                 entity="MEDICATION",
                 word=m["medication"],
-                start_idx=m["start"],
+                start_idx=m["start_idx"],
                 score=HIGH_CONFIDENCE_SCORE
             ))
     entities.sort(key=lambda e: e.start_idx)

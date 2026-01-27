@@ -24,7 +24,8 @@ def run_anonymization(transcript_path: str, anonymizer: TranscriptAnonymizer) ->
         anonymized_texts.append({
             "start_time": row['start_time'],
             "end_time": row['end_time'],
-            "text": anonymized_text
+            "text": anonymized_text,
+            "speaker": row.get("speaker", "UNKNOWN")  # Retain speaker info if available
         })
 
     # Export anonymized transcript to CSV
@@ -33,8 +34,8 @@ def run_anonymization(transcript_path: str, anonymizer: TranscriptAnonymizer) ->
         output_path=Path(transcript_path).parent,
         input_file_path=Path(transcript_path),
         service="anonymization",
-        columns=["start_time", "end_time", "text"],
-        empty_ok=True, # should not be empty unless incoming csv transcript had empty cells which I don't think is possible, so can I set this to False?
+        columns=["start_time", "end_time", "text", "speaker"],
+        empty_ok=True,
     )
 
 async def run_anonymization_service():
