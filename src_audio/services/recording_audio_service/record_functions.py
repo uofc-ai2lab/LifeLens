@@ -7,24 +7,6 @@ import signal
 import asyncio
 from src_audio.domain.constants import MAX_RECORD_SECONDS, RECORDING_DIR, SIGNAL_FILE, ARECORD_DEVICE
 
-def _ensure_recording_dir():
-    """Ensure the recording directory exists."""
-    os.makedirs(RECORDING_DIR, exist_ok=True)
-
-
-def _write_signal_file():
-    """Write signal file to indicate recording completion."""
-    _ensure_recording_dir()
-    with open(SIGNAL_FILE, "w", encoding="utf-8") as flag:
-        flag.write(f"done:{time.time()}")
-
-
-def _clear_stale_signal_file():
-    """Remove stale signal file to prevent false positives."""
-    if os.path.exists(SIGNAL_FILE):
-        os.remove(SIGNAL_FILE)
-
-
 def start_recording():
     """
     Start recording using arecord command.
@@ -32,8 +14,10 @@ def start_recording():
     Returns:
         tuple: (subprocess.Popen, str) - process and output file path
     """
-    _ensure_recording_dir()
-    _clear_stale_signal_file()
+    
+    os.makedirs(RECORDING_DIR, exist_ok=True) # Ensure the recording directory exists.
+    if os.path.exists(SIGNAL_FILE): # Remove stale signal file to prevent false positives.
+        os.remove(SIGNAL_FILE)
 
     timestamp = time.strftime('%Y%m%d_%H%M%S')
     output_file = os.path.join(RECORDING_DIR, f"recording_{timestamp}.wav")
@@ -53,26 +37,6 @@ def start_recording():
     )
 
     return process, output_file
-
-
-def stop_recording(process):
-    """Stop the recording process with SIGINT."""
-    print("Stopping recording...")
-    process.send_signal(signal.SIGINT)
-
-
-def _get_wav_files():
-    """
-    Get all WAV files in recording directory.
-    
-    Returns:
-        list: Paths to all .wav files
-    """
-    return [
-        os.path.join(RECORDING_DIR, f)
-        for f in os.listdir(RECORDING_DIR)
-        if f.lower().endswith(".wav") and os.path.isfile(os.path.join(RECORDING_DIR, f))
-    ]
 
 
 def wait_for_recording(output_file=None):
@@ -98,8 +62,13 @@ def wait_for_recording(output_file=None):
             print(f"Specified output file does not exist: {output_file}")
         return
 
-    # Handle all WAV files
-    wav_files = _get_wav_files()
+    # Get all WAV files in recording directory.
+    wav_files = [
+        os.path.join(RECORDING_DIR, f)
+        for f in os.listdir(RECORDING_DIR)
+        if f.lower().endswith(".wav") and os.path.isfile(os.path.join(RECORDING_DIR, f))
+        ]
+    
     if not wav_files:
         print("No .wav files found in recording directory.")
         return
@@ -156,7 +125,13 @@ async def run_recording_service():
 
     print("Manual stop requested." if enter_future in done else "Auto-stop reached (5 minutes).")
 
-    stop_recording(process)
+    print("Stopping recording...")
+    process.send_signal(signal.SIGINT)
     process.wait()
-    _write_signal_file()
+    
+    # Write signal file to indicate recording completion.
+    os.makedirs(RECORDING_DIR, exist_ok=True)
+    with open(SIGNAL_FILE, "w", encoding="utf-8") as flag:
+        flag.write(f"done:{time.time()}")
+
     wait_for_recording(output_file)
