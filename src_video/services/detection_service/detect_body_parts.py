@@ -1,16 +1,13 @@
 
-import os
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 from ultralytics import YOLO
 from huggingface_hub import snapshot_download, hf_hub_download
 import dill  # required for some legacy checkpoints
 import torch  # needed for classification device selection
-
-# classification import is done lazily inside pipeline to keep loose coupling
 
 
 # NOTE: Torso placeholder
@@ -19,20 +16,11 @@ import torch  # needed for classification device selection
 # we will revisit and either (a) implement a heuristic decomposition or (b)
 # fine-tune a segmentation model with dedicated annotations. For now, using
 # 'torso' keeps the pipeline simpler.
-PART_DEFAULT = ["face", "arm", "hand", "leg", "foot", "neck", "torso", "head"]  # default classes (head is composite; torso may be refined later)
+PART_DEFAULT = ["face", "arm", "hand", "leg", "foot", "neck", "torso", "head"]
 
-# possibly calculate the chest / abdomen / pelvis regions from torso masks in future
 
 def load_model(model_path: str):
-    """Load YOLO model with HF direct file preference.
-
-    Resolution order:
-    1. Local file path.
-    2. HF repo string (owner/repo): try specific checkpoint filenames via hf_hub_download.
-       Preferred list: epoch 114 then 125. If none succeed, snapshot and pick segmentation ('seg' in name) else largest.
-    3. On failure, fallback to official 'yolov8n-seg.pt'.
-    4. Otherwise delegate to YOLO for built-in models.
-    """
+    """Load YOLO model with HF direct file preference."""
     p = Path(model_path)
     if p.exists():
         print(f"[loader] Local weight found: {p}")
@@ -73,21 +61,29 @@ def ensure_dir(path: str | Path):
     Path(path).mkdir(parents=True, exist_ok=True)
 
 
-def mask_to_bbox(mask: np.ndarray, margin: float, image_shape: tuple[int, int]) -> tuple[int, int, int, int]:
-    """Compute bounding rectangle for a binary mask and expand by margin.
+def _clip_bbox(bbox: tuple[int, int, int, int], image_shape: tuple[int, int]) -> tuple[int, int, int, int]:
+    x1, y1, x2, y2 = bbox
+    H, W = image_shape
+    x1 = max(0, min(W - 1, x1))
+    x2 = max(0, min(W - 1, x2))
+    y1 = max(0, min(H - 1, y1))
+    y2 = max(0, min(H - 1, y2))
+    return x1, y1, x2, y2
 
-    Returns (x1, y1, x2, y2) in image coordinates.
-    """
-    ys, xs = np.where(mask > 0)
-    if ys.size == 0 or xs.size == 0:
+
+def _expand_bbox_with_margin(
+    bbox: tuple[int, int, int, int],
+    margin: float,
+    image_shape: tuple[int, int],
+) -> tuple[int, int, int, int]:
+    x1, y1, x2, y2 = bbox
+    H, W = image_shape
+    if x2 <= x1 or y2 <= y1:
         return 0, 0, 0, 0
-    y1, y2 = ys.min(), ys.max()
-    x1, x2 = xs.min(), xs.max()
     h = y2 - y1 + 1
     w = x2 - x1 + 1
     pad_h = int(h * margin)
     pad_w = int(w * margin)
-    H, W = image_shape
     x1 = max(0, x1 - pad_w)
     y1 = max(0, y1 - pad_h)
     x2 = min(W - 1, x2 + pad_w)
@@ -95,26 +91,96 @@ def mask_to_bbox(mask: np.ndarray, margin: float, image_shape: tuple[int, int]) 
     return x1, y1, x2, y2
 
 
-def save_crop(image: np.ndarray, bbox: tuple[int, int, int, int], out_path: Path):
+def _resize_mask_to_image(mask_bin: np.ndarray, image_shape: tuple[int, int]) -> np.ndarray:
+    """Resize a binary mask to the given (H,W) using nearest-neighbor."""
+    H, W = image_shape
+    if mask_bin.shape == (H, W):
+        return mask_bin
+    mask_img = Image.fromarray((mask_bin > 0).astype(np.uint8) * 255)
+    mask_img = mask_img.resize((W, H), resample=Image.NEAREST)
+    return (np.array(mask_img) > 0).astype(np.uint8)
+
+
+def rotate_image_np(image: np.ndarray, degrees: int) -> np.ndarray:
+    """Rotate HxWxC image by 0/90/180/270 degrees.
+
+    Returns a contiguous array (some rotations can create negative-stride views).
+    """
+    if degrees not in (0, 90, 180, 270):
+        raise ValueError(f"degrees must be one of 0/90/180/270, got {degrees}")
+    if degrees == 0:
+        return np.ascontiguousarray(image)
+    if degrees == 90:
+        return np.ascontiguousarray(np.rot90(image, k=1))
+    if degrees == 180:
+        return np.ascontiguousarray(np.rot90(image, k=2))
+    return np.ascontiguousarray(np.rot90(image, k=3))
+
+
+def _prediction_score(results) -> float:
+    """Heuristic score for choosing the best rotation.
+
+    Uses sum of box confidences. If boxes are missing, falls back to 0.
+    """
+    score = 0.0
+    try:
+        for r in results:
+            if getattr(r, "boxes", None) is None or getattr(r.boxes, "conf", None) is None:
+                continue
+            conf = r.boxes.conf
+            # conf can be a tensor
+            try:
+                score += float(conf.sum().item())
+            except Exception:
+                score += float(np.sum(conf))
+    except Exception:
+        return 0.0
+    return float(score)
+
+
+def choose_best_rotation(model, image_np: np.ndarray, device: Optional[str], candidate_degrees: List[int]) -> int:
+    """Pick the rotation that yields the strongest detection signal."""
+    best_deg = 0
+    best_score = -1.0
+    for deg in candidate_degrees:
+        rotated = rotate_image_np(image_np, deg)
+        predict_kwargs = {"source": rotated, "verbose": False}
+        if device is not None:
+            predict_kwargs["device"] = device
+        results = model.predict(**predict_kwargs)
+        score = _prediction_score(results)
+        if score > best_score:
+            best_score = score
+            best_deg = deg
+    return best_deg
+
+
+def mask_to_bbox(mask: np.ndarray, margin: float, image_shape: tuple[int, int]) -> tuple[int, int, int, int]:
+    """Compute bounding rectangle for a binary mask and expand by margin."""
+    ys, xs = np.where(mask > 0)
+    if ys.size == 0 or xs.size == 0:
+        return 0, 0, 0, 0
+    y1, y2 = int(ys.min()), int(ys.max())
+    x1, x2 = int(xs.min()), int(xs.max())
+    return _expand_bbox_with_margin((x1, y1, x2, y2), margin=margin, image_shape=image_shape)
+
+
+def save_crop(image: np.ndarray, bbox: tuple[int, int, int, int], out_path: Path) -> bool:
     x1, y1, x2, y2 = bbox
     if x2 <= x1 or y2 <= y1:
         return False
-    crop = image[y1:y2+1, x1:x2+1]
+    crop = image[y1:y2 + 1, x1:x2 + 1]
     Image.fromarray(crop).save(out_path)
     return True
 
 
-def save_alpha_masked(image: np.ndarray, mask: np.ndarray, bbox: tuple[int, int, int, int], out_path: Path):
-    """Save RGBA crop where pixels outside mask are transparent.
-
-    bbox should tightly enclose the mask (precomputed via mask_to_bbox). We re-slice both image and mask
-    and build an RGBA image: RGB from original, Alpha = 255 for mask, 0 outside.
-    """
+def save_alpha_masked(image: np.ndarray, mask: np.ndarray, bbox: tuple[int, int, int, int], out_path: Path) -> bool:
+    """Save RGBA crop where pixels outside mask are transparent."""
     x1, y1, x2, y2 = bbox
     if x2 <= x1 or y2 <= y1:
         return False
-    crop_img = image[y1:y2+1, x1:x2+1]
-    crop_mask = mask[y1:y2+1, x1:x2+1] > 0
+    crop_img = image[y1:y2 + 1, x1:x2 + 1]
+    crop_mask = mask[y1:y2 + 1, x1:x2 + 1] > 0
     if crop_mask.sum() == 0:
         return False
     rgba = np.zeros((crop_img.shape[0], crop_img.shape[1], 4), dtype=np.uint8)
@@ -124,19 +190,18 @@ def save_alpha_masked(image: np.ndarray, mask: np.ndarray, bbox: tuple[int, int,
     return True
 
 
-def visualize(image: np.ndarray, boxes: List[tuple[int,int,int,int]], labels: List[str], out_path: Path):
-    """Simple visualization: draw rectangles and labels. Avoid heavy deps (use PIL)."""
-    # box corners will be the four coordinates: (x1, y1, x2, y2)
+def visualize(image: np.ndarray, boxes: List[tuple[int, int, int, int]], labels: List[str], out_path: Path):
+    """Simple visualization: draw rectangles and labels."""
     img_pil = Image.fromarray(image.copy())
     draw = ImageDraw.Draw(img_pil)
     try:
         font = ImageFont.load_default()
     except Exception:
         font = None
-    for (x1,y1,x2,y2), label in zip(boxes, labels):
-        draw.rectangle([x1,y1,x2,y2], outline="red", width=2)
+    for (x1, y1, x2, y2), label in zip(boxes, labels):
+        draw.rectangle([x1, y1, x2, y2], outline="red", width=2)
         if font:
-            draw.text((x1+3, y1+3), label, fill="yellow", font=font)
+            draw.text((x1 + 3, y1 + 3), label, fill="yellow", font=font)
     img_pil.save(out_path)
 
 
@@ -150,22 +215,44 @@ def process_image(
     add_head: bool,
     alpha_png: bool,
     device: Optional[str] = None,
+    auto_orient: bool = True,
+    rotate_degrees: int = 0,
+    auto_rotate_subject: bool = True,
     classification_export_dir: Optional[Path] = None,
     save_annotated: bool = True,
     debug: bool = False,
     debug_print: bool = False,
 ):
-    image = Image.open(image_path).convert("RGB")  # load as RGB
-    image_np = np.array(image)
+    image_pil = Image.open(image_path)
+    if auto_orient:
+        # Respect EXIF orientation tags (common for phone/camera images).
+        image_pil = ImageOps.exif_transpose(image_pil)
+    image_pil = image_pil.convert("RGB")
 
-    # Run inference. If a device is provided, use Ultralytics predict() so device selection is honored.
-    if device is None:
-        results = model(str(image_path))
-    else:
-        results = model.predict(source=str(image_path), device=device, verbose=False)
+    if rotate_degrees not in (0, 90, 180, 270):
+        raise ValueError(f"rotate_degrees must be one of 0/90/180/270, got {rotate_degrees}")
+    if rotate_degrees:
+        # Deterministic rotation for fixed camera setups.
+        image_pil = image_pil.rotate(rotate_degrees, expand=True)
+
+    image_np = np.ascontiguousarray(np.array(image_pil))
+
+    # Auto-fix upside-down subjects: try 0 vs 180 and pick the best.
+    if auto_rotate_subject:
+        best_deg = choose_best_rotation(model, image_np, device=device, candidate_degrees=[0, 180])
+        if best_deg != 0 and debug:
+            print(f"[detect] auto_rotate_subject: using {best_deg} degrees for {image_path.name}")
+        image_np = rotate_image_np(image_np, best_deg)
+
+    # Key for crop/annotated alignment: run YOLO on the same pixels we're cropping.
+    predict_kwargs = {"source": image_np, "verbose": False}
+    if device is not None:
+        predict_kwargs["device"] = device
+    results = model.predict(**predict_kwargs)
+
     print(f"Processing {image_path.name}: {len(results)} result(s)")
-    vis_boxes = []
-    vis_labels = []
+    vis_boxes: List[tuple[int, int, int, int]] = []
+    vis_labels: List[str] = []
 
     crops_root = output_dir / "crops" / image_path.stem
     ensure_dir(crops_root)
@@ -173,48 +260,74 @@ def process_image(
         annotated_root = output_dir / "annotated"
         ensure_dir(annotated_root)
 
-    # Collect masks for potential composite head (hair + face + upper neck)
-    composite_parts = {"hair": [], "face": [], "neck": []}
+    composite_parts: Dict[str, List[np.ndarray]] = {"hair": [], "face": [], "neck": []}
 
     for result in results:
-        if debug:
-            try:
-                mask_shape = None if getattr(result, "masks", None) is None else tuple(result.masks.data.shape)
-                print(f"[debug] image={image_path.name} boxes={len(result.boxes)} masks_shape={mask_shape}")
-            except Exception as e:
-                print(f"[debug] could not read mask shape: {e}")
-        # Save annotated image (model's own rendering) with labels and masks
         if save_annotated:
             try:
-                annotated_img = result.plot()  # numpy array with overlays
+                annotated_img = result.plot()
                 Image.fromarray(annotated_img).save((output_dir / "annotated" / image_path.name))
             except Exception as e:
                 if debug:
                     print(f"[debug] failed to plot annotated image: {e}")
-        names_map = result.names  # index -> class name
-        # Boxes
-        if getattr(result, "masks", None) is None:
-            print("Warning: result has no segmentation masks; skipping mask-derived crops.")
+
+        names_map = result.names
+        if getattr(result, "boxes", None) is None or getattr(result.boxes, "cls", None) is None:
             continue
-        masks = result.masks.data.cpu().numpy()  # shape: (N, H, W)
+
         cls_ids = result.boxes.cls.cpu().numpy().astype(int)
-        for idx, cls_id in enumerate(cls_ids): # index the list 
-            cls_name = names_map.get(cls_id, str(cls_id))
-            mask = masks[idx]
-            mask_bin_all = (mask > 0.5).astype(np.uint8)
-            if cls_name in composite_parts:
-                composite_parts[cls_name].append(mask_bin_all)
+        xyxy_boxes = None
+        try:
+            xyxy_boxes = result.boxes.xyxy.cpu().numpy()
+        except Exception:
+            xyxy_boxes = None
+
+        masks = None
+        if getattr(result, "masks", None) is not None and getattr(result.masks, "data", None) is not None:
+            try:
+                masks = result.masks.data.cpu().numpy()
+            except Exception:
+                masks = None
+
+        for idx, cls_id in enumerate(cls_ids):
+            cls_name = names_map.get(int(cls_id), str(cls_id))
+
+            # Mask (used for min_area + alpha export + composite head). Resize to image-space.
+            mask_bin = None
+            if masks is not None and idx < len(masks):
+                mask_bin_model = (masks[idx] > 0.5).astype(np.uint8)
+                mask_bin = _resize_mask_to_image(mask_bin_model, image_np.shape[:2])
+                if cls_name in composite_parts:
+                    composite_parts[cls_name].append(mask_bin)
+
             if classes_filter and cls_name not in classes_filter:
                 continue
-            mask_bin = mask_bin_all
-            area = mask_bin.sum()
-            if area < min_area:
-                continue
-            bbox = mask_to_bbox(mask_bin, margin=margin, image_shape=image_np.shape[:2])
+
+            if mask_bin is not None:
+                if int(mask_bin.sum()) < int(min_area):
+                    continue
+
+            # Primary crop region: YOLO box (matches result.plot overlays).
+            bbox = (0, 0, 0, 0)
+            if xyxy_boxes is not None and idx < len(xyxy_boxes):
+                x1, y1, x2, y2 = xyxy_boxes[idx].tolist()
+                bbox = (int(round(x1)), int(round(y1)), int(round(x2)), int(round(y2)))
+                bbox = _expand_bbox_with_margin(bbox, margin=margin, image_shape=image_np.shape[:2])
+                bbox = _clip_bbox(bbox, image_shape=image_np.shape[:2])
+
+            # Fallback: mask-derived bbox if box is missing/degenerate.
+            if (bbox[2] <= bbox[0] or bbox[3] <= bbox[1]) and mask_bin is not None:
+                bbox = mask_to_bbox(mask_bin, margin=margin, image_shape=image_np.shape[:2])
+
             filename = f"{image_path.stem}_{cls_name}_{idx}.jpg"
             saved = save_crop(image_np, bbox, crops_root / filename)
-            if alpha_png and saved:
-                save_alpha_masked(image_np, mask_bin, bbox, crops_root / f"{image_path.stem}_{cls_name}_{idx}_alpha.png")
+            if alpha_png and saved and mask_bin is not None:
+                save_alpha_masked(
+                    image_np,
+                    mask_bin,
+                    bbox,
+                    crops_root / f"{image_path.stem}_{cls_name}_{idx}_alpha.png",
+                )
             if saved:
                 vis_boxes.append(bbox)
                 vis_labels.append(cls_name)
@@ -227,29 +340,32 @@ def process_image(
                         if debug_print:
                             print(f"[debug] classification export failed for {filename}: {e}")
 
-    # Create composite head crop if requested
     if add_head:
-        head_components = []
-        head_components.extend(composite_parts["hair"])  # hair masks
-        head_components.extend(composite_parts["face"])  # face masks
-        # Upper portion of neck (top 40%) to connect if needed
+        head_components: List[np.ndarray] = []
+        head_components.extend(composite_parts["hair"])
+        head_components.extend(composite_parts["face"])
         for neck_mask in composite_parts["neck"]:
             rows = np.where(neck_mask > 0)[0]
             if rows.size:
-                top_cut = rows.min() + int((rows.max() - rows.min() + 1) * 0.4)
+                top_cut = int(rows.min() + (rows.max() - rows.min() + 1) * 0.4)
                 neck_top = neck_mask.copy()
                 neck_top[top_cut:] = 0
                 head_components.append(neck_top)
         if head_components:
-            head_union = np.clip(sum(head_components), 0, 1)
-            if head_union.sum() >= min_area:
+            head_union = np.clip(sum(head_components), 0, 1).astype(np.uint8)
+            if int(head_union.sum()) >= int(min_area):
                 bbox = mask_to_bbox(head_union, margin=margin, image_shape=image_np.shape[:2])
                 head_filename = f"{image_path.stem}_head_0.jpg"
                 if save_crop(image_np, bbox, crops_root / head_filename):
                     vis_boxes.append(bbox)
                     vis_labels.append("head")
                     if alpha_png:
-                        save_alpha_masked(image_np, head_union, bbox, crops_root / f"{image_path.stem}_head_0_alpha.png")
+                        save_alpha_masked(
+                            image_np,
+                            head_union,
+                            bbox,
+                            crops_root / f"{image_path.stem}_head_0_alpha.png",
+                        )
                     if classification_export_dir is not None:
                         cls_dir = classification_export_dir / "head"
                         ensure_dir(cls_dir)
@@ -259,7 +375,6 @@ def process_image(
                             if debug_print:
                                 print(f"[debug] classification export failed for composite head: {e}")
 
-    # Visualization
     vis_dir = output_dir / "vis"
     ensure_dir(vis_dir)
     visualize(image_np, vis_boxes, vis_labels, vis_dir / f"{image_path.stem}.jpg")
@@ -276,6 +391,9 @@ def iterate_source(
     alpha_png: bool,
     max_images: int,
     device: Optional[str] = None,
+    auto_orient: bool = True,
+    rotate_degrees: int = 0,
+    auto_rotate_subject: bool = True,
     classification_export_dir: Optional[Path] = None,
     save_annotated: bool = True,
     debug: bool = False,
@@ -292,34 +410,41 @@ def iterate_source(
             add_head,
             alpha_png,
             device=device,
+            auto_orient=auto_orient,
+            rotate_degrees=rotate_degrees,
+            auto_rotate_subject=auto_rotate_subject,
             classification_export_dir=classification_export_dir,
             save_annotated=save_annotated,
             debug=debug,
             debug_print=debug_print,
         )
-    else:
-        exts = {".jpg", ".jpeg", ".png", ".bmp"}
-        all_imgs = [p for p in sorted(source.rglob("*")) if p.suffix.lower() in exts]
-        if (max_images is not None) and (max_images > 0):
-            all_imgs = all_imgs[:max_images]
-            if debug:
-                print(f"[debug] Limiting to first {len(all_imgs)} images")
-        for img_path in all_imgs:
-            process_image(
-                model,
-                img_path,
-                output,
-                classes,
-                margin,
-                min_area,
-                add_head,
-                alpha_png,
-                device=device,
-                classification_export_dir=classification_export_dir,
-                save_annotated=save_annotated,
-                debug=debug,
-                debug_print=debug_print,
-            )
+        return
+
+    exts = {".jpg", ".jpeg", ".png", ".bmp"}
+    all_imgs = [p for p in sorted(source.rglob("*")) if p.suffix.lower() in exts]
+    if (max_images is not None) and (max_images > 0):
+        all_imgs = all_imgs[:max_images]
+        if debug:
+            print(f"[debug] Limiting to first {len(all_imgs)} images")
+    for img_path in all_imgs:
+        process_image(
+            model,
+            img_path,
+            output,
+            classes,
+            margin,
+            min_area,
+            add_head,
+            alpha_png,
+            device=device,
+            auto_orient=auto_orient,
+            rotate_degrees=rotate_degrees,
+            auto_rotate_subject=auto_rotate_subject,
+            classification_export_dir=classification_export_dir,
+            save_annotated=save_annotated,
+            debug=debug,
+            debug_print=debug_print,
+        )
 
 
 def run_detection(
@@ -334,11 +459,21 @@ def run_detection(
     debug: bool = False,
     alpha_png: bool = False,
     max_images: int = 200,
+    auto_orient: bool = True,
+    rotate_degrees: int = 0,
+    auto_rotate_subject: bool = True,
     classification_export_dir: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run YOLO segmentation + crop extraction.
 
-    This is the detection entrypoint used by the `src_video` pipeline.
+    Crop behavior:
+    - Primary: YOLO `boxes.xyxy` (matches `result.plot()` rectangles)
+    - Fallback: mask-derived bbox (when a box is missing/degenerate)
+
+    Rotation behavior:
+    - `auto_orient`: applies EXIF orientation fix before inference.
+    - `rotate_degrees`: deterministic 0/90/180/270 rotation for fixed camera setups.
+    - `auto_rotate_subject`: tries 0 vs 180 and picks the best detection signal (helps upside-down photos).
     """
     classes = PART_DEFAULT if classes is None else classes
 
@@ -346,7 +481,6 @@ def run_detection(
     output_path = Path(output)
     ensure_dir(output_path)
 
-    # If user requests the 'head' class, interpret it as the composite head crop.
     effective_add_head = bool(add_head or ("head" in classes))
     if ("head" in classes) and (not add_head):
         print("[detect] 'head' is in classes; enabling composite head crop.")
@@ -368,6 +502,9 @@ def run_detection(
         alpha_png,
         max_images,
         device=device,
+        auto_orient=auto_orient,
+        rotate_degrees=rotate_degrees,
+        auto_rotate_subject=auto_rotate_subject,
         classification_export_dir=export_dir_path,
         save_annotated=True,
         debug=debug,
@@ -380,6 +517,9 @@ def run_detection(
         "output": str(output_path),
         "classification_export_dir": (str(export_dir_path) if export_dir_path else None),
         "classes": classes,
+        "auto_orient": auto_orient,
+        "rotate_degrees": rotate_degrees,
+        "auto_rotate_subject": auto_rotate_subject,
     }
     print(f"[detect] Done. Outputs in {output_path}")
     return summary

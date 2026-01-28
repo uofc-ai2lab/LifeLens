@@ -351,4 +351,5 @@ async def main(video_capture) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(asyncio.run(main()))
+    video_capture = initialize_camera(flip_method=0)
+    raise SystemExit(asyncio.run(main(video_capture)))
