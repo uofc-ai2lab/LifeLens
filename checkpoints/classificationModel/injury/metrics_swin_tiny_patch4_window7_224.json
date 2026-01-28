@@ -1,0 +1,8 @@
+{
+  "model_name": "swin_tiny_patch4_window7_224",
+  "best_val_accuracy": 0.4166666666666667,
+  "roc_auc": NaN,
+  "pr_auc": 0.46419753086419746,
+  "precision_macro": 0.4583333333333333,
+  "recall_macro": 0.3333333333333333
+}

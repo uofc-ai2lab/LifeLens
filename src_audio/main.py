@@ -113,7 +113,7 @@ async def main():
     minutes, seconds = divmod(total_seconds, 60)
     hours, minutes = divmod(minutes, 60)
 
-    print(f"Complete pipeline time: {hours} hours, {minutes} minutes, and {seconds} seconds")
+    print(f"Complete AUDIO pipeline time: {hours} hours, {minutes} minutes, and {seconds} seconds")
     
 if __name__ == "__main__":
     import asyncio
