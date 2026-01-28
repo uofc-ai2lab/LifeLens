@@ -23,6 +23,12 @@ def run_video_pipeline():
 
 def main():
     start_time = time.time()
+    
+    video_thread = threading.Thread(
+        target=run_video_pipeline,
+        name="VideoThread",
+        daemon=False,
+    )
 
     audio_thread = threading.Thread(
         target=run_audio_pipeline,
@@ -30,11 +36,6 @@ def main():
         daemon=False,
     )
 
-    video_thread = threading.Thread(
-        target=run_video_pipeline,
-        name="VideoThread",
-        daemon=False,
-    )
     
     """
     daemon means running in the bg and as soon as the main thread and 
