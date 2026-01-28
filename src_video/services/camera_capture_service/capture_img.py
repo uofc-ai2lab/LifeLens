@@ -52,7 +52,7 @@ def capture_images(video_capture):
     ret_val, frame = video_capture.read()
 
     if not ret_val or frame is None:
-        print("Error: Failed to capture frame.")
+        print("Error: Capturing images -> frame is None.")
         return False
 
     timestamp = cv2.getTickCount()

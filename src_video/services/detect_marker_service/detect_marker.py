@@ -59,8 +59,8 @@ def detect_apriltags(video_capture, show_visualization=True, print_info=True):
     """
 
     ret_val, frame = video_capture.read()
-    if not ret_val:
-        print("ERROR: Failed to grab frame for AprilTag detection")
+    if not ret_val or frame is None:
+        print("ERROR: Frame is None for AprilTag detection")
         return []
     # Convert to grayscale
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
