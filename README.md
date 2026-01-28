@@ -1,6 +1,8 @@
 # LifeLens Codebase
 A complete audio-to-transcript and transcript-to-meaning pipeline with services for transcription, intervention extraction, medication extraction, and semantic filtering.
 
+Line for restarting camera: sudo systemctl restart nvargus-daemon
+
 **Note: Ensure you are running all of the following commands from the project root unless otherwise specified.**
 
 ## Environment Setup
