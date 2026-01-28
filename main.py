@@ -3,7 +3,7 @@ import asyncio
 import time
 
 from src_audio.main import main as audio_main
-from src_video.main import main as video_main
+from src_video.main import main as video_main, initialize_camera
 """
 In Python, we're not actually threading, we are switching b/w tasks and using the downtimes 
 of the different tasks to execute the other tasks
@@ -15,18 +15,21 @@ def run_audio_pipeline():
     asyncio.run(audio_main())
     print("[root] AUDIO pipeline finished")
 
-def run_video_pipeline():
+def run_video_pipeline(video_capture):
     """Runs video async pipeline in its own event loop"""
     print("[root] Starting VIDEO pipeline thread")
-    asyncio.run(video_main())
+    asyncio.run(video_main(video_capture))
     print("[root] VIDEO pipeline finished")
 
 def main():
     start_time = time.time()
     
+    video_capture = initialize_camera(flip_method=0)
+    
     video_thread = threading.Thread(
         target=run_video_pipeline,
         name="VideoThread",
+        args=(video_capture,),
         daemon=False,
     )
 
@@ -36,21 +39,13 @@ def main():
         daemon=False,
     )
 
-    
-    """
-    daemon means running in the bg and as soon as the main thread and 
-    the other important threads have finished, we can quit the script
-    we don't need to wait for the sections within the functions to finish, it will just quit right away
-    We have daemon as False because we don't want that.
-    """
-
     # Start both pipelines
-    audio_thread.start()
     video_thread.start()
-
+    audio_thread.start()
+    
     # Wait for both to finish
-    audio_thread.join()
     video_thread.join()
+    audio_thread.join()
 
     elapsed = time.time() - start_time
     print(f"[root] All pipelines completed in {elapsed:.2f}s")
