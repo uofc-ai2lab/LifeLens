@@ -22,7 +22,7 @@ VIDEO_DIR = DATA_DIR / "video"
 VIDEO_SOURCE_DIR = VIDEO_DIR / "source_files"
 VIDEO_OUTPUT_DIR = VIDEO_DIR / "output_files"
 
-SNAPSHOT_COUNT = int(os.getenv('SNAPSHOT_COUNT', '10'))  # number of snapshots to capture
+SNAPSHOT_COUNT = int(os.getenv('SNAPSHOT_COUNT', '3'))  # number of snapshots to capture
 SNAPSHOT_INTERVAL = int(os.getenv('SNAPSHOT_INTERVAL', '2'))  # seconds between snapshots
 
 IMAGE_SAVE_DIR = VIDEO_DIR / "saved_imgs"
