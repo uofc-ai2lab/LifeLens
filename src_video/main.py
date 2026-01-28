@@ -241,30 +241,28 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
     print_summary(settings, infer_summary)
 
     # deleting the crops folder to prevent accumulation
-    crops_root = Path(settings["CROPS_ROOT"])
+    # crops_root = Path(settings["CROPS_ROOT"])
 
-    if crops_root.exists():
-        try:
-            shutil.rmtree(crops_root)
-            crops_root.mkdir(parents=True, exist_ok=True)
-            print(f"[INFO] Cleaned crops folder: {crops_root}")
-        except Exception as e:
-            print(f"[WARNING] Failed to clean crops folder: {e}")
+    # if crops_root.exists():
+    #     try:
+    #         shutil.rmtree(crops_root)
+    #         crops_root.mkdir(parents=True, exist_ok=True)
+    #         print(f"[INFO] Cleaned crops folder: {crops_root}")
+    #     except Exception as e:
+    #         print(f"[WARNING] Failed to clean crops folder: {e}")
     
-    print("[video] Image processing complete.\n")
+    # print("[video] Image processing complete.\n")
     
     return True
 
 
-async def main() -> int:
+async def main(video_capture) -> int:
 
     settings = load_video_pipeline_settings()
     
     window_title = "CSI Camera"
-    video_capture = None
 
     try:
-        video_capture = initialize_camera(flip_method=0)
         cv2.namedWindow(window_title, cv2.WINDOW_AUTOSIZE)
 
         # State variables
