@@ -241,17 +241,17 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
     print_summary(settings, infer_summary)
 
     # deleting the crops folder to prevent accumulation
-    crops_root = Path(settings["CROPS_ROOT"])
+    # crops_root = Path(settings["CROPS_ROOT"])
 
-    if crops_root.exists():
-        try:
-            shutil.rmtree(crops_root)
-            crops_root.mkdir(parents=True, exist_ok=True)
-            print(f"[INFO] Cleaned crops folder: {crops_root}")
-        except Exception as e:
-            print(f"[WARNING] Failed to clean crops folder: {e}")
+    # if crops_root.exists():
+    #     try:
+    #         shutil.rmtree(crops_root)
+    #         crops_root.mkdir(parents=True, exist_ok=True)
+    #         print(f"[INFO] Cleaned crops folder: {crops_root}")
+    #     except Exception as e:
+    #         print(f"[WARNING] Failed to clean crops folder: {e}")
     
-    print("[video] Image processing complete.\n")
+    # print("[video] Image processing complete.\n")
     
     return True
 
