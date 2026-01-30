@@ -51,8 +51,8 @@ def initialize_camera(flip_method: int = 0) -> cv2.VideoCapture:
     warmup_sleep_s = 0.05
     last_err = None
     for _ in range(warmup_reads):
-        ok, frame = video_capture.read()
-        if ok and frame is not None:
+        ret_val, frame = video_capture.read()
+        if ret_val and frame is not None:
             print("Camera started successfully! Detecting markers...\n")
             return video_capture
         last_err = "read() returned no frame"
