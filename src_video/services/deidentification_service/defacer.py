@@ -259,7 +259,7 @@ def get_anonymized_image(frame,
     anonymize_frame(
         dets, frame, mask_scale=mask_scale,
         replacewith=replacewith, ellipse=ellipse, draw_scores=draw_scores,
-        replaceimg=replaceimg
+        replaceimg=replaceimg, mosaicsize=20
     )
 
     return frame

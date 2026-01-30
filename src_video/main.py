@@ -21,6 +21,7 @@ from src_video.services.detect_marker_service.detect_marker import detect_aprilt
 from src_video.services.camera_capture_service.capture_img import (gstreamer_pipeline, capture_images,)
 from src_video.domain.constants import COLOR_TEXT
 from src_video.domain.entities import create_body_parts
+from config.video_settings import IMAGE_SAVE_DIR
 
 
 def _as_posix(path: str) -> str:
@@ -262,7 +263,8 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
     try:
         deidentify_result = run_deidentification(
             # input_dir=_as_posix(str(Path(settings["DETECTION_OUTPUT"]) / "annotated")),
-            input_dir = _as_posix(settings["DETECTION_OUTPUT"]),
+            # input_dir = _as_posix(settings["DETECTION_OUTPUT"]),
+            input_dir=_as_posix(IMAGE_SAVE_DIR),
             output_dir=_as_posix(str(Path(settings["DETECTION_OUTPUT"]) / "deidentified")),
             enabled=True,
             threshold=0.2,
