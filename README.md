@@ -258,6 +258,7 @@ python -m src_audio.main <service_name>
 | `meds`           | Run medication extraction service |
 | `inter`          | Run NLP intervention extraction   |
 | `sem`            | Run semantic filtering service |
+| `denoise`       | Run denoising service |
 
 
 ### Examples

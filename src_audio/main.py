@@ -6,6 +6,7 @@ from src_audio.services.semantic_filtering_service.semantic_filtering import run
 from src_audio.services.anonymization_service.transcript_anonymization import run_anonymization_service
 from src_audio.services.recording_audio_service.record_functions import run_recording_service
 from src_audio.services.audio_chunking_service.trim_audio import run_audio_trimming
+from src_audio.services.denoising_service.denoise import run_denoise_service
 from src_audio.utils.metadata import setup_metadata, finalize_metadata
 from datetime import datetime
 
@@ -18,7 +19,7 @@ async def main():
         "service",
         nargs="?",
         type=str,
-        choices=["transcribe", "meds", "inter", "sem", "anonymize", "trim", "record"],
+        choices=["transcribe", "meds", "inter", "sem", "anonymize", "trim", "record", "denoise"],
         default=None
     )
     args = parser.parse_args()
@@ -48,6 +49,9 @@ async def main():
         elif args.service == "trim":
             await run_audio_trimming()
             setup_metadata()
+        elif args.service == "denoise":
+            await run_denoise_service()
+            setup_metadata()
         
         else:  
             
@@ -57,6 +61,13 @@ async def main():
                 print("Recording finished.\n")
             except Exception as e:
                 print("Recording failed:", e)
+
+            try:
+                print("Starting de-noising service...\n")
+                await run_denoise_service()
+                print("De-noising service finished.\n")
+            except Exception as e:
+                print("De-noising service failed:", e)
             
             try:
                 print("Starting audio trimming...\n")
