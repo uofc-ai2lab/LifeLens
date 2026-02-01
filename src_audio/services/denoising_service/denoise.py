@@ -3,7 +3,7 @@ from scipy.io import wavfile
 import numpy as np
 import os
 from pathlib import Path
-from config.audio_settings import AUDIO_FILES_DICT, AUDIO_DIR
+from config.audio_settings import AUDIO_FILES_DICT, AUDIO_DIR, create_parent_audio_dir
 
 
 def load_audio(file_path: str):
@@ -50,6 +50,7 @@ def denoise(input_file, output_file):
    reduced_noise = np.int16(reduced_noise * 32767)
    
    # Save the cleaned audio
+   create_parent_audio_dir(output_file)
    wavfile.write(output_file, sample_rate, reduced_noise)
    print(f"Cleaned audio saved as {output_file}")
    
@@ -57,6 +58,5 @@ async def run_denoise_service():
     """Main function to run the de-noising service"""
     print(f"Starting de-noising service for {AUDIO_FILES_DICT}..\n")
     for parent_audio in AUDIO_FILES_DICT.keys(): 
-        cleaned_file = f"cleaned_{Path(parent_audio).name}"
+        cleaned_file = f"cleaned_{Path(AUDIO_DIR / parent_audio).name}"
         denoise(parent_audio, cleaned_file)
-        AUDIO_FILES_DICT[parent_audio].append(cleaned_file)
