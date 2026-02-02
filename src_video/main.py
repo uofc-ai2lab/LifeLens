@@ -19,6 +19,8 @@ from src_video.services.classification_service.infer_injuries_on_crops import pr
 from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
 from src_video.services.camera_capture_service.capture_img import (gstreamer_pipeline, capture_images,)
+from src_video.services.person_reid_service.tracker import PersonReIDEngine
+from src_video.services.person_reid_service.integration import run_person_reid_on_detections, generate_reid_report
 from src_video.domain.constants import COLOR_TEXT
 from src_video.domain.entities import create_body_parts
 
@@ -204,9 +206,14 @@ def body_ranking(settings: Dict[str, Any]) -> bool:
         return False
 
 
-def process_single_image(settings: Dict[str, Any]) -> bool:
+def process_single_image(settings: Dict[str, Any], reid_engine: PersonReIDEngine, image_count: int) -> bool:
     """
     Process a single captured image through the full pipeline.
+    
+    Args:
+        settings: Pipeline configuration settings
+        reid_engine: PersonReIDEngine instance for person re-identification
+        image_count: Current image count (1-indexed)
     
     Returns:
         True if processing succeeded, False otherwise.
@@ -233,8 +240,34 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
     except Exception as e:
         print(f"[video] Object Detection failed: {e}")
     
-    # Run injury inference
+    # Run person re-identification on detected body parts
     crops_root = Path(settings["CROPS_ROOT"])
+    is_gallery_registration = (image_count == 1)
+    
+    try:
+        print("\n[video] Running person re-identification...\n")
+        reid_result = run_person_reid_on_detections(
+            crops_root=crops_root,
+            image_id=f"image_{image_count:03d}",
+            reid_engine=reid_engine,
+            is_gallery_registration=is_gallery_registration,
+        )
+        
+        if reid_result["success"]:
+            if is_gallery_registration:
+                print(f"[video] Gallery registration: {reid_result['detections_registered']} body parts")
+                print(f"[video] Person ID: {reid_result['person_id']}")
+            else:
+                summary = reid_result.get("summary", {})
+                print(f"[video] Re-identification: {summary.get('identified_count')}/{summary.get('total_detections')} identified")
+                print(f"[video] ReID rate: {summary.get('reid_rate', 0):.1%}")
+        else:
+            print(f"[video] Person ReID failed: {reid_result.get('error')}")
+    
+    except Exception as e:
+        print(f"[video] Person ReID error: {e}")
+    
+    # Run injury inference
     try:
 
         infer_summary = predict_injuries_on_detection_crops(
@@ -293,6 +326,10 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
 async def main(video_capture) -> int:
 
     settings = load_video_pipeline_settings()
+    
+    # Initialize person re-identification engine
+    reid_dir = Path(settings["DETECTION_OUTPUT"]) / "person_reid"
+    reid_engine = PersonReIDEngine(storage_dir=str(reid_dir))
     
     window_title = "CSI Camera"
 
@@ -362,7 +399,7 @@ async def main(video_capture) -> int:
                     is_processing = True
                     
                     # Process the captured image through full pipeline
-                    if process_single_image(settings):
+                    if process_single_image(settings, reid_engine, total_images_processed + 1):
                         total_images_processed += 1
                         print(f"[INFO] Successfully processed {total_images_processed} images total.\n")
                     else:
@@ -374,6 +411,11 @@ async def main(video_capture) -> int:
 
             elif not detected_tag and total_images_processed > 0:
                 print("[INFO] Tag lost. Continuing to monitor...\n")
+
+        # Generate final re-identification report
+        if total_images_processed > 0:
+            reid_report_path = Path(settings["DETECTION_OUTPUT"]) / "person_reid" / "reid_report.json"
+            generate_reid_report(reid_engine, reid_report_path)
 
         print(f"\n[INFO] Session complete. Processed {total_images_processed} images total.\n")
         return 0
