@@ -28,9 +28,10 @@ from src_video.services.detect_marker_service.detect_marker import detect_aprilt
 from src_video.services.camera_capture_service.capture_img import (
     gstreamer_pipeline,
     capture_images,
+    initialize_camera,
+    draw_overlay
 )
 
-from src_video.domain.constants import COLOR_TEXT
 
 
 def _as_posix(path: str) -> str:
@@ -51,74 +52,8 @@ def put_latest(queue: Queue, item):
     queue.put(item)
 
 
-def initialize_camera(flip_method: int = 0) -> cv2.VideoCapture:
-
-    pipeline = gstreamer_pipeline(flip_method=flip_method)
-    debug = os.getenv("VIDEO_CAMERA_DEBUG", "0").strip().lower() in {"1", "true", "yes", "on"}
-    if debug:
-        print(f"[video][camera] gstreamer pipeline: {pipeline}")
-
-    video_capture = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
-    if not video_capture.isOpened():
-        raise RuntimeError("Error: Unable to open camera (GStreamer pipeline did not open)")
-
-    # Warmup
-    for _ in range(20):
-        ok, frame = video_capture.read()
-        if ok and frame is not None:
-            print("[CAMERA] Started successfully\n")
-            return video_capture
-        last_err = "read() returned no frame"
-        time.sleep(0.05)
-
-    video_capture.release()
-
-    raise RuntimeError(
-        "Error: Camera opened but no frames received. "
-        "If you see 'Failed to create CaptureSession', restart `nvargus-daemon`, "
-        "ensure no other process is using the CSI camera, and verify the camera ribbon/port. "
-        f"({last_err})"
-    )
-
-def update_fps(frame_count: int, start_time: float, print_info: bool) -> tuple[int, float, float]:
-    """Calculate and return updated FPS metrics."""
-    elapsed = time.time() - start_time
-    if elapsed > 2.0:
-        fps = frame_count / elapsed
-        if print_info:
-            print(f"\n[PERFORMANCE] FPS: {fps:.1f}")
-        return 0, time.time(), fps
-    return frame_count, start_time, 0.0
-
-
-def draw_overlay(frame, fps: float, processing: bool):
-
-    cv2.putText(
-        frame,
-        f"FPS: {fps:.1f}",
-        (10, 30),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.7,
-        COLOR_TEXT,
-        2,
-    )
-
-    if processing:
-        cv2.putText(
-            frame,
-            "PROCESSING...",
-            (10, 60),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            (0, 165, 255),
-            2,
-        )
-
-
 
 def process_single_image(settings: Dict[str, Any]) -> bool:
-
-    infer_summary = {}
 
     try:
 
@@ -330,6 +265,11 @@ def main() -> int:
 
             now = time.time()
 
+            keyCode = cv2.waitKey(10) & 0xFF
+            # Stop the program on the ESC key or 'q'
+            if keyCode == 27 or keyCode == ord('q'):
+                break
+
 
             # Capture
             if detected and (now - last_snap) >= SNAPSHOT_INTERVAL:
@@ -352,8 +292,6 @@ def main() -> int:
             draw_overlay(frame, fps, processing)
 
             cv2.imshow(window, frame)
-
-
             key = cv2.waitKey(1) & 0xFF
 
             if key in (27, ord("q")):
@@ -377,9 +315,6 @@ def main() -> int:
 
 
     return 0
-
-
-
 
 if __name__ == "__main__":
 
