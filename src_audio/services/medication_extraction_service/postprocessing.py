@@ -10,8 +10,9 @@ def create_all_med_list(med_list=MEDICATIONS) -> list[str]:
     Cached to avoid recomputation for every sentence.
     """
     all_med_terms = set()
-    for med, aliases in med_list.items():
+    for med, med_info in med_list.items():
         all_med_terms.add(med.lower())
+        aliases = med_info.get("aliases", [])
         for alias in aliases:
             all_med_terms.add(alias.lower())
             
@@ -116,12 +117,21 @@ def fallback_dosage_or_route(sentence: str, med_start_idx: int, mode: str = "dos
             
             # Check if the first word is a text-based number
             if num_tok in TEXT_NUMBERS:
-                return f"{TEXT_NUMBERS[num_tok]} {unit_tok}" 
-                   
+                return f"{TEXT_NUMBERS.get(num_tok)} {unit_tok}" 
+
     elif mode == "route":
         # Look through whole sentence (that has been tokenized) for a possible route.
         for token in re.findall(r"[a-z']+", after_med):
             if token in ROUTES:
                 return token
 
+    return None
+
+def get_default_dosage(medication_name: str) -> str | None:
+    med_lower = medication_name.lower()
+    for med_name, info in MEDICATIONS.items():
+        if med_name.lower() == med_lower:
+            return info.get("default_dosage")
+        if med_lower in [a.lower() for a in info.get("aliases", [])]:
+            return info.get("default_dosage")
     return None

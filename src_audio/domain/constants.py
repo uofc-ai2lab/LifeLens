@@ -43,58 +43,205 @@ INTER_COLUMNS = [
 ]
 
 ### ------------------------------- MEDICATION SERVICE ------------------------------- ###
-
 MEDICATIONS = {
-    "Pressure Infuser": [],
-    "Normal Saline": ["NS", "Electrolyte"],
-    "Syringe": [],
-    "ASA": ["ASA"],
-    "Adenosine": ["Adeno"],
-    "Amiodarone": ["Amio"],
-    "Atropine": ["Atropine"],
-    "Calcium Chloride": ["CaCl₂"],
-    "Carboprost": ["Hemabate"],
-    "Clopidogrel": ["Plavix"],
-    "D5W": ["D5W"],
-    "Dextrose": ["D50"],
-    "Epinephrine": ["Epi"],
-    "Furosemide": ["Lasix"],
-    "Isoproterenol": ["Iso", "Isuprel"],
-    "Labetalol": ["Labetalol"],
-    "Metoprolol": ["Metoprolol", "Lopressor"],
-    "Nitroglycerin": ["NTG"],
-    "Norepinephrine": ["Levo", "NE"],
-    "Phenylephrine": ["Neo", "Phenyl"],
-    "Sodium Bicarbonate": ["Bicarb"],
-    "Salbutamol": ["Salbutamol", "Ventolin"],
-    "Ipratropium": ["Ipratropium", "Atrovent"],
-    "Dimenhydrinate": ["Gravol"],
-    "Diphenhydramine": ["Benadryl"],
-    "Metoclopramide": ["Maxeran", "Reglan"],
-    "Loperamide": ["Imodium"],
-    "Ondansetron": ["Zofran"],
-    "Enoxaparin": ["Lovenox"],
-    "Heparin": ["Heparin"],
-    "Humulin R": ["Regular insulin", "R-insulin"],
-    "Magnesium sulfate": ["Mag sulfate", "MgSO₄"],
-    "Vitamin K": ["Phytonadione"],
-    "Misoprostol": ["Miso"],
-    "Oxytocin": ["Oxy", "Pitocin"],
-    "Propofol": ["Propofol", "Diprivan"],
-    "Lidocaine": ["Lido", "Lido oint"],
-    "Naloxone": ["Narcan"],
-    "Intralipid": ["Intralipid"],
-    "Dexamethasone": ["Dex", "Decadron"],
-    "Solu-Medrol": ["Solu-Medrol", "Methylpred"],
-    "Plavix": ["Plavix"],
-    "Ticagrelor": ["Brilinta"],
-    "TNKase": ["TNK"],
-    "Tranexamic Acid": ["TXA"],
-    "Indomethacin": ["Indomethacin", "Indocin"],
-    "Bug Spray": [],
-    "NS flush": ["NS flush"],
-    "Sterile Water": ["SW"]
+    "Pressure Infuser": {
+        "aliases": [],
+        "default_dosage": None
+    },
+    "Normal Saline": {
+        "aliases": ["NS", "Electrolyte"],
+        "default_dosage": "1000 ml"
+    },
+    "Syringe": {
+        "aliases": [],
+        "default_dosage": None
+    },
+    "ASA": {
+        "aliases": ["ASA"],
+        "default_dosage": "325 mg"
+    },
+    "Adenosine": {
+        "aliases": ["Adeno"],
+        "default_dosage": "6 mg"
+    },
+    "Amiodarone": {
+        "aliases": ["Amio"],
+        "default_dosage": "300 mg"
+    },
+    "Atropine": {
+        "aliases": ["Atropine"],
+        "default_dosage": "1 mg"
+    },
+    "Calcium Chloride": {
+        "aliases": ["CaCl₂"],
+        "default_dosage": "1 g"
+    },
+    "Carboprost": {
+        "aliases": ["Hemabate"],
+        "default_dosage": "250 mcg"
+    },
+    "Clopidogrel": {
+        "aliases": ["Plavix"],
+        "default_dosage": "300 mg"
+    },
+    "D5W": {
+        "aliases": ["D5W"],
+        "default_dosage": "500 ml"
+    },
+    "Dextrose": {
+        "aliases": ["D50"],
+        "default_dosage": "25 g"
+    },
+    "Epinephrine": {
+        "aliases": ["Epi"],
+        "default_dosage": "1 mg"
+    },
+    "Furosemide": {
+        "aliases": ["Lasix"],
+        "default_dosage": "40 mg"
+    },
+    "Isoproterenol": {
+        "aliases": ["Iso", "Isuprel"],
+        "default_dosage": "2 mcg/min"
+    },
+    "Labetalol": {
+        "aliases": ["Labetalol"],
+        "default_dosage": "20 mg"
+    },
+    "Metoprolol": {
+        "aliases": ["Metoprolol", "Lopressor"],
+        "default_dosage": "5 mg"
+    },
+    "Nitroglycerin": {
+        "aliases": ["NTG"],
+        "default_dosage": "0.4 mg"
+    },
+    "Norepinephrine": {
+        "aliases": ["Levo", "NE"],
+        "default_dosage": "0.1 mcg/kg/min"
+    },
+    "Phenylephrine": {
+        "aliases": ["Neo", "Phenyl"],
+        "default_dosage": "100 mcg"
+    },
+    "Sodium Bicarbonate": {
+        "aliases": ["Bicarb"],
+        "default_dosage": "50 mEq"
+    },
+    "Salbutamol": {
+        "aliases": ["Salbutamol", "Ventolin"],
+        "default_dosage": "2.5 mg"
+    },
+    "Ipratropium": {
+        "aliases": ["Ipratropium", "Atrovent"],
+        "default_dosage": "0.5 mg"
+    },
+    "Dimenhydrinate": {
+        "aliases": ["Gravol"],
+        "default_dosage": "50 mg"
+    },
+    "Diphenhydramine": {
+        "aliases": ["Benadryl"],
+        "default_dosage": "25 mg"
+    },
+    "Metoclopramide": {
+        "aliases": ["Maxeran", "Reglan"],
+        "default_dosage": "10 mg"
+    },
+    "Loperamide": {
+        "aliases": ["Imodium"],
+        "default_dosage": "4 mg"
+    },
+    "Ondansetron": {
+        "aliases": ["Zofran"],
+        "default_dosage": "4 mg"
+    },
+    "Enoxaparin": {
+        "aliases": ["Lovenox"],
+        "default_dosage": "40 mg"
+    },
+    "Heparin": {
+        "aliases": ["Heparin"],
+        "default_dosage": "5000 units"
+    },
+    "Humulin R": {
+        "aliases": ["Regular insulin", "R-insulin"],
+        "default_dosage": "10 units"
+    },
+    "Magnesium sulfate": {
+        "aliases": ["Mag sulfate", "MgSO₄"],
+        "default_dosage": "2 g"
+    },
+    "Vitamin K": {
+        "aliases": ["Phytonadione"],
+        "default_dosage": "10 mg"
+    },
+    "Misoprostol": {
+        "aliases": ["Miso"],
+        "default_dosage": "800 mcg"
+    },
+    "Oxytocin": {
+        "aliases": ["Oxy", "Pitocin"],
+        "default_dosage": "10 units"
+    },
+    "Propofol": {
+        "aliases": ["Propofol", "Diprivan"],
+        "default_dosage": "50 mg"
+    },
+    "Lidocaine": {
+        "aliases": ["Lido", "Lido oint"],
+        "default_dosage": "100 mg"
+    },
+    "Naloxone": {
+        "aliases": ["Narcan"],
+        "default_dosage": "0.4 mg"
+    },
+    "Intralipid": {
+        "aliases": ["Intralipid"],
+        "default_dosage": "100 ml"
+    },
+    "Dexamethasone": {
+        "aliases": ["Dex", "Decadron"],
+        "default_dosage": "10 mg"
+    },
+    "Solu-Medrol": {
+        "aliases": ["Solu-Medrol", "Methylpred"],
+        "default_dosage": "125 mg"
+    },
+    "Plavix": {
+        "aliases": ["Plavix"],
+        "default_dosage": "300 mg"
+    },
+    "Ticagrelor": {
+        "aliases": ["Brilinta"],
+        "default_dosage": "180 mg"
+    },
+    "TNKase": {
+        "aliases": ["TNK"],
+        "default_dosage": "50 mg"
+    },
+    "Tranexamic Acid": {
+        "aliases": ["TXA"],
+        "default_dosage": "1 g"
+    },
+    "Indomethacin": {
+        "aliases": ["Indomethacin", "Indocin"],
+        "default_dosage": "50 mg"
+    },
+    "Bug Spray": {
+        "aliases": [],
+        "default_dosage": None
+    },
+    "NS flush": {
+        "aliases": ["NS flush"],
+        "default_dosage": "10 ml"
+    },
+    "Sterile Water": {
+        "aliases": ["SW"],
+        "default_dosage": "10 ml"
+    }
 }
+
 
 ROUTES = {
     "infusion", "iv", "intra-venous", "iv push", "ivp", "iv bolus", "ivb", "bolus",

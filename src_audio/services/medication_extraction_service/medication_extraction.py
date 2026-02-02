@@ -95,6 +95,11 @@ def extract_med_admins_with_confidence(segments: list[dict]) -> list[MedicationA
                     if dose:
                         record.dosage = dose
                         record.dosage_score = LOW_CONFIDENCE_SCORE
+                    else:
+                        default_dosage = get_default_dosage(record.medication)
+                        if default_dosage:
+                            record.dosage = default_dosage
+                            record.dosage_score = LOW_CONFIDENCE_SCORE
 
                 if not record.route:
                     rte = fallback_dosage_or_route(segment["original_text"], ent.start_idx, mode="route")
