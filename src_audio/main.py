@@ -50,8 +50,8 @@ async def main():
             await run_audio_trimming()
             setup_metadata()
         elif args.service == "denoise":
-            await run_denoise_service()
             setup_metadata()
+            await run_denoise_service()
         
         else:  
             
@@ -61,13 +61,6 @@ async def main():
                 print("Recording finished.\n")
             except Exception as e:
                 print("Recording failed:", e)
-
-            try:
-                print("Starting de-noising service...\n")
-                await run_denoise_service()
-                print("De-noising service finished.\n")
-            except Exception as e:
-                print("De-noising service failed:", e)
             
             try:
                 print("Starting audio trimming...\n")
@@ -77,6 +70,13 @@ async def main():
                 print("Audio trimming failed:", e)
             
             setup_metadata()
+
+            try:
+                print("Starting de-noising service...\n")
+                await run_denoise_service()
+                print("De-noising service finished.\n")
+            except Exception as e:
+                print("De-noising service failed:", e)
             
             try:
                 print("Starting transcription...\n")

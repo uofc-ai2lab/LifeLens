@@ -7,6 +7,7 @@ class AudioFileMetaData:
     parent_audio_path: Optional[Path] = None
     chunk_audio_path: Optional[Path] = None
     transcript_path: Optional[Path] = None
+    denoised_audio_path: Optional[Path] = None
     anonymization_path: Optional[Path] = None
     medication_path: Optional[Path] = None
     semantic_path: Optional[Path] = None

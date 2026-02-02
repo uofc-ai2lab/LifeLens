@@ -4,21 +4,22 @@ import numpy as np
 import os
 from pathlib import Path
 from config.audio_settings import AUDIO_FILES_DICT, AUDIO_DIR, create_parent_audio_dir
+from src_audio.utils.metadata import create_update_metadata
 
 
-def load_audio(file_path: str):
+def load_audio(input_audio_path: Path):
     """Load and prepare audio file for noise reduction"""
-    audio_location = AUDIO_DIR / Path(file_path).name # find the parent audio file in audio_files dir
     
-    if not os.path.exists(audio_location):
-        print(f"File {audio_location} not found!")
+    if not os.path.exists(input_audio_path):
+        print(f"File {input_audio_path} not found!")
         return
     
     # skip junk files (.DS_Store, etc.)
-    if audio_location.suffix.lower() != ".wav":
+    if input_audio_path.suffix.lower() != ".wav":
+        print(f"Unsupported file format: {input_audio_path.suffix}")
         return
     # Read the audio file
-    sample_rate, audio_data = wavfile.read(audio_location)
+    sample_rate, audio_data = wavfile.read(str(input_audio_path))
     
     # Convert stereo to mono by averaging channels
     if len(audio_data.shape) > 1:
@@ -32,11 +33,11 @@ def load_audio(file_path: str):
     print(f"Loaded {len(audio_data)/sample_rate:.1f} seconds of audio at {sample_rate}Hz")
     return sample_rate, audio_data
 
-def denoise(input_file, output_file): 
+def denoise(input_audio_path: Path, output_audio_path: Path): 
    """Remove noise from audio file and save the cleaned version"""
    
    # Load the original audio
-   sample_rate, audio_data = load_audio(input_file)
+   sample_rate, audio_data = load_audio(input_audio_path)
    
    # Apply noise reduction
    reduced_noise = nr.reduce_noise(
@@ -50,13 +51,21 @@ def denoise(input_file, output_file):
    reduced_noise = np.int16(reduced_noise * 32767)
    
    # Save the cleaned audio
-   create_parent_audio_dir(output_file)
-   wavfile.write(output_file, sample_rate, reduced_noise)
-   print(f"Cleaned audio saved as {output_file}")
+   wavfile.write(str(output_audio_path), sample_rate, reduced_noise)
+   print(f"Cleaned audio saved as {output_audio_path}\n")
    
 async def run_denoise_service():
     """Main function to run the de-noising service"""
-    print(f"Starting de-noising service for {AUDIO_FILES_DICT}..\n")
-    for parent_audio in AUDIO_FILES_DICT.keys(): 
-        cleaned_file = f"cleaned_{Path(AUDIO_DIR / parent_audio).name}"
-        denoise(parent_audio, cleaned_file)
+    print(f"Starting de-noising service for {list(AUDIO_FILES_DICT.keys())}..\n")
+    for parent, chunks in AUDIO_FILES_DICT.items():
+        for i, chunk in enumerate(list(chunks)):
+            chunk = Path(chunk)
+            out = chunk.parent / f"denoised_{chunk.name}"
+            try:
+                denoise(chunk, out)
+                # replace the entry so transcription uses denoised file
+                AUDIO_FILES_DICT[parent][i] = out
+                # optionally update metadata:
+                create_update_metadata(chunk, "denoise", out)
+            except Exception as e:
+                print(f"Failed denoising {chunk}: {e}")

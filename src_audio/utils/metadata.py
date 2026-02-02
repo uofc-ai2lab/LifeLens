@@ -119,7 +119,22 @@ def create_update_metadata(input_file_path, service, output_file):
             )
             
             TRANSCRIPT_FILES_LIST.append(parent_dir / output_file)
-   
+# ────────────────────────── DE-NOISING ──────────────────────────
+    elif service == "denoise":
+    # match on chunk_audio_path
+        existing_audio_meta = search_metadata("chunk_audio_path", input_file_path)
+        if existing_audio_meta:
+            existing_audio_meta.denoised_audio_path = output_file
+        else:
+            AUDIO_PIPELINE_METADATA.append(
+                AudioFileMetaData(
+                    parent_audio_path=None,
+                    chunk_audio_path=input_file_path,
+                    denoised_audio_path=output_file
+                )
+            )
+        _write_metadata_json()
+        return
     # ────────────────────────── OTHER SERVICES ──────────────────────────
     else: # if not a transcription service, check for transcript filename 
         existing_transc = search_metadata("transcript_path",input_file_path)
