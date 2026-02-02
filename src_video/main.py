@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 import time
 import asyncio
 from pathlib import Path
@@ -7,7 +8,12 @@ import threading
 import shutil
 import cv2
 
-from config.video_settings import ( load_video_pipeline_settings, SNAPSHOT_INTERVAL, IMAGE_SAVE_DIR)
+from config.video_settings import (
+    load_video_pipeline_settings,
+    SNAPSHOT_COUNT,
+    SNAPSHOT_INTERVAL,
+    IMAGE_SAVE_DIR,
+)
 from src_video.services.detection_service.detect_body_parts import run_detection
 from src_video.services.classification_service.infer_injuries_on_crops import predict_injuries_on_detection_crops
 from src_video.services.deidentification_service.deidentify import run_deidentification
@@ -23,14 +29,42 @@ def _as_posix(path: str) -> str:
 
 
 def initialize_camera(flip_method: int = 0) -> cv2.VideoCapture:
-    """Initialize and return the camera capture object."""
-    video_capture = cv2.VideoCapture(
-        gstreamer_pipeline(flip_method=flip_method), cv2.CAP_GSTREAMER
-    )
+    """Initialize and return the camera capture object (Jetson CSI via nvarguscamerasrc).
+
+    Notes:
+    - OpenCV/GStreamer can report "opened" even if Argus fails to create a CaptureSession.
+      We do a short warmup read loop so we only claim success once frames are actually available.
+    - Set `VIDEO_CAMERA_DEBUG=1` to print the GStreamer pipeline string.
+    """
+
+    pipeline = gstreamer_pipeline(flip_method=flip_method)
+    debug = os.getenv("VIDEO_CAMERA_DEBUG", "0").strip().lower() in {"1", "true", "yes", "on"}
+    if debug:
+        print(f"[video][camera] gstreamer pipeline: {pipeline}")
+
+    video_capture = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
     if not video_capture.isOpened():
-        raise RuntimeError("Error: Unable to open camera")
-    print("Camera started successfully! Detecting markers...\n")
-    return video_capture
+        raise RuntimeError("Error: Unable to open camera (GStreamer pipeline did not open)")
+
+    # Warm up and validate we can actually grab frames.
+    warmup_reads = 20
+    warmup_sleep_s = 0.05
+    last_err = None
+    for _ in range(warmup_reads):
+        ret_val, frame = video_capture.read()
+        if ret_val and frame is not None:
+            print("Camera started successfully! Detecting markers...\n")
+            return video_capture
+        last_err = "read() returned no frame"
+        time.sleep(warmup_sleep_s)
+
+    video_capture.release()
+    raise RuntimeError(
+        "Error: Camera opened but no frames received. "
+        "If you see 'Failed to create CaptureSession', restart `nvargus-daemon`, "
+        "ensure no other process is using the CSI camera, and verify the camera ribbon/port. "
+        f"({last_err})"
+    )
 
 
 def update_fps(frame_count: int, start_time: float, print_info: bool) -> tuple[int, float, float]:
@@ -279,6 +313,10 @@ async def main(video_capture) -> int:
         print("Starting camera monitoring...\n")
 
         while True:
+            if total_images_processed >= SNAPSHOT_COUNT:
+                print(f"\n[INFO] Reached SNAPSHOT_COUNT={SNAPSHOT_COUNT}. Ending video session.\n")
+                break
+
             ret_val, frame = video_capture.read()
             if not ret_val:
                 print("ERROR: Failed to grab frame")
@@ -303,8 +341,8 @@ async def main(video_capture) -> int:
             else:
                 break
 
-            # Detect AprilTag 
-            detected_tag = detect_apriltags(video_capture, show_visualization=show_visualization, print_info=print_info)
+            # Detect AprilTag (reuse current frame; avoids double-grabbing)
+            detected_tag = detect_apriltags(frame, show_visualization=show_visualization, print_info=print_info)
 
             # If tag detected and not currently processing
             if detected_tag and not is_processing:

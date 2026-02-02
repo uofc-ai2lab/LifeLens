@@ -46,7 +46,7 @@ print("AprilTag detector initialized successfully!")
 
 # ==================== DETECTION FUNCTIONS ====================
 
-def detect_apriltags(video_capture, show_visualization=True, print_info=True):
+def detect_apriltags(source, show_visualization=True, print_info=True):
     """
     Detect AprilTags in a frame
     
@@ -58,10 +58,17 @@ def detect_apriltags(video_capture, show_visualization=True, print_info=True):
         List of detected tags
     """
 
-    ret_val, frame = video_capture.read()
-    if not ret_val:
-        print("ERROR: Failed to grab frame for AprilTag detection")
-        return []
+    # Accept either a cv2.VideoCapture-like object (with .read()) or a raw frame (np.ndarray).
+    if hasattr(source, "read"):
+        ret_val, frame = source.read()
+        if not ret_val:
+            print("ERROR: Failed to grab frame for AprilTag detection")
+            return []
+    else:
+        frame = source
+        if frame is None:
+            print("ERROR: No frame provided for AprilTag detection")
+            return []
     # Convert to grayscale
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     
