@@ -139,8 +139,8 @@ TEXT_NUMBERS = {
     "quarter": 0.25
 }
 
-NUMBER_PATTERN = re.compile(r"\d+(?:\.\d+)?(?:/\d+)?")
-
+NUMBER_PATTERN = re.compile(r"(?:\d*\.\d+|\d+)(?:/\d+)?")
+DOSAGE_TOKEN_PATTERN = re.compile(r"(?:\d*\.\d+|\d+)(?:/\d+)?|[a-z']+")
 LOW_CONFIDENCE_SCORE = 0.5
 HIGH_CONFIDENCE_SCORE = 1.0
 

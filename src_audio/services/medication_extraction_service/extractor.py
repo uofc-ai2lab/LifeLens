@@ -93,7 +93,7 @@ class MedicationExtractor:
                 "end_idx": end_idx,
                 "scores": []
             })
-            group["end"] = end_idx
+            group["end_idx"] = end_idx
             group["scores"].append(score)
         
         return word_groups

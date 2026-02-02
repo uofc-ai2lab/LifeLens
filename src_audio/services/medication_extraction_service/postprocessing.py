@@ -1,6 +1,6 @@
 import re
 from functools import lru_cache
-from src_audio.domain.constants import ROUTES, DOSAGES, TEXT_NUMBERS, NUMBER_PATTERN, MEDICATIONS, LOW_CONFIDENCE_SCORE, HIGH_CONFIDENCE_SCORE
+from src_audio.domain.constants import ROUTES, DOSAGES, TEXT_NUMBERS, NUMBER_PATTERN, MEDICATIONS, LOW_CONFIDENCE_SCORE, HIGH_CONFIDENCE_SCORE, DOSAGE_TOKEN_PATTERN
 from src_audio.domain.entities import MedicationEntity
 
 @lru_cache(maxsize=1)
@@ -102,24 +102,26 @@ def fallback_dosage_or_route(sentence: str, med_start_idx: int, mode: str = "dos
     after_med = text[med_start_idx:]
 
     if mode == "dosage":
-        # Tokenize numbers, hyphens, slashes, and words
-        tokens = re.findall(r"\d+(?:\.\d+)?(?:/\d+)?|[a-z']+", after_med)
+        # Tokenize: Grab numbers/fractions OR words
+        tokens = DOSAGE_TOKEN_PATTERN.findall(after_med)
+        
         for i in range(len(tokens) - 1):
             number_token, unit_token = tokens[i], tokens[i + 1]
             
-            # Numeric check
-            is_number = NUMBER_PATTERN.fullmatch(number_token)
-            if not is_number and number_token in TEXT_NUMBERS:
-                is_number = True
-
-            if is_number and unit_token in DOSAGES:
-                return f"{number_token} {unit_token}"
-    
+        # Check if the second word is a valid unit
+        if unit_tok in DOSAGES:
+            # Check if the first word is a numeric string
+            if NUMBER_PATTERN.fullmatch(num_tok):
+                return f"{num_tok} {unit_tok}"
+            
+            # Check if the first word is a text-based number
+            if num_tok in TEXT_NUMBERS:
+                return f"{TEXT_NUMBERS[num_tok]} {unit_tok}" 
+                   
     elif mode == "route":
-        # Tokenize words
-        tokens = re.findall(r"[a-z']+", after_med)
-        for token in tokens:
+        # Look through whole sentence (that has been tokenized) for a possible route.
+        for token in re.findall(r"[a-z']+", after_med):
             if token in ROUTES:
                 return token
-    
+
     return None
