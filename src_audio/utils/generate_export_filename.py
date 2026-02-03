@@ -15,7 +15,7 @@ def generate_export_filename(
     
     # For non-transcript services, we are given a transcript file
     existing_metadata = None
-    if service != "denoise":
+    if service == "denoise":
         existing_metadata = search_metadata(
             "audio_chunk_path",
             input_file_path
@@ -40,7 +40,7 @@ def generate_export_filename(
 
     # Re-fetch metadata to ensure update succeeded
     check_existing_metadata = None
-    if service != "denoise":
+    if service == "denoise":
         check_existing_metadata = search_metadata(
             "audio_chunk_path",
             input_file_path
