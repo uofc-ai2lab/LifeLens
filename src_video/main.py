@@ -259,14 +259,22 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
 
 
     # Run de-identification
-
     try:
-        run_deidentification(
-            input_dir=_as_posix(settings["DETECTION_OUTPUT"]),
+        deidentify_result = run_deidentification(
+            # input_dir=_as_posix(str(Path(settings["DETECTION_OUTPUT"]) / "annotated")),
+            input_dir = _as_posix(settings["DETECTION_OUTPUT"]),
             output_dir=_as_posix(str(Path(settings["DETECTION_OUTPUT"]) / "deidentified")),
-            enabled=False,
+            enabled=True,
+            threshold=0.2,
+            replacewith="blur",
+            mask_scale=1.3,
+            ellipse=True,
+            draw_scores=False,
         )
-        print("[video] De-identification skipped (disabled).\n")
+        if deidentify_result.get("success"):
+            print(f"[video] De-identification complete: {deidentify_result['processed_count']} images processed.\n")
+        else:
+            print(f"[video] De-identification warning: {deidentify_result.get('note', deidentify_result.get('error'))}\n")
 
     except Exception as e:
         print(f"[video] De-identification failed: {e}")
