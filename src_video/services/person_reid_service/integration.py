@@ -213,6 +213,7 @@ def run_person_reid_on_detections(
 def generate_reid_report(
     reid_engine: PersonReIDEngine,
     output_path: Path,
+    saved_images_dir: Optional[Path] = None,
 ) -> bool:
     """
     Generate a comprehensive re-identification report.
@@ -240,8 +241,21 @@ def generate_reid_report(
         crops_root = detection_output_dir / "crops"
         images_section: Dict[str, Any] = {}
 
+        # If provided, filter crop folders to only those corresponding to images currently
+        # present in the saved images directory.
+        saved_stems: Optional[set[str]] = None
+        if saved_images_dir is not None and saved_images_dir.exists():
+            stems = {
+                p.stem
+                for p in saved_images_dir.iterdir()
+                if p.is_file() and p.suffix.lower() in {".jpg", ".jpeg", ".png"}
+            }
+            saved_stems = stems if stems else None
+
         if crops_root.exists():
             image_dirs = [p for p in crops_root.iterdir() if p.is_dir()]
+            if saved_stems is not None:
+                image_dirs = [p for p in image_dirs if p.name in saved_stems]
             image_dirs.sort(key=lambda p: p.stat().st_mtime)
 
             for image_dir in image_dirs:
@@ -296,6 +310,12 @@ def generate_reid_report(
 
         if images_section:
             report["images"] = images_section
+
+        report["images_filter"] = {
+            "saved_images_dir": str(saved_images_dir) if saved_images_dir is not None else None,
+            "filtered_to_saved_images": saved_stems is not None,
+            "saved_images_count": 0 if saved_stems is None else len(saved_stems),
+        }
         
         with open(output_path, 'w') as f:
             json.dump(report, f, indent=2)

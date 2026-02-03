@@ -427,7 +427,7 @@ async def main(video_capture) -> int:
         # Generate final re-identification report
         if total_images_processed > 0:
             reid_report_path = Path(settings["DETECTION_OUTPUT"]) / "person_reid" / "reid_report.json"
-            generate_reid_report(reid_engine, reid_report_path)
+            generate_reid_report(reid_engine, reid_report_path, saved_images_dir=Path(IMAGE_SAVE_DIR))
 
         print(f"\n[INFO] Session complete. Processed {total_images_processed} images total.\n")
         return 0
