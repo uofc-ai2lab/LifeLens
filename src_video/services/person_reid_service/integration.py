@@ -12,6 +12,66 @@ from src_video.services.person_reid_service.tracker import PersonReIDEngine
 from src_video.domain.entities import MatchResult
 
 
+def _select_target_image_dir(crops_root: Path, image_id: str) -> Optional[Path]:
+    """Select the crop subdirectory that represents the current image.
+
+    Preference order:
+    1) crops_root/image_id if it exists
+    2) newest subdirectory under crops_root
+
+    This avoids accidentally running ReID over *all* historical crop folders.
+    """
+
+    candidate = crops_root / image_id
+    if candidate.exists() and candidate.is_dir():
+        return candidate
+
+    subdirs = [p for p in crops_root.iterdir() if p.is_dir()]
+    if not subdirs:
+        return None
+
+    return max(subdirs, key=lambda p: p.stat().st_mtime)
+
+
+def extract_detections_from_image_dir(
+    image_dir: Path,
+    image_id: str,
+) -> List[Tuple[str, str, Tuple[int, int, int, int], float, str]]:
+    """Extract detections from a single crop folder (one captured image)."""
+
+    detections: List[Tuple[str, str, Tuple[int, int, int, int], float, str]] = []
+    if not image_dir.exists() or not image_dir.is_dir():
+        return detections
+
+    for crop_file in image_dir.glob("*.jpg"):
+        if "_alpha.png" in crop_file.name:
+            continue
+
+        # Format: {image_stem}_{body_part}_{idx}.jpg
+        parts = crop_file.stem.rsplit('_', 1)
+        if len(parts) < 2:
+            continue
+
+        prefix = parts[0]
+        prefix_parts = prefix.rsplit('_', 1)
+        if len(prefix_parts) < 2:
+            continue
+
+        body_part = prefix_parts[1]
+        bbox = (0, 0, 0, 0)  # Placeholder; can be replaced with real bbox metadata later.
+        confidence = 0.95
+
+        detections.append((
+            body_part,
+            str(crop_file),
+            bbox,
+            confidence,
+            image_id,
+        ))
+
+    return detections
+
+
 def extract_detections_from_crops(
     crops_root: Path,
     image_id: str,
@@ -36,41 +96,13 @@ def extract_detections_from_crops(
     if not crops_root.exists():
         return detections
     
-    # Iterate through crop subdirectories
-    for image_dir in crops_root.iterdir():
-        if not image_dir.is_dir():
-            continue
-        
-        # Find all crop files (exclude alpha PNGs)
-        for crop_file in image_dir.glob("*.jpg"):
-            if "_alpha.png" in crop_file.name:
-                continue
-            
-            # Parse body part from filename
-            # Format: {stem}_{body_part}_{idx}.jpg
-            parts = crop_file.stem.rsplit('_', 1)
-            if len(parts) < 2:
-                continue
-            
-            prefix = parts[0]
-            prefix_parts = prefix.rsplit('_', 1)
-            if len(prefix_parts) < 2:
-                continue
-            
-            body_part = prefix_parts[1]
-            
-            # Estimate bbox from crop (we don't have exact bbox from just crop file)
-            # This is a simplified approach; real implementation should store bbox metadata
-            bbox = (0, 0, 0, 0)  # Placeholder
-            confidence = 0.95  # High confidence for YOLO detections
-            
-            detections.append((
-                body_part,
-                str(crop_file),
-                bbox,
-                confidence,
-                image_id,
-            ))
+    target_dir = _select_target_image_dir(crops_root, image_id)
+    if target_dir is None:
+        return detections
+
+    # Use the folder name as the image_id for traceability in reports.
+    # (The caller-provided image_id is often "image_00X" while folders are like "captured_img_...".)
+    return extract_detections_from_image_dir(target_dir, image_id=target_dir.name)
     
     return detections
 
@@ -196,11 +228,74 @@ def generate_reid_report(
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
         gallery_info = reid_engine.get_gallery()
-        
-        report = {
+
+        report: Dict[str, Any] = {
             "total_people_in_gallery": len(gallery_info),
             "gallery": gallery_info,
         }
+
+        # Optional per-image mapping: for each crop in each image folder, show which person_id
+        # it matched and which reference crop it matched against.
+        detection_output_dir = output_path.parent.parent
+        crops_root = detection_output_dir / "crops"
+        images_section: Dict[str, Any] = {}
+
+        if crops_root.exists():
+            image_dirs = [p for p in crops_root.iterdir() if p.is_dir()]
+            image_dirs.sort(key=lambda p: p.stat().st_mtime)
+
+            for image_dir in image_dirs:
+                detections = extract_detections_from_image_dir(image_dir, image_id=image_dir.name)
+                if not detections:
+                    continue
+
+                match_results = reid_engine.reid_detections(detections)
+                summary = reid_engine.get_match_summary(match_results)
+
+                # Majority-vote assignment for the whole image (helpful for quick sanity checks).
+                matched = [r for r in match_results if r.is_match and r.reference_tracking_id]
+                best_person_id: Optional[str] = None
+                if matched:
+                    counts: Dict[str, int] = {}
+                    conf_sums: Dict[str, float] = {}
+                    for r in matched:
+                        pid = r.reference_tracking_id
+                        counts[pid] = counts.get(pid, 0) + 1
+                        conf_sums[pid] = conf_sums.get(pid, 0.0) + float(r.confidence)
+                    best_person_id = max(
+                        counts.keys(),
+                        key=lambda pid: (counts[pid], conf_sums.get(pid, 0.0) / max(1, counts[pid]))
+                    )
+
+                detections_out: List[Dict[str, Any]] = []
+                # Preserve 1:1 ordering with `detections` list.
+                for (body_part, crop_path, bbox, confidence, img_id), r in zip(detections, match_results):
+                    ref_crop_path = None
+                    if r.is_match and r.reference_tracking_id:
+                        person = reid_engine.gallery.get(r.reference_tracking_id)
+                        if person:
+                            ref_det = person.get_detection(body_part)
+                            if ref_det:
+                                ref_crop_path = ref_det.crop_path
+
+                    detections_out.append({
+                        "image_id": img_id,
+                        "body_part": body_part,
+                        "crop_path": crop_path,
+                        "matched": r.is_match,
+                        "person_id": r.reference_tracking_id,
+                        "confidence": r.confidence,
+                        "reference_crop_path": ref_crop_path,
+                    })
+
+                images_section[image_dir.name] = {
+                    "best_person_id": best_person_id,
+                    "summary": summary,
+                    "detections": detections_out,
+                }
+
+        if images_section:
+            report["images"] = images_section
         
         with open(output_path, 'w') as f:
             json.dump(report, f, indent=2)

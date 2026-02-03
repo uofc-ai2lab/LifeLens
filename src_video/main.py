@@ -261,6 +261,18 @@ def process_single_image(settings: Dict[str, Any], reid_engine: PersonReIDEngine
                 summary = reid_result.get("summary", {})
                 print(f"[video] Re-identification: {summary.get('identified_count')}/{summary.get('total_detections')} identified")
                 print(f"[video] ReID rate: {summary.get('reid_rate', 0):.1%}")
+
+                # Print detected person IDs for this captured image.
+                reid_rows = reid_result.get("reid_results", [])
+                matched_person_ids = sorted({
+                    row.get("person_id")
+                    for row in reid_rows
+                    if row.get("is_identified") and row.get("person_id")
+                })
+                if matched_person_ids:
+                    print(f"[video] Detected person ID(s) in this image: {matched_person_ids}")
+                else:
+                    print("[video] Detected person ID(s) in this image: [] (no gallery match)")
         else:
             print(f"[video] Person ReID failed: {reid_result.get('error')}")
     
