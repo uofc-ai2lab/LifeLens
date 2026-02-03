@@ -47,7 +47,7 @@ def body_ranking(settings: Dict[str, Any]) -> bool:
             injury_prob = pred.get("injury_prob", 0.0)
             image_id = pred.get("image_id")
 
-            now = time.time()
+            now = time.strftime("%Y-%m-%d %H:%M:%S")
 
             # Ensure body part exists
             if body_part not in best_results:
