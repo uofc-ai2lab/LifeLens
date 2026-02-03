@@ -106,8 +106,8 @@ def create_update_metadata(input_file_path, service, output_file):
         return
 
     # ────────────────────────── TRANSCRIPTION ──────────────────────────
-    if service == "transcript":
-        existing_audio_meta = search_metadata("chunk_audio_path",input_file_path)
+    elif service == "transcript":
+        existing_audio_meta = search_metadata("denoised_audio_path",input_file_path)
         if existing_audio_meta:
             existing_audio_meta.transcript_path=output_file
             

@@ -12,49 +12,30 @@ def generate_export_filename(
     # Default output filename (fallback)
     output_filename = f"{service}_{input_file_path.parent.stem}.csv"
     output_file_path = input_file_path.parent / output_filename
-    
-    # For non-transcript services, we are given a transcript file
-    existing_metadata = None
+
+    # Decide what string to search our metadata on based on service type
     if service == "denoise":
-        existing_metadata = search_metadata(
-            "audio_chunk_path",
-            input_file_path
-        )
-    # For de-noising service, we are given a denoised audio file
-    elif service == "transcript": 
-        existing_metadata = search_metadata(
-            "denoised_audio_path",
-            input_file_path
-        )
+        metadata_key = "audio_chunk_path" # For de-noising service, we need to look for a chunk audio file
+    elif service == "transcript":
+        metadata_key = "denoised_audio_path" # For transcription service, we we need to look for a denoised audio file
     else:
-        existing_metadata = search_metadata("transcript_filename", input_file_path)
+        metadata_key = "transcript_path" # For other services, we need to look for a transcript file
+    
+    existing_metadata = search_metadata(metadata_key, input_file_path)
         
-    # If metadata exists and has an associated chunk audio, rename output accordingly
-    if existing_metadata:
-        print(f"EXIST - {existing_metadata}")
-        if existing_metadata.chunk_audio_path: 
-            output_filename = f"{timestamp}_{service}_{existing_metadata.chunk_audio_path.parent.stem}.csv"
+    # NOT SURE WHAT IS HAPPENING HERE: ASK ISHA
+    # # If metadata exists and has an associated chunk audio, rename output accordingly
+    # if existing_metadata.:
+    #     print(f"EXIST - {existing_metadata}")
+    #     if existing_metadata.chunk_audio_path: 
+    #         output_filename = f"{timestamp}_{service}_{existing_metadata.chunk_audio_path.parent.stem}.csv"
 
     # Update metadata
     create_update_metadata(input_file_path, service, output_file_path)
 
     # Re-fetch metadata to ensure update succeeded
-    check_existing_metadata = None
-    if service == "denoise":
-        check_existing_metadata = search_metadata(
-            "audio_chunk_path",
-            input_file_path
-        )
-    # For de-noising service, we are given a denoised audio file
-    elif service == "transcript": 
-        check_existing_metadata = search_metadata(
-            "denoised_audio_path",
-            input_file_path
-        )
-    else:
-        check_existing_metadata = search_metadata("transcript_path", input_file_path)
     
-    if check_existing_metadata is None:
+    if search_metadata(metadata_key, input_file_path) is None:
         raise RuntimeError("Metadata update failed")
 
     return output_file_path
