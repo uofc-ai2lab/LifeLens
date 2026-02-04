@@ -54,3 +54,6 @@ timm
 
 # detect AprilTag Marker
 pupil-apriltags>=1.0.4
+
+# Denoising
+noisereduce>=3.0.0
