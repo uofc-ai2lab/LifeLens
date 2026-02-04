@@ -5,7 +5,6 @@ from datetime import datetime
 from typing import List, Dict, Callable, Optional, Union
 from src_audio.domain.constants import bcolors
 from src_audio.utils.format_timestamp import format_timestamp
-from src_audio.utils.generate_export_filename import generate_export_filename
 
 def _transform_row_fn(data, columns):
     # Apply default transformations
@@ -35,8 +34,7 @@ def _transform_row_fn(data, columns):
 
 def export_to_csv(
     data: Union[List[Dict],pd.DataFrame],
-    output_path: Path,
-    input_file_path: Path,
+    audio_chunk_path: Path,
     service: str = "",
     columns: Optional[List[str]] = None,
     header: Optional[List[str]] = None,
@@ -55,8 +53,9 @@ def export_to_csv(
     - _transform_row_fn: optional function to transform each row
     - empty_ok: whether to write empty CSV if data is empty
     """
-
-    full_output_path = generate_export_filename(input_file_path, service)
+    
+    output_filename = f"{service}_{audio_chunk_path.parent.stem}.csv"
+    full_output_path = audio_chunk_path.parent / output_filename
     full_output_path.parent.mkdir(parents=True, exist_ok=True)
     
     # Determine columns for empty CSV
@@ -108,3 +107,5 @@ def export_to_csv(
     except Exception as e:
         print(bcolors.FAIL + f"ERROR exporting CSV: {e}" + bcolors.ENDC)
         raise
+
+    return full_output_path

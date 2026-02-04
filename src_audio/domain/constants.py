@@ -11,7 +11,9 @@ class bcolors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
-    
+
+AUDIO_EXTS = {".wav", ".mp3", ".m4a", ".flac"}
+
 
 ### ------------------------------- INTERVENTION SERVICE ------------------------------- ###
 INTERVENTIONS = {

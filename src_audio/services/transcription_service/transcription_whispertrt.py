@@ -5,7 +5,6 @@ import pandas as pd
 from src_audio.domain.constants import bcolors
 from src_audio.utils.export_to_csv import export_to_csv
 from config.audio_settings import (
-    AUDIO_FILES_DICT,
     IS_JETSON,
     MODEL_SIZE,
     MODEL_CACHE_PATH,
@@ -295,8 +294,6 @@ async def run_transcription(audio_chunk_file):
     # ==================== VERIFICATION STEP 1: LOAD MODEL ====================
     model = load_whisper_model(MODEL_SIZE, MODEL_CACHE_PATH)
 
-    # for parent_audio, chunk_files in AUDIO_FILES_DICT.items():
-    #     for audio_chunk_file in chunk_files:
     print(f"Current audio file path: {audio_chunk_file}")
     print(bcolors.OKGREEN + f"Transcribing {Path(audio_chunk_file).name}...\n" + bcolors.ENDC)
     
@@ -334,10 +331,9 @@ async def run_transcription(audio_chunk_file):
     columns=["start_time", "end_time", "text", "speaker"]
     print_formatting("heading","STEP 5: EXPORTING RESULTS")
     
-    export_to_csv(
+    transcript_path = export_to_csv(
         data=normalized_result,
-        output_path=Path(audio_chunk_file).parent,
-        input_file_path=Path(audio_chunk_file),
+        audio_chunk_path=Path(audio_chunk_file),
         service="transcript",
         columns=columns,
     )
@@ -354,3 +350,5 @@ async def run_transcription(audio_chunk_file):
     print(bcolors.OKBLUE + f"  Transcription: {time_for_transcription.seconds // 60} minutes and {time_for_transcription.seconds % 60} seconds" + bcolors.ENDC)
     print(bcolors.OKBLUE + f"  Export: {time_for_export.seconds // 60} minutes and {time_for_export.seconds % 60} seconds" + bcolors.ENDC)
     print(bcolors.OKGREEN + bcolors.BOLD + "\nPIPELINE COMPLETED SUCCESSFULLY!" + bcolors.ENDC + "\n")    
+    
+    return transcript_path

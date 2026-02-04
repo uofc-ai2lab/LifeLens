@@ -1,0 +1,12 @@
+start_time,end_time,event_type,event_category,entity_detected,full_text
+00:01:42.000,00:01:49.000,intervention,Hemorrhage Control,Medical dressing; Apply; dressing,The guy's dressing has been applied to the wound supplemental oxygen has been applied at 12 degrees per minute.
+00:02:18.000,00:02:22.000,intervention,Airway Management,Oxygen; Airway structure; airway,"So turning up his oxygen, making sure he's protecting his airway."
+00:02:30.000,00:02:40.000,intervention,Airway Management,Airway structure; airway,So there's an airway spade in these tallocuts.
+00:02:40.000,00:02:43.000,intervention,IV/Fluid Administration,intravenous administration; iv,Do you guys think you can start establishing some IV access?
+00:02:59.000,00:03:04.000,intervention,Hemorrhage Control,Medical dressing; Apply; dressing,There's an obvious wound here with the occlusive dressing applied.
+00:03:24.000,00:03:28.000,intervention,IV/Fluid Administration,intravenous administration; Hanging; iv,"So we have IV access, so we'll start just hanging a leader."
+00:04:15.000,00:04:23.000,intervention,Airway Management,Time; start time; intubation; C0834313,"So at this point in time, I think like we may need to start considering if we need to progress to intubation that being said he shouldn't be intubated right now,"
+00:06:05.000,00:06:08.000,intervention,IV/Fluid Administration,A little bit; fluid - substance; fluid,I think there's a little bit of fluid I can see around.
+00:08:39.000,00:08:44.000,intervention,Airway Management,Improved; Airway structure; airway,Saturations have improved to 94% he's still protecting his airway but we're set up to intubate
+00:10:25.000,00:10:31.000,intervention,Hemorrhage Control,Statistical mean; Pressure (property); low; Drop - Unit of Volume; C3826646; pressure,"Yeah, I mean his pressure is quite low, so if there's anything that's not going to drop his blood pressure further,"
+00:11:28.000,00:11:32.000,intervention,Airway Management,intubation,And we're still prepped for intubation to things continue down a certain path.

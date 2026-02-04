@@ -1,10 +1,9 @@
 from src_audio.utils.load_csv_file import load_csv_file 
 from src_audio.utils.export_to_csv import export_to_csv
 from src_audio.services.anonymization_service.anonymizer import TranscriptAnonymizer
-from config.audio_settings import TRANSCRIPT_FILES_LIST
 from pathlib import Path
 
-def run_anonymization(transcript_path: str, anonymizer: TranscriptAnonymizer) -> None:
+def run_anonymization(chunk_path: str, transcript_path: str, anonymizer: TranscriptAnonymizer) -> None:
     """
     Run the full transcript anonymization pipeline:
     - Load transcript CSV
@@ -29,26 +28,18 @@ def run_anonymization(transcript_path: str, anonymizer: TranscriptAnonymizer) ->
         })
 
     # Export anonymized transcript to CSV
-    export_to_csv(
+    anon_path = export_to_csv(
         data=anonymized_texts,
-        output_path=Path(transcript_path).parent,
-        input_file_path=Path(transcript_path),
+        audio_chunk_path=Path(chunk_path),
         service="anonymization",
         columns=["start_time", "end_time", "text", "speaker"],
         empty_ok=True,
     )
 
-async def run_anonymization_service():
+async def run_anonymization_service(chunk_path: str, transcript_path: str):
     """
     Async wrapper to run the transcript anonymization script
-    
-    Args: 
-        None
-    
-    Returns: 
-        None
     """
     anonymizer = TranscriptAnonymizer()
-    for transcript in TRANSCRIPT_FILES_LIST:
-        run_anonymization(transcript, anonymizer)
+    run_anonymization(chunk_path, transcript_path, anonymizer)
     
