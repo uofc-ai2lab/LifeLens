@@ -20,6 +20,8 @@ CAPTURE_WIDTH=1920
 CAPTURE_HEIGHT=720
 DISPLAY_WIDTH=960
 DISPLAY_HEIGHT=540
+FRAME_RATE=30
+FLIP_METHOD=0  # 0=none, 1=counterclockwise, 2=180, 3=clockwise, 4=horizontal flip, 5=vertical flip, 6=upper right diag, 7=upper left diag
 
 # Camera Calibration - NEEDED FOR ACCURATE DISTANCE
 # we don't need this to be super accurate for our use case, so these are approximate values

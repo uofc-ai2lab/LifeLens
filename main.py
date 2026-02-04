@@ -66,11 +66,6 @@ def main():
     while time.time() < deadline and not (video_ready.is_set() or video_failed.is_set()):
         time.sleep(0.05)
 
-    if video_failed.is_set() or not video_ready.is_set():
-        print("[root] Video not ready; skipping audio pipeline.")
-        video_thread.join()
-        return
-
     audio_thread.start()
     
     # Wait for both to finish

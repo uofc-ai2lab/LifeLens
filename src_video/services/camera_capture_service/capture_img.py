@@ -11,6 +11,8 @@ from src_video.domain.constants import (
     DISPLAY_WIDTH,
     DISPLAY_HEIGHT,
     COLOR_TEXT,
+    FRAME_RATE,
+    FLIP_METHOD
     )
 
 """ 
@@ -27,8 +29,8 @@ def gstreamer_pipeline(
     capture_height=CAPTURE_HEIGHT,
     display_width=DISPLAY_WIDTH,
     display_height=DISPLAY_HEIGHT,
-    framerate=30,
-    flip_method=0,
+    framerate=FRAME_RATE,
+    flip_method=FLIP_METHOD,
 ):
     return (
         "nvarguscamerasrc sensor-id=%d ! "
