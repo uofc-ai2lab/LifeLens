@@ -1,0 +1,2 @@
+start_time,end_time,event_type,event_category,entity_detected,full_text
+00:02:27.099,00:02:30.099,intervention,IV/Fluid Administration,iv,"Hello, uh, IV, IV, CBR."

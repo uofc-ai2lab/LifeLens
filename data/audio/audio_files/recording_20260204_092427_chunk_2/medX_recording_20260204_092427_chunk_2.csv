@@ -1,0 +1,2 @@
+start_time,end_time,event_type,medication (confidence score),dosage (confidence score),route (confidence score),full_text
+00:03:06.259,00:03:10.259,medication,ACM (0.325),Not Found,Not Found,
