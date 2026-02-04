@@ -288,69 +288,69 @@ async def transcribe_audio(audio_file: str, model):
 
 #     return result
 
-async def run_transcription():
+async def run_transcription(audio_chunk_file):
     print_formatting("title", "TRANSCRIPTION PIPELINE")
     
     """Main runner function for WhisperTRT (or Whisper) transcription """
     # ==================== VERIFICATION STEP 1: LOAD MODEL ====================
     model = load_whisper_model(MODEL_SIZE, MODEL_CACHE_PATH)
 
-    for parent_audio, chunk_files in AUDIO_FILES_DICT.items():
-        for audio_chunk_file in chunk_files:
-            print(f"Current audio file path: {audio_chunk_file}")
-            print(bcolors.OKGREEN + f"Transcribing {Path(audio_chunk_file).name}...\n" + bcolors.ENDC)
-            
-            # ==================== VERIFICATION STEP 2: CHECK INPUT FILE ====================
-            if verify_audio_file_exists(audio_chunk_file) is False:
-                print(bcolors.FAIL + f"{audio_chunk_file} does not exist. Stopping transcription, moving to next audio file." + bcolors.ENDC)
-                continue 
-        
-            # Track total time
-            total_start = datetime.now()
+    # for parent_audio, chunk_files in AUDIO_FILES_DICT.items():
+    #     for audio_chunk_file in chunk_files:
+    print(f"Current audio file path: {audio_chunk_file}")
+    print(bcolors.OKGREEN + f"Transcribing {Path(audio_chunk_file).name}...\n" + bcolors.ENDC)
+    
+    # ==================== VERIFICATION STEP 2: CHECK INPUT FILE ====================
+    if verify_audio_file_exists(audio_chunk_file) is False:
+        print(bcolors.FAIL + f"{audio_chunk_file} does not exist. Stopping transcription, moving to next audio file." + bcolors.ENDC)
+        # continue 
 
-            # ==================== VERIFICATION STEP 3: TRANSCRIBE ====================
-            transcribe_start = datetime.now()
-            result = await transcribe_audio(audio_chunk_file, model)
+    # Track total time
+    total_start = datetime.now()
 
-            # ==================== VERIFICATION STEP 3.1: Diarize ====================
-            # print_formatting("heading","STEP 3.1: Diarizing with pyannote...")
-            # diarize_start = datetime.now()
-            # result = await assign_speakers(device, audio_file, result, use_offline_models, hugging_face_token)
-            # diarize_end = datetime.now()
-        
-            # ==================== VERIFICATION STEP 4: CHECK OUTPUT ====================
-            verified_result = verify_transcription_output(result)
-            transcribe_end = datetime.now()
+    # ==================== VERIFICATION STEP 3: TRANSCRIBE ====================
+    transcribe_start = datetime.now()
+    result = await transcribe_audio(audio_chunk_file, model)
 
-            # Check if transcription failed
-            if verified_result is None:
-                print(bcolors.FAIL + "\nTRANSCRIPTION FAILED - STOPPING PIPELINE" + bcolors.ENDC)
-                return
+    # ==================== VERIFICATION STEP 3.1: Diarize ====================
+    # print_formatting("heading","STEP 3.1: Diarizing with pyannote...")
+    # diarize_start = datetime.now()
+    # result = await assign_speakers(device, audio_file, result, use_offline_models, hugging_face_token)
+    # diarize_end = datetime.now()
 
-            normalized_result = normalize_whisper_segments(verified_result)
+    # ==================== VERIFICATION STEP 4: CHECK OUTPUT ====================
+    verified_result = verify_transcription_output(result)
+    transcribe_end = datetime.now()
 
-            # ==================== VERIFICATION STEP 5: CHECK EXPORT ====================
-            export_start = datetime.now()
-            columns=["start_time", "end_time", "text", "speaker"]
-            print_formatting("heading","STEP 5: EXPORTING RESULTS")
-            
-            export_to_csv(
-                data=normalized_result,
-                output_path=Path(audio_chunk_file).parent,
-                input_file_path=Path(audio_chunk_file),
-                service="transcript",
-                columns=columns,
-            )
+    # Check if transcription failed
+    if verified_result is None:
+        print(bcolors.FAIL + "\nTRANSCRIPTION FAILED - STOPPING PIPELINE" + bcolors.ENDC)
+        return
 
-            export_end = datetime.now()
+    normalized_result = normalize_whisper_segments(verified_result)
 
-            # Print timing summary
-            time_for_transcription = transcribe_end - transcribe_start
-            time_for_export = export_end - export_start
-            time_total = export_end - total_start
+    # ==================== VERIFICATION STEP 5: CHECK EXPORT ====================
+    export_start = datetime.now()
+    columns=["start_time", "end_time", "text", "speaker"]
+    print_formatting("heading","STEP 5: EXPORTING RESULTS")
+    
+    export_to_csv(
+        data=normalized_result,
+        output_path=Path(audio_chunk_file).parent,
+        input_file_path=Path(audio_chunk_file),
+        service="transcript",
+        columns=columns,
+    )
 
-            print_formatting("title", "TIMING SUMMARY")
-            print(bcolors.OKBLUE + f"Total time: {time_total.seconds // 60} minutes and {time_total.seconds % 60} seconds" + bcolors.ENDC)
-            print(bcolors.OKBLUE + f"  Transcription: {time_for_transcription.seconds // 60} minutes and {time_for_transcription.seconds % 60} seconds" + bcolors.ENDC)
-            print(bcolors.OKBLUE + f"  Export: {time_for_export.seconds // 60} minutes and {time_for_export.seconds % 60} seconds" + bcolors.ENDC)
-        print(bcolors.OKGREEN + bcolors.BOLD + "\nPIPELINE COMPLETED SUCCESSFULLY!" + bcolors.ENDC + "\n")    
+    export_end = datetime.now()
+
+    # Print timing summary
+    time_for_transcription = transcribe_end - transcribe_start
+    time_for_export = export_end - export_start
+    time_total = export_end - total_start
+
+    print_formatting("title", "TIMING SUMMARY")
+    print(bcolors.OKBLUE + f"Total time: {time_total.seconds // 60} minutes and {time_total.seconds % 60} seconds" + bcolors.ENDC)
+    print(bcolors.OKBLUE + f"  Transcription: {time_for_transcription.seconds // 60} minutes and {time_for_transcription.seconds % 60} seconds" + bcolors.ENDC)
+    print(bcolors.OKBLUE + f"  Export: {time_for_export.seconds // 60} minutes and {time_for_export.seconds % 60} seconds" + bcolors.ENDC)
+    print(bcolors.OKGREEN + bcolors.BOLD + "\nPIPELINE COMPLETED SUCCESSFULLY!" + bcolors.ENDC + "\n")    
