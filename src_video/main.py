@@ -118,12 +118,6 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
             mask_scale=1.3,
             ellipse=True,
             draw_scores=False,
-            enabled=True,
-            threshold=0.2,
-            replacewith="blur",
-            mask_scale=1.3,
-            ellipse=True,
-            draw_scores=False,
         )
         if deidentify_result.get("success"):
             print(f"[video] De-identification complete: {deidentify_result['processed_count']} images processed.\n")
