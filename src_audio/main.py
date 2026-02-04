@@ -28,8 +28,6 @@ def put_latest(queue: Queue, item):
     
     
 async def process_audio_chunk(chunk_path: str) -> None:
-    # If your services assume “latest file in AUDIO_DIR”, this is enough.
-    # If they need an explicit path, add parameters to those services.
     try:
         print("[audio] Starting transcription...")
         await run_transcription(chunk_path)
