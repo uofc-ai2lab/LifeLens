@@ -123,10 +123,6 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
             print(f"[video] De-identification complete: {deidentify_result['processed_count']} images processed.\n")
         else:
             print(f"[video] De-identification warning: {deidentify_result.get('note', deidentify_result.get('error'))}\n")
-        if deidentify_result.get("success"):
-            print(f"[video] De-identification complete: {deidentify_result['processed_count']} images processed.\n")
-        else:
-            print(f"[video] De-identification warning: {deidentify_result.get('note', deidentify_result.get('error'))}\n")
 
     except Exception as e:
         print(f"[video] De-identification failed: {e}")
