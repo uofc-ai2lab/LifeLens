@@ -8,8 +8,6 @@ from pathlib import Path
 from queue import Queue, Empty
 
 from config.audio_settings import AUDIO_CHUNKS_DIR, PROCESSED_AUDIO_DIR
-from src_audio.services.recording_audio_service.record_audio import record_one_chunk
-
 from src_audio.services.transcription_service.transcription_whispertrt import run_transcription
 from src_audio.services.anonymization_service.transcript_anonymization import run_anonymization
 from src_audio.services.medication_extraction_service.medication_extraction import run_medication_extraction
@@ -38,8 +36,7 @@ def move_chunk_to_processed(chunk_path: Path) -> Path:
     chunk_path.replace(dest_path)
     return dest_path
 
-
-def process_latest_audio_chunk() -> bool:
+def process_audio_chunk() -> bool:
     """
     Processes whatever is currently in AUDIO_CHUNKS_DIR.
     """
@@ -50,8 +47,8 @@ def process_latest_audio_chunk() -> bool:
             print("[audio] No chunks to process")
             return False
 
-        # Process newest chunk
-        latest = files[-1]
+        # Process the first chunk in folder (FIFO)
+        latest = files[0]
         print(f"[audio] Found latest chunk in inbox: {latest.name}")
 
         # MOVE into processed folder (this also prevents reprocessing)
@@ -92,7 +89,7 @@ def processing_worker(queue: Queue):
             break
 
         try:
-            process_latest_audio_chunk()
+            process_audio_chunk()
         except Exception as e:
             print(f"[AUDIO WORKER ERROR] {e}")
         finally:
@@ -110,9 +107,11 @@ def main() -> int:
 
     if args.dev:
         print("[AUDIO MODE] DEV")
-        process_latest_audio_chunk()
+        process_audio_chunk()
         return 0
 
+    from src_audio.services.recording_audio_service.record_audio import record_one_chunk
+    
     audio_queue = Queue(maxsize=2)
 
     worker = threading.Thread(
@@ -154,9 +153,14 @@ def main() -> int:
         print("\n[AUDIO MAIN] Interrupted")
 
     finally:
-        print("[AUDIO MAIN] Shutting down")
+        print("[AUDIO MAIN] Recording stopped. Waiting for processing to finish...")
+        
+        # Wait until worker finishes all queued work
+        audio_queue.join()
+
+        print("[AUDIO MAIN] Processing finished. Shutting down worker...")
         audio_queue.put("STOP")
-        worker.join(timeout=10)
+        worker.join()
 
     elapsed = datetime.now() - start_time
     total_seconds = int(elapsed.total_seconds())

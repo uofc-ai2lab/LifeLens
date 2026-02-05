@@ -158,5 +158,11 @@ MAX_RECORD_SECONDS = 300  # 5 minutes
 RECORDING_DIR = "/home/capstone/recordings"
 SIGNAL_FILE = os.path.join(RECORDING_DIR, "recording_done.flag")
 ARECORD_DEVICE = "hw:CARD=ArrayUAC10,DEV=0"
-CHUNK_SECONDS = 180 
+CHUNK_SECONDS = 180
+
+### ------------------------------- GSTREAMER AUDIO CONFIGURATION ------------------------------- ###
+# GStreamer audio pipeline settings
+AUDIO_SAMPLE_RATE = 16000  # Hz
+AUDIO_CHANNELS = 6         # Multi-channel from ArrayUAC10
+AUDIO_FORMAT = "S16LE"     # Signed 16-bit Little Endian
 

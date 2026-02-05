@@ -114,6 +114,8 @@ python -m pip install --upgrade pip
 For all operating systems, run the following:
 ```sh
 pip install -r requirements.txt
+# brew install pygobject3 gstreamer gst-plugins-base gst-plugins-good
+brew install gstreamer gst-plugins-base gst-plugins-good
 ```
 
 If operating on a jetson-nano, also install jetson-specific dependencies:
@@ -121,6 +123,8 @@ If operating on a jetson-nano, also install jetson-specific dependencies:
 pip install -r requirements-jetson.txt
 sudo pip install ultralytics --no-deps 
 sudo pip install deface --no-deps
+sudo apt update
+sudo apt install -y python3-gi gir1.2-gstreamer-1.0 gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good
 #Need to manually install ultralytics due to dependency issues 
 ```
 

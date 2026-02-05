@@ -8,7 +8,7 @@ import cv2
 import argparse
 
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from queue import Queue, Empty
 
 
@@ -25,12 +25,8 @@ from src_video.services.classification_service.infer_injuries_on_crops import (
 )
 from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
-from src_video.services.camera_capture_service.capture_img import (
-    gstreamer_pipeline,
-    capture_images,
-    initialize_camera,
-    draw_overlay
-)
+from src_video.services.camera_capture_service.capture_img import draw_overlay
+from src_video.services.camera_capture_service.gstreamer_video_pipeline import GStreamerVideoPipeline
 
 
 
@@ -45,13 +41,15 @@ def put_latest(queue: Queue, item):
     if queue.full():
         try:
             queue.get_nowait()
-            queue.task_done()
         except:
             pass
 
     queue.put(item)
 
-
+def save_frame(frame) -> bool:
+    timestamp = cv2.getTickCount()
+    filename = os.path.join(IMAGE_SAVE_DIR, f"captured_img_{timestamp}.jpg")
+    return cv2.imwrite(filename, frame)
 
 def process_single_image(settings: Dict[str, Any]) -> bool:
 
@@ -170,6 +168,7 @@ def processing_worker(queue: Queue, settings: Dict[str, Any]):
             continue
 
         if job == "STOP":
+            queue.task_done()
             break
 
 
@@ -198,7 +197,11 @@ def processing_worker(queue: Queue, settings: Dict[str, Any]):
     print("[WORKER] Stopped")
 
 
-def main() -> int:
+def main(
+    video_pipeline: Optional[GStreamerVideoPipeline] = None,
+    video_ready: Optional[threading.Event] = None,
+    video_failed: Optional[threading.Event] = None,
+) -> int:
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--dev", action="store_true")
@@ -213,7 +216,20 @@ def main() -> int:
         process_single_image(settings)
         return 0
 
-    video_capture = initialize_camera()
+    # Use provided pipeline or initialize new one
+    owns_pipeline = False
+    if video_pipeline is None:
+        video_pipeline = GStreamerVideoPipeline(flip_method=0)
+        owns_pipeline = True
+        
+        if not video_pipeline.start():
+            print("[VIDEO MAIN] ERROR: Failed to start video pipeline")
+            if video_failed is not None:
+                video_failed.set()
+            return 1
+
+    if video_ready is not None:
+        video_ready.set()
 
     image_queue = Queue(maxsize=3)
 
@@ -243,7 +259,7 @@ def main() -> int:
     try:
         while True:
 
-            ok, frame = video_capture.read()
+            ok, frame = video_pipeline.read_frame()
 
             if not ok:
                 print("[ERROR] Camera read failed")
@@ -273,8 +289,7 @@ def main() -> int:
 
             # Capture
             if detected and (now - last_snap) >= SNAPSHOT_INTERVAL:
-
-                if capture_images(video_capture):
+                if save_frame(frame):
 
                     job = {
                         "time": now,
@@ -310,7 +325,11 @@ def main() -> int:
         image_queue.put("STOP")
         worker.join(timeout=5)
 
-        video_capture.release()
+        # Clean up pipeline if we created it
+        if owns_pipeline and video_pipeline is not None:
+            video_pipeline.stop()
+            video_pipeline.cleanup()
+        
         cv2.destroyAllWindows()
 
 
@@ -319,3 +338,4 @@ def main() -> int:
 if __name__ == "__main__":
 
     raise SystemExit(main())
+
