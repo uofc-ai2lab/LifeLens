@@ -222,7 +222,11 @@ def main() -> int:
     if DEV_MODE:
         print("[MODE] DEV")
         try:
-            saved = sorted(Path(IMAGE_SAVE_DIR).glob("*.jpg"), key=lambda p: p.stat().st_mtime)
+            exts = {".jpg", ".jpeg", ".png"}
+            saved = sorted(
+                [p for p in Path(IMAGE_SAVE_DIR).iterdir() if p.is_file() and p.suffix.lower() in exts],
+                key=lambda p: p.stat().st_mtime,
+            )
             if not saved:
                 print(f"[DEV] No images found in {IMAGE_SAVE_DIR}")
                 return 0
@@ -236,7 +240,9 @@ def main() -> int:
                 report_path=reid_dir / "reid_report.json",
                 saved_images_dir=Path(IMAGE_SAVE_DIR),
             )
-            process_single_image(settings, image_paths=[str(saved[-1])], reid_session=reid_session)
+            # In DEV mode, process all saved images so the ReID report can
+            # reference every capture currently in saved_imgs.
+            process_single_image(settings, image_paths=[str(p) for p in saved], reid_session=reid_session)
         except Exception as e:
             print(f"[DEV] Failed: {e}")
         return 0

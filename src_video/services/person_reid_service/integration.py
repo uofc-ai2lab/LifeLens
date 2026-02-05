@@ -43,8 +43,13 @@ def extract_detections_from_image_dir(
     if not image_dir.exists() or not image_dir.is_dir():
         return detections
 
-    for crop_file in image_dir.glob("*.jpg"):
-        if "_alpha.png" in crop_file.name:
+    exts = {".jpg", ".jpeg", ".png"}
+    for crop_file in image_dir.iterdir():
+        if not crop_file.is_file() or crop_file.suffix.lower() not in exts:
+            continue
+
+        # Skip alpha-mask crops (commonly written as *_alpha.png)
+        if crop_file.name.lower().endswith("_alpha.png"):
             continue
 
         # Format: {image_stem}_{body_part}_{idx}.jpg
@@ -241,26 +246,58 @@ def generate_reid_report(
         crops_root = detection_output_dir / "crops"
         images_section: Dict[str, Any] = {}
 
-        # If provided, filter crop folders to only those corresponding to images currently
-        # present in the saved images directory.
+        # If provided, include *every* image currently present in saved_images_dir in the
+        # report, even if crops are missing (e.g., detection didn't run yet / failed).
         saved_stems: Optional[set[str]] = None
+        saved_images_by_stem: Dict[str, Path] = {}
         if saved_images_dir is not None and saved_images_dir.exists():
-            stems = {
-                p.stem
-                for p in saved_images_dir.iterdir()
-                if p.is_file() and p.suffix.lower() in {".jpg", ".jpeg", ".png"}
+            for p in saved_images_dir.iterdir():
+                if p.is_file() and p.suffix.lower() in {".jpg", ".jpeg", ".png"}:
+                    saved_images_by_stem[p.stem] = p
+            saved_stems = set(saved_images_by_stem.keys()) if saved_images_by_stem else None
+
+        def _empty_summary() -> Dict[str, Any]:
+            return {
+                "total_detections": 0,
+                "identified_count": 0,
+                "new_count": 0,
+                "reid_rate": 0.0,
+                "identified_by_part": {},
+                "confidence_scores": {},
             }
-            saved_stems = stems if stems else None
 
-        if crops_root.exists():
-            image_dirs = [p for p in crops_root.iterdir() if p.is_dir()]
-            if saved_stems is not None:
-                image_dirs = [p for p in image_dirs if p.name in saved_stems]
-            image_dirs.sort(key=lambda p: p.stat().st_mtime)
+        # Primary path: saved_images_dir provided → iterate those stems so the report can
+        # assess/report on every capture in saved_imgs.
+        if saved_stems is not None:
+            ordered_stems = sorted(
+                saved_stems,
+                key=lambda s: saved_images_by_stem.get(s).stat().st_mtime if saved_images_by_stem.get(s) else 0,
+            )
+            for stem in ordered_stems:
+                image_dir = crops_root / stem
 
-            for image_dir in image_dirs:
+                # No crops yet → still include entry.
+                if not image_dir.exists() or not image_dir.is_dir():
+                    images_section[stem] = {
+                        "best_person_id": None,
+                        "primary_person_present": False,
+                        "summary": _empty_summary(),
+                        "detections": [],
+                        "has_crops": False,
+                        "note": "No crops folder found for this image (detection may not have run or produced no crops).",
+                    }
+                    continue
+
                 detections = extract_detections_from_image_dir(image_dir, image_id=image_dir.name)
                 if not detections:
+                    images_section[stem] = {
+                        "best_person_id": None,
+                        "primary_person_present": False,
+                        "summary": _empty_summary(),
+                        "detections": [],
+                        "has_crops": True,
+                        "note": "Crops folder exists but no crop images were found/parsed.",
+                    }
                     continue
 
                 match_results = reid_engine.reid_detections(detections)
@@ -302,10 +339,69 @@ def generate_reid_report(
                         "reference_crop_path": ref_crop_path,
                     })
 
+                images_section[stem] = {
+                    "best_person_id": best_person_id,
+                    "primary_person_present": (
+                        bool(primary_person_id)
+                        and any(
+                            d.get("matched") and d.get("person_id") == primary_person_id
+                            for d in detections_out
+                        )
+                    ),
+                    "summary": summary,
+                    "detections": detections_out,
+                    "has_crops": True,
+                }
+
+        # Fallback path: no saved_images_dir filter → iterate crop folders.
+        elif crops_root.exists():
+            image_dirs = [p for p in crops_root.iterdir() if p.is_dir()]
+            image_dirs.sort(key=lambda p: p.stat().st_mtime)
+
+            for image_dir in image_dirs:
+                detections = extract_detections_from_image_dir(image_dir, image_id=image_dir.name)
+                match_results = reid_engine.reid_detections(detections) if detections else []
+                summary = reid_engine.get_match_summary(match_results) if detections else _empty_summary()
+
+                matched = [r for r in match_results if r.is_match and r.reference_tracking_id]
+                best_person_id: Optional[str] = None
+                if matched:
+                    counts: Dict[str, int] = {}
+                    conf_sums: Dict[str, float] = {}
+                    for r in matched:
+                        pid = r.reference_tracking_id
+                        counts[pid] = counts.get(pid, 0) + 1
+                        conf_sums[pid] = conf_sums.get(pid, 0.0) + float(r.confidence)
+                    best_person_id = max(
+                        counts.keys(),
+                        key=lambda pid: (counts[pid], conf_sums.get(pid, 0.0) / max(1, counts[pid]))
+                    )
+
+                detections_out: List[Dict[str, Any]] = []
+                for (body_part, crop_path, bbox, confidence, img_id), r in zip(detections, match_results):
+                    ref_crop_path = None
+                    if r.is_match and r.reference_tracking_id:
+                        person = reid_engine.gallery.get(r.reference_tracking_id)
+                        if person:
+                            ref_det = person.get_detection(body_part)
+                            if ref_det:
+                                ref_crop_path = ref_det.crop_path
+
+                    detections_out.append({
+                        "image_id": img_id,
+                        "body_part": body_part,
+                        "crop_path": crop_path,
+                        "matched": r.is_match,
+                        "person_id": r.reference_tracking_id,
+                        "confidence": r.confidence,
+                        "reference_crop_path": ref_crop_path,
+                    })
+
                 images_section[image_dir.name] = {
                     "best_person_id": best_person_id,
-                    "primary_person_present":(
-                        bool(primary_person_id) and any(
+                    "primary_person_present": (
+                        bool(primary_person_id)
+                        and any(
                             d.get("matched") and d.get("person_id") == primary_person_id
                             for d in detections_out
                         )
