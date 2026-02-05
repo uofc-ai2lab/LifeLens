@@ -1,7 +1,5 @@
-import subprocess, os, time, signal
+import subprocess, time, signal
 from pathlib import Path
-from typing import Optional
-
 from src_audio.domain.constants import ARECORD_DEVICE, CHUNK_SECONDS
 
 def record_one_chunk(output_dir: str | Path, stop_event) -> bool:
