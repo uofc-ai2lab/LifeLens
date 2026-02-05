@@ -39,44 +39,32 @@ def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")
 
 
-def capture_frame_from_pipeline(frame, image_save_dir: str) -> bool:
-    """
-    Capture and save a frame directly.
-    
-    Args:
-        frame: The frame to save (numpy array)
-        image_save_dir: Directory to save the image
-    
-    Returns:
-        bool: True if frame saved successfully
-    """
-    if frame is None:
-        print("[CAPTURE] Error: No frame to capture")
-        return False
-    
-    import cv2
-    timestamp = cv2.getTickCount()
-    filename = os.path.join(image_save_dir, f"captured_img_{timestamp}.jpg")
-
-    if not cv2.imwrite(filename, frame):
-        print("[CAPTURE] Error: Failed to save image")
-        return False
-
-    print(f"[CAPTURE] Image saved as {filename}")
-    return True
-
-
-
+def put_latest(queue: Queue, item):
     """
     Drop old item if queue is full, keep newest.
     """
     if queue.full():
         try:
             queue.get_nowait()
-        except:
+        except Empty:
             pass
-
     queue.put(item)
+
+def read_frame_from_pipeline(pipeline):
+    """Read a frame from either VideoCapture or GStreamerVideoPipeline."""
+    if hasattr(pipeline, "read_frame"):
+        return pipeline.read_frame()
+    return pipeline.read()
+
+
+def release_pipeline(pipeline):
+    """Release any pipeline type safely."""
+    if hasattr(pipeline, "cleanup"):
+        pipeline.cleanup()
+    elif hasattr(pipeline, "stop"):
+        pipeline.stop()
+    elif hasattr(pipeline, "release"):
+        pipeline.release()
 
 def save_frame(frame) -> bool:
     timestamp = cv2.getTickCount()
@@ -306,7 +294,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
     try:
         while True:
 
-            ok, frame = video_pipeline.read_frame()
+            ok, frame = read_frame_from_pipeline(video_pipeline)
 
             if not ok or frame is None:
                 print("[ERROR] Camera read failed")
@@ -342,7 +330,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
                         "id": int(now * 1000),
                     }
 
-                    # put_latest(image_queue, job)
+                    put_latest(image_queue, job)
 
                     processing = True
                     last_snap = now
@@ -375,7 +363,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
 
         # Only release pipeline if we created it (not if passed from orchestrator)
         if owns_pipeline and video_pipeline is not None:
-            video_pipeline.stop()
+            release_pipeline(video_pipeline)
         
         cv2.destroyAllWindows()
 

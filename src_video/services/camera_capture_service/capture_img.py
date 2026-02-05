@@ -71,26 +71,43 @@ def capture_images(video_capture):
 
 
 def initialize_camera(flip_method: int = 0) -> cv2.VideoCapture:
-
-    pipeline = gstreamer_pipeline(flip_method=flip_method)
     debug = os.getenv("VIDEO_CAMERA_DEBUG", "0").strip().lower() in {"1", "true", "yes", "on"}
-    if debug:
-        print(f"[video][camera] gstreamer pipeline: {pipeline}")
 
-    video_capture = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
-    if not video_capture.isOpened():
-        raise RuntimeError("Error: Unable to open camera (GStreamer pipeline did not open)")
+    configs = [
+        (CAPTURE_WIDTH, CAPTURE_HEIGHT, DISPLAY_WIDTH, DISPLAY_HEIGHT),
+        (1280, 720, 960, 540),
+        (1280, 720, 640, 360),
+        (640, 360, 640, 360),
+    ]
 
-    # Warmup
-    for _ in range(20):
-        ok, frame = video_capture.read()
-        if ok and frame is not None:
-            print("[CAMERA] Started successfully\n")
-            return video_capture
-        last_err = "read() returned no frame"
-        time.sleep(0.05)
+    last_err = ""
+    for capture_w, capture_h, display_w, display_h in configs:
+        pipeline = gstreamer_pipeline(
+            capture_width=capture_w,
+            capture_height=capture_h,
+            display_width=display_w,
+            display_height=display_h,
+            flip_method=flip_method,
+        )
+        if debug:
+            print(f"[video][camera] gstreamer pipeline: {pipeline}")
 
-    video_capture.release()
+        video_capture = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
+        if not video_capture.isOpened():
+            last_err = "pipeline did not open"
+            video_capture.release()
+            continue
+
+        # Warmup
+        for _ in range(20):
+            ok, frame = video_capture.read()
+            if ok and frame is not None:
+                print("[CAMERA] Started successfully\n")
+                return video_capture
+            last_err = "read() returned no frame"
+            time.sleep(0.05)
+
+        video_capture.release()
 
     raise RuntimeError(
         "Error: Camera opened but no frames received. "
