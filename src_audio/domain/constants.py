@@ -164,6 +164,7 @@ ARECORD_DEVICE = "hw:CARD=ArrayUAC10,DEV=0"
 AUDIO_SAMPLE_RATE = 16000
 AUDIO_CHANNELS = 6
 AUDIO_FORMAT = "S16LE"
+CHUNK_SECONDS=20
 
 def get_gstreamer_audio_pipeline(output_file: str) -> str:
     """

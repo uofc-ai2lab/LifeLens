@@ -79,16 +79,39 @@ def run_video_pipeline(video_ready: threading.Event, video_failed: threading.Eve
     print("[root] VIDEO pipeline finished")
 
 
+def run_jetson_startup_tasks():
+    """Run Jetson-specific startup tasks via external script."""
+    script_path = Path(__file__).parent / "scripts" / "run_jetson_startup_tasks.sh"
+    if not script_path.exists():
+        print(f"[root] WARNING: Startup script not found: {script_path}")
+        return
+    
+    try:
+        subprocess.run(["bash", str(script_path)], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"[root] ERROR: Startup tasks failed with exit code {e.returncode}")
+        raise
+    except Exception as e:
+        print(f"[root] ERROR: Could not run startup tasks: {e}")
+        raise
+
+
 def main():
     """
     Main orchestrator for dual GStreamer pipeline execution.
     
     Manages:
+    - Jetson startup tasks (camera reset)
     - Startup synchronization (video before audio)
     - Proper threading with daemon=False for graceful shutdown
     - Error handling and cleanup
     - Timing statistics
     """
+    # Run Jetson startup tasks if on Jetson platform
+    if IS_JETSON:
+        print("[root] Jetson detected. Running startup tasks...")
+        run_jetson_startup_tasks()
+    
     start_time = time.time()
 
     # Synchronization events
@@ -131,15 +154,6 @@ def main():
     video_thread.join()
     if audio_thread.is_alive():
         audio_thread.join()
-
-    if IS_JETSON:
-        pid_file = Path("/tmp/tegrastats.pid")
-        if pid_file.exists():
-            try:
-                pid = int(pid_file.read_text().strip())
-                subprocess.run(["sudo", "kill", "-TERM", str(pid)], check=False)
-            except Exception:
-                pass
     
     elapsed = time.time() - start_time
     print(f"\n[root] All GStreamer pipelines completed in {elapsed:.2f}s")
