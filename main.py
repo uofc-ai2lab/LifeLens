@@ -8,182 +8,123 @@ from src_audio.main import main as audio_main
 from src_video.main import main as video_main
 from src_video.services.camera_capture_service.gstreamer_video_pipeline import GStreamerVideoPipeline
 from config.audio_settings import IS_JETSON
-
 """
-Dual GStreamer Pipeline Architecture:
-- Video thread: Hardware-accelerated CSI camera capture (NVIDIA Jetson)
-- Audio thread: Multi-channel USB audio recording
-- Both run concurrently in separate threads
-- GStreamer pipelines initialized inside each thread
-- Async main functions run via asyncio.run() within threads
+Dual GStreamer Pipeline Architecture
+=====================================
+
+Two separate GStreamer pipelines run concurrently in a single process using Python threading:
+
+1. AUDIO PIPELINE (async loop in dedicated thread)
+   - Uses GStreamer alsasrc + wavenc
+   - Captures multi-channel USB audio
+   - Runs full audio processing pipeline
+
+2. VIDEO PIPELINE (async loop in dedicated thread)
+   - Uses GStreamer nvarguscamerasrc (NVIDIA Jetson hardware acceleration)
+   - Captures CSI camera frames
+   - Runs full video processing pipeline
+
+Threading Model:
+- Both pipelines run asynchronously in their own event loops
+- Each pipeline has its own GStreamer pipeline instance
+- Coordinated startup via threading.Event for camera readiness
+- Proper cleanup on shutdown or error
+
+GStreamer handles the heavy lifting:
+- Hardware acceleration for video (nvarguscamerasrc, nvvidconv)
+- Audio format conversion and encoding
+- Multi-threading within GStreamer plugin chains
+- Automatic buffer management and synchronization
 """
 
-def run_audio_pipeline(video_ready: threading.Event, video_failed: threading.Event):
-    """Runs audio GStreamer pipeline in its own thread.
-    
-    Waits for video to be ready, then runs async audio_main via asyncio.run()
-    """
-    print("[root] AUDIO thread: Waiting for video pipeline readiness signal")
-    
-    # Wait for video to initialize (with timeout)
-    init_timeout = 15.0
-    deadline = time.time() + init_timeout
-    while time.time() < deadline and not (video_ready.is_set() or video_failed.is_set()):
-        time.sleep(0.1)
-    
-    if video_failed.is_set():
-        print("[root] AUDIO thread: Video pipeline failed, not starting audio")
-        return
-    
-    if not video_ready.is_set():
-        print("[root] AUDIO thread: Video initialization timeout, aborting audio")
-        return
-    
-    print("[root] AUDIO thread: Video ready, starting audio pipeline")
 
+def run_audio_pipeline():
+    """Runs audio async pipeline in its own event loop with GStreamer."""
+    print("[root] Starting AUDIO pipeline thread with GStreamer")
     try:
-        # Run async audio_main
         asyncio.run(audio_main())
     except Exception as e:
         print(f"[root] AUDIO pipeline error: {e}")
-
     print("[root] AUDIO pipeline finished")
 
 
 def run_video_pipeline(video_ready: threading.Event, video_failed: threading.Event):
-    """Runs video GStreamer pipeline in its own thread.
-    
-    Creates the GStreamer pipeline and runs async video_main via asyncio.run()
+    """Runs video async pipeline in its own event loop with GStreamer.
+
+    Important: Open and release the CSI camera in the SAME thread to avoid
+    Argus/GStreamer sessions lingering between runs.
     """
-    print("[root] VIDEO thread: Starting video pipeline")
-        
-    # Initialize video pipeline in this thread
-    video_pipeline = GStreamerVideoPipeline(flip_method=0)
-    if not video_pipeline.start():
-        print("[root] VIDEO thread: Failed to start video pipeline")
-        video_failed.set()
-        return
-    
-    print("[root] VIDEO thread: Pipeline initialized, starting processing")
-    video_ready.set()
-    
+    print("[root] Starting VIDEO pipeline thread with GStreamer")
+    video_pipeline = None
     try:
-        # Run async video_main with the pipeline
+        # Initialize GStreamer video pipeline
+        video_pipeline = GStreamerVideoPipeline(flip_method=0)
+        if not video_pipeline.start():
+            video_failed.set()
+            print("[root] VIDEO pipeline failed to initialize camera")
+            return
+        
+        video_ready.set()
+        
+        # Run video processing pipeline with initialized camera
         asyncio.run(video_main(video_pipeline))
+        
     except Exception as e:
         video_failed.set()
         print(f"[root] VIDEO pipeline error: {e}")
     finally:
-        video_pipeline.stop()
-        video_pipeline.cleanup()
-
+        if video_pipeline:
+            video_pipeline.cleanup()
+    
     print("[root] VIDEO pipeline finished")
-
-
-def run_audio_pipeline(video_ready: threading.Event, video_failed: threading.Event):
-    """Runs audio GStreamer pipeline in its own thread.
-    
-    Waits for video to be ready, then runs async audio_main via asyncio.run()
-    """
-    print("[root] AUDIO thread: Waiting for video pipeline readiness signal")
-    
-    # Wait for video to initialize (with timeout)
-    init_timeout = 15.0
-    deadline = time.time() + init_timeout
-    while time.time() < deadline and not (video_ready.is_set() or video_failed.is_set()):
-        time.sleep(0.1)
-    
-    if video_failed.is_set():
-        print("[root] AUDIO thread: Video pipeline failed, not starting audio")
-        return
-    
-    if not video_ready.is_set():
-        print("[root] AUDIO thread: Video initialization timeout, aborting audio")
-        return
-    
-    print("[root] AUDIO thread: Video ready, starting audio pipeline")
-
-    try:
-        # Run async audio_main
-        asyncio.run(audio_main())
-    except Exception as e:
-        print(f"[root] AUDIO pipeline error: {e}")
-
-    print("[root] AUDIO pipeline finished")
-
-
-def run_jetson_startup_tasks() -> None:
-    """Run Jetson-specific startup tasks via script."""
-    print("[root] Jetson detected. Running startup tasks...")
-
-    script_path = Path(__file__).resolve().parent / "scripts" / "run_jetson_startup_tasks.sh"
-    if not script_path.exists():
-        print(f"[root] WARNING: Startup script not found: {script_path}")
-        return
-
-    try:
-        subprocess.run([
-            "bash",
-            str(script_path),
-        ], check=True, text=True)
-    except subprocess.CalledProcessError as e:
-        print(f"[root] WARNING: Startup script failed (exit {e.returncode}).")
-    except Exception as e:
-        print(f"[root] WARNING: Startup script failed: {e}")
 
 
 def main():
     """
-    Orchestrate dual GStreamer pipelines for concurrent audio and video processing.
+    Main orchestrator for dual GStreamer pipeline execution.
     
-    Execution flow:
-    1. Start video thread - initializes camera via GStreamer
-    2. Wait for video to be ready (with timeout)
-    3. Start audio thread - records audio via GStreamer
-    4. Both threads run concurrently, processing their respective streams
-    5. Graceful shutdown on completion or interrupt
+    Manages:
+    - Startup synchronization (video before audio)
+    - Proper threading with daemon=False for graceful shutdown
+    - Error handling and cleanup
+    - Timing statistics
     """
     start_time = time.time()
 
-    # Jetson-specific startup tasks
-    if IS_JETSON:
-        run_jetson_startup_tasks()
-    
     # Synchronization events
     video_ready = threading.Event()
     video_failed = threading.Event()
-    
-    # Create threads for both pipelines
+
+    # Start video thread (must initialize camera first)
     video_thread = threading.Thread(
         target=run_video_pipeline,
-        name="VideoThread",
-        args=(video_ready, video_failed),
-        daemon=False,
-    )
-    
-    audio_thread = threading.Thread(
-        target=run_audio_pipeline,
-        name="AudioThread",
+        name="VideoThread_GStreamer",
         args=(video_ready, video_failed),
         daemon=False,
     )
 
-    # Start video thread first (must initialize first to avoid resource contention)
-    print("[root] Starting dual GStreamer pipeline orchestration")
-    print(f"[root] Video: GStreamer pipeline (hardware-accelerated CSI camera)")
-    print(f"[root] Audio: GStreamer pipeline (6-channel USB audio)")
+    # Start audio thread (will wait for video ready)
+    audio_thread = threading.Thread(
+        target=run_audio_pipeline,
+        name="AudioThread_GStreamer",
+        daemon=False,
+    )
+
+    # Start video first; only start audio once camera is confirmed ready
+    print("[root] Initializing GStreamer pipelines...")
     video_thread.start()
-    
-    # Wait briefly for video initialization outcome
-    # Audio thread checks video_ready/video_failed and doesn't start if video fails
-    # This prevents resource contention and allows graceful failure handling
+
+    # Wait briefly for video initialization to complete
     init_timeout_s = 15.0
     deadline = time.time() + init_timeout_s
     while time.time() < deadline and not (video_ready.is_set() or video_failed.is_set()):
         time.sleep(0.1)
-    
-    # Start audio thread (will wait for video_ready signal in its thread)
-    audio_thread.start()
+
+    if video_failed.is_set():
+        print("[root] VIDEO pipeline failed to initialize. Aborting audio pipeline.")
+    else:
+        print("[root] VIDEO pipeline ready. Starting AUDIO pipeline...")
+        audio_thread.start()
     
     # Wait for both threads to complete
     print("[root] Both pipelines started, waiting for completion")
@@ -201,8 +142,7 @@ def main():
                 pass
     
     elapsed = time.time() - start_time
-    print(f"\n[root] ✓ All pipelines completed successfully in {elapsed:.2f}s")
-    print(f"[root] Dual GStreamer pipeline orchestration finished")
+    print(f"\n[root] All GStreamer pipelines completed in {elapsed:.2f}s")
 
 
 if __name__ == "__main__":

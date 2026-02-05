@@ -1,18 +1,18 @@
 """
-GStreamer Video Pipeline for NVIDIA Jetson Camera Capture
+GStreamer Video Pipeline Module
 
-Handles hardware-accelerated CSI camera capture using GStreamer.
-Provides frame-by-frame access through OpenCV integration.
+Provides GStreamer-based video capture from CSI camera using NVIDIA Jetson hardware acceleration.
+Handles pipeline initialization, frame capture, and state management.
 """
 
 import gi
-gi.require_version('Gst', '1.0')
-from gi.repository import Gst, GLib
-import cv2, os
-import threading
-import time
-from typing import Tuple, Optional
-import numpy as np
+import cv2
+import os
+from typing import Optional
+
+# Initialize GStreamer bindings
+gi.require_version("Gst", "1.0")
+from gi.repository import Gst
 
 from src_video.domain.constants import (
     CAPTURE_WIDTH,
@@ -34,222 +34,169 @@ def get_gstreamer_video_pipeline(
     flip_method: int = FLIP_METHOD,
 ) -> str:
     """
-    Generate GStreamer pipeline string for NVIDIA Jetson CSI camera.
+    Returns a GStreamer pipeline string for NVIDIA Jetson CSI camera capture.
+    
+    Uses hardware acceleration (nvarguscamerasrc, nvvidconv) for efficient video capture.
+    Includes buffer management and stability optimizations for Jetson platform.
     
     Args:
-        sensor_id: Camera sensor ID (0 for first camera)
-        capture_width: Capture resolution width
-        capture_height: Capture resolution height
-        display_width: Display resolution width
-        display_height: Display resolution height
-        framerate: Target framerate in FPS
+        sensor_id: Camera sensor ID (default: 0)
+        capture_width: Camera capture width in pixels
+        capture_height: Camera capture height in pixels
+        display_width: Display width in pixels
+        display_height: Display height in pixels
+        framerate: Target frame rate in FPS
         flip_method: Image flip method (0=none, 1=clockwise, 2=rotate-180, 3=counter-clockwise)
     
     Returns:
-        GStreamer pipeline string
+        GStreamer pipeline string for video capture via appsink
     """
     return (
-        f"nvarguscamerasrc sensor-id={sensor_id} bufapi-version=1 ! "
-        f"video/x-raw(memory:NVMM), "
-        f"width={capture_width}, height={capture_height}, "
-        f"framerate={framerate}/1 ! "
-        f"nvvidconv flip-method={flip_method} ! "
-        f"video/x-raw, width={display_width}, height={display_height}, format=BGRx ! "
-        f"videoconvert ! "
-        f"video/x-raw, format=BGR ! "
-        f"appsink max-buffers=2 drop=true sync=false async=false enable-last-sample=false"
+        "nvarguscamerasrc sensor-id=%d bufapi-version=1 ! "
+        "video/x-raw(memory:NVMM), width=(int)%d, height=(int)%d, framerate=(fraction)%d/1 ! "
+        "nvvidconv flip-method=%d ! "
+        "video/x-raw, width=(int)%d, height=(int)%d, format=(string)BGRx ! "
+        "videoconvert ! "
+        "video/x-raw, format=(string)BGR ! "
+        "appsink max-buffers=2 drop=true"
+        % (
+            sensor_id,
+            capture_width,
+            capture_height,
+            framerate,
+            flip_method,
+            display_width,
+            display_height,
+        )
     )
 
 
 class GStreamerVideoPipeline:
     """
-    NVIDIA Jetson hardware-accelerated video pipeline using GStreamer.
+    Manages a GStreamer video capture pipeline using NVIDIA Jetson CSI camera.
     
     Features:
-        - Hardware acceleration via nvarguscamerasrc and nvvidconv
-        - Frame warmup sequence for stable operation
-        - OpenCV integration via appsink
-        - Proper state management and resource cleanup
-        - Automatic retry mechanism on initialization failure
+    - Hardware-accelerated video capture (nvarguscamerasrc)
+    - NVIDIA video format conversion (nvvidconv)
+    - OpenCV integration via appsink
+    - Proper pipeline state management
+    - Warmup sequence to ensure stable operation
     """
     
-    # Default retry configuration
-    DEFAULT_MAX_RETRIES = 3
-    DEFAULT_RETRY_DELAY = 1.0  # seconds
-    
-    def __init__(self, flip_method: int = 0, warmup_frames: int = 20, max_retries: int = DEFAULT_MAX_RETRIES, retry_delay: float = DEFAULT_RETRY_DELAY):
+    def __init__(self, flip_method: int = 0):
         """
-        Initialize GStreamer video pipeline.
+        Initialize the GStreamer video pipeline.
         
         Args:
-            flip_method: Image flip method (0=none, 2=180°)
-            warmup_frames: Number of frames to skip during warmup
-            max_retries: Maximum number of initialization retry attempts (default: 3)
-            retry_delay: Delay in seconds between retry attempts (default: 1.0)
+            flip_method: Image flip method (0=none, 2=rotate-180, etc.)
         """
         if not Gst.is_initialized():
             Gst.init(None)
         
         self.flip_method = flip_method
-        self.warmup_frames = warmup_frames
-        self.max_retries = max_retries
-        self.retry_delay = retry_delay
-        self.pipeline_string = get_gstreamer_video_pipeline(flip_method=flip_method)
-        self.pipeline = None
-        self.caps_filter = None
-        self.appsink = None
         self.video_capture = None
         self.is_initialized = False
-        self._lock = threading.Lock()
-        self._frames_captured = 0
-        self._attempts = 0
-        self._last_error = None
-        
+    
     def start(self) -> bool:
         """
-        Start the GStreamer pipeline with automatic retry on failure.
+        Start the video capture pipeline.
         
-        Attempts to initialize the pipeline up to max_retries times with
-        retry_delay seconds between attempts.
+        Performs warmup sequence to ensure camera is ready.
+        Includes retry logic for transient buffer issues.
         
         Returns:
-            True if pipeline started successfully, False if all retries exhausted
+            bool: True if pipeline started successfully, False otherwise
         """
-        for attempt in range(self.max_retries):
-            self._attempts = attempt + 1
+        max_retries = 3
+        for attempt in range(max_retries):
             try:
-                print(f"[video][camera] Initialization attempt {self._attempts}/{self.max_retries}")
-                print(f"[video][camera] Pipeline: {self.pipeline_string}")
+                pipeline = get_gstreamer_video_pipeline(flip_method=self.flip_method)
                 
                 debug = os.getenv("VIDEO_CAMERA_DEBUG", "0").strip().lower() in {"1", "true", "yes", "on"}
                 if debug:
-                    print(f"[video][camera] Attempt {attempt + 1}/{self.max_retries}")
-                    print(f"[video][camera] GStreamer pipeline: {self.pipeline_string}")
-                    
-                # Create GStreamer pipeline
-                self.video_capture = cv2.VideoCapture(
-                    self.pipeline_string,
-                    cv2.CAP_GSTREAMER
-                )
-                
+                    print(f"[video][camera] Attempt {attempt + 1}/{max_retries}")
+                    print(f"[video][camera] GStreamer pipeline: {pipeline}")
+
+                self.video_capture = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
                 if not self.video_capture.isOpened():
-                    error_msg = f"Unable to open camera (GStreamer pipeline failed to open)"
-                    self._last_error = error_msg
-                    print(f"[video][camera] ERROR: {error_msg} (attempt {self._attempts}/{self.max_retries})")
-                    
-                    # Cleanup before retry
-                    if self.video_capture is not None:
-                        self.video_capture.release()
-                        self.video_capture = None
-                    
-                    # Retry with delay if not last attempt
-                    if attempt < self.max_retries - 1:
-                        print(f"[video][camera] Retrying in {self.retry_delay}s...")
-                        time.sleep(self.retry_delay)
+                    print(f"[video][camera] Pipeline failed to open (attempt {attempt + 1}/{max_retries})")
+                    if attempt < max_retries - 1:
+                        import time
+                        time.sleep(1)
                     continue
+
+                print(f"[video][camera] Pipeline created, warming up (attempt {attempt + 1}/{max_retries})...")
                 
-                # Set buffer size to 1 for low-latency frame capture
-                self.video_capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                # Extended warmup sequence with more patience
+                warmup_attempts = 30
+                for i in range(warmup_attempts):
+                    ok, frame = self.video_capture.read()
+                    if ok and frame is not None:
+                        print(f"[video][camera] Warmup complete on frame {i+1} - camera ready")
+                        self.is_initialized = True
+                        return True
+                    import time
+                    time.sleep(0.1)
+
+                print(f"[video][camera] Warmup failed after {warmup_attempts} frames (attempt {attempt + 1}/{max_retries})")
+                self.video_capture.release()
                 
-                print("[video][camera] GStreamer pipeline opened, starting warmup sequence")
-                
-                # Warmup sequence: skip initial frames for stable operation
-                warmup_failed = False
-                for i in range(self.warmup_frames):
-                    ret, frame = self.video_capture.read()
-                    if not ret:
-                        error_msg = f"Failed to read frame during warmup at frame {i}"
-                        self._last_error = error_msg
-                        print(f"[video][camera] ERROR: {error_msg}")
-                        self.video_capture.release()
-                        self.video_capture = None
-                        warmup_failed = True
-                        break
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(2)
                     
-                    if debug or (i + 1) % 5 == 0:
-                        print(f"[video][camera] Warmup frame {i+1}/{self.warmup_frames}")
-                
-                if warmup_failed:
-                    # Retry warmup failed attempt
-                    if attempt < self.max_retries - 1:
-                        print(f"[video][camera] Retrying in {self.retry_delay}s...")
-                        time.sleep(self.retry_delay)
-                    continue
-                
-                self.is_initialized = True
-                self._frames_captured = 0
-                print(f"[video][camera] ✓ GStreamer pipeline ready (attempt {self._attempts}/{self.max_retries})")
-                return True
-                
             except Exception as e:
-                error_msg = str(e)
-                self._last_error = error_msg
-                print(f"[video][camera] ERROR: Failed to initialize: {error_msg} (attempt {self._attempts}/{self.max_retries})")
-                
-                if self.video_capture is not None:
-                    try:
-                        self.video_capture.release()
-                    except:
-                        pass
-                    self.video_capture = None
-                
-                if attempt < self.max_retries - 1:
-                    print(f"[video][camera] Retrying in {self.retry_delay}s...")
-                    time.sleep(self.retry_delay)
-        
-        print(f"[video][camera] ✗ Failed to initialize after {self.max_retries} attempts")
-        if self._last_error:
-            print(f"[video][camera] Last error: {self._last_error}")
-        return False
-    
-    def get_attempts(self) -> int:
-        """Get the number of initialization attempts made."""
-        return self._attempts
-    
-    def get_last_error(self) -> Optional[str]:
-        """Get the last error message from initialization."""
-        return self._last_error
-    
-    def read_frame(self) -> Tuple[bool, Optional[np.ndarray]]:
+                print(f"[video][camera] Exception during startup (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(1)
+
+        # All retries exhausted
+        raise RuntimeError(
+            f"Camera failed to initialize after {max_retries} attempts. "
+            "Common solutions:\n"
+            "  1. Restart nvargus-daemon: sudo systemctl restart nvargus-daemon\n"
+            "  2. Check camera connection and ribbon cable\n"
+            "  3. Verify no other process is using the camera (lsof /dev/video0)\n"
+            "  4. Check dmesg for NVIDIA Argus errors: dmesg | tail -20"
+        )
+
+
+    def read_frame(self) -> tuple:
         """
-        Read a single frame from the pipeline.
+        Read a frame from the video pipeline.
         
         Returns:
-            Tuple of (success: bool, frame: ndarray or None)
+            tuple: (success: bool, frame: numpy.ndarray or None)
         """
         if not self.is_initialized or self.video_capture is None:
             return False, None
         
         try:
-            with self._lock:
-                ret, frame = self.video_capture.read()
-                if ret:
-                    self._frames_captured += 1
-                return ret, frame
+            ok, frame = self.video_capture.read()
+            return ok, frame
         except Exception as e:
-            print(f"[video][camera] ERROR: Failed to read frame: {e}")
+            print(f"[video][camera] ERROR reading frame: {e}")
             return False, None
     
     def stop(self) -> bool:
         """
-        Stop the GStreamer pipeline.
+        Stop the video capture pipeline.
         
         Returns:
-            True if stopped successfully
+            bool: True if pipeline stopped successfully
         """
         try:
             if self.video_capture is not None:
                 self.video_capture.release()
-                self.video_capture = None
                 self.is_initialized = False
-                print(f"[video][camera] Pipeline stopped (captured {self._frames_captured} frames)")
-            return True
+                print("[video][camera] Pipeline stopped")
+                return True
+            return False
         except Exception as e:
-            print(f"[video][camera] ERROR: Failed to stop: {e}")
+            print(f"[video][camera] ERROR stopping pipeline: {e}")
             return False
     
     def cleanup(self):
-        """Clean up all resources."""
+        """Cleanup pipeline resources."""
         self.stop()
-        if self.pipeline is not None:
-            self.pipeline = None

@@ -1,5 +1,6 @@
 import os
 import re
+import threading
 
 class bcolors:
     HEADER = '\033[95m'
@@ -157,12 +158,28 @@ MED_COLUMNS = [
 MAX_RECORD_SECONDS = 300  # 5 minutes
 RECORDING_DIR = "/home/capstone/recordings"
 SIGNAL_FILE = os.path.join(RECORDING_DIR, "recording_done.flag")
+
+# GStreamer Audio Pipeline Configuration
 ARECORD_DEVICE = "hw:CARD=ArrayUAC10,DEV=0"
-CHUNK_SECONDS = 20
+AUDIO_SAMPLE_RATE = 16000
+AUDIO_CHANNELS = 6
+AUDIO_FORMAT = "S16LE"
 
-### ------------------------------- GSTREAMER AUDIO CONFIGURATION ------------------------------- ###
-# GStreamer audio pipeline settings
-AUDIO_SAMPLE_RATE = 16000  # Hz
-AUDIO_CHANNELS = 6         # Multi-channel from ArrayUAC10
-AUDIO_FORMAT = "S16LE"     # Signed 16-bit Little Endian
-
+def get_gstreamer_audio_pipeline(output_file: str) -> str:
+    """
+    Returns a GStreamer pipeline for audio recording from multi-channel USB audio device.
+    
+    Args:
+        output_file: Path to write the output WAV file
+    
+    Returns:
+        GStreamer pipeline string for audio capture and recording
+    """
+    return (
+        f"alsasrc device={ARECORD_DEVICE} ! "
+        f"audioconvert ! "
+        f"audioresample ! "
+        f"audio/x-raw,format={AUDIO_FORMAT},rate={AUDIO_SAMPLE_RATE},channels={AUDIO_CHANNELS} ! "
+        f"wavenc ! "
+        f"filesink location={output_file}"
+    )

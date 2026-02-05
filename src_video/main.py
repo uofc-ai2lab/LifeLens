@@ -25,7 +25,12 @@ from src_video.services.classification_service.infer_injuries_on_crops import (
 )
 from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
-from src_video.services.camera_capture_service.capture_img import (draw_overlay)
+from src_video.services.camera_capture_service.capture_img import (
+    gstreamer_pipeline,
+    capture_images,
+    initialize_camera,
+    draw_overlay
+)
 from src_video.services.camera_capture_service.gstreamer_video_pipeline import GStreamerVideoPipeline
 
 
@@ -34,7 +39,34 @@ def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")
 
 
-def put_latest(queue: Queue, item):
+def capture_frame_from_pipeline(frame, image_save_dir: str) -> bool:
+    """
+    Capture and save a frame directly.
+    
+    Args:
+        frame: The frame to save (numpy array)
+        image_save_dir: Directory to save the image
+    
+    Returns:
+        bool: True if frame saved successfully
+    """
+    if frame is None:
+        print("[CAPTURE] Error: No frame to capture")
+        return False
+    
+    import cv2
+    timestamp = cv2.getTickCount()
+    filename = os.path.join(image_save_dir, f"captured_img_{timestamp}.jpg")
+
+    if not cv2.imwrite(filename, frame):
+        print("[CAPTURE] Error: Failed to save image")
+        return False
+
+    print(f"[CAPTURE] Image saved as {filename}")
+    return True
+
+
+
     """
     Drop old item if queue is full, keep newest.
     """
@@ -215,11 +247,14 @@ def processing_worker(queue: Queue, settings: Dict[str, Any]):
     print("[WORKER] Stopped")
 
 
-def main(
-    video_pipeline: Optional[GStreamerVideoPipeline] = None,
-    video_ready: Optional[threading.Event] = None,
-    video_failed: Optional[threading.Event] = None,
-) -> int:
+def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
+    """
+    Main video processing pipeline.
+    
+    Args:
+        video_pipeline: Optional GStreamer video pipeline object. If None, initializes own pipeline.
+                       When called from orchestrator, passes pre-initialized pipeline.
+    """
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--dev", action="store_true")
@@ -235,24 +270,12 @@ def main(
         return 0
 
     # Use provided pipeline or initialize new one
-    owns_pipeline = False
     if video_pipeline is None:
-        print("[VIDEO MAIN] Creating video pipeline...")
-        video_pipeline = GStreamerVideoPipeline(flip_method=0)
+        video_pipeline = initialize_camera()
         owns_pipeline = True
-        
-        if not video_pipeline.start():
-            print("[VIDEO MAIN] ERROR: Failed to start video pipeline")
-            if video_failed is not None:
-                video_failed.set()
-            return 1
-        print("[VIDEO MAIN] Pipeline started successfully")
     else:
-        print("[VIDEO MAIN] Using provided pipeline")
-
-    # Signal that video is ready to start processing
-    if video_ready is not None:
-        video_ready.set()
+        # Use the pipeline passed from orchestrator (already initialized)
+        owns_pipeline = False
 
     image_queue = Queue(maxsize=3)
 
@@ -311,14 +334,15 @@ def main(
 
             # Capture
             if detected and (now - last_snap) >= SNAPSHOT_INTERVAL:
-                if capture_frame_from_pipeline(frame, settings["image_save_dir"]):
+
+                if capture_frame_from_pipeline(frame, IMAGE_SAVE_DIR):
 
                     job = {
                         "time": now,
                         "id": int(now * 1000),
                     }
 
-                    put_latest(image_queue, job)
+                    # put_latest(image_queue, job)
 
                     processing = True
                     last_snap = now
@@ -349,10 +373,9 @@ def main(
         image_queue.put("STOP")
         worker.join(timeout=5)
 
-        # Clean up pipeline if we created it
+        # Only release pipeline if we created it (not if passed from orchestrator)
         if owns_pipeline and video_pipeline is not None:
             video_pipeline.stop()
-            video_pipeline.cleanup()
         
         cv2.destroyAllWindows()
 
