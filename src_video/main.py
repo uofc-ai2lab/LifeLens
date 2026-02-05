@@ -25,7 +25,7 @@ from src_video.services.classification_service.infer_injuries_on_crops import (
 )
 from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
-from src_video.services.camera_capture_service.capture_img import draw_overlay
+from src_video.services.camera_capture_service.capture_img import (draw_overlay)
 from src_video.services.camera_capture_service.gstreamer_video_pipeline import GStreamerVideoPipeline
 
 
@@ -49,7 +49,25 @@ def put_latest(queue: Queue, item):
 def save_frame(frame) -> bool:
     timestamp = cv2.getTickCount()
     filename = os.path.join(IMAGE_SAVE_DIR, f"captured_img_{timestamp}.jpg")
+
     return cv2.imwrite(filename, frame)
+
+def capture_frame_from_pipeline(frame, image_save_dir: str) -> bool:
+    """
+    Saves a single frame to disk from the video pipeline.
+    """
+    if frame is None:
+        print("[video] ERROR: No frame to save")
+        return False
+    timestamp = cv2.getTickCount()
+    filename = os.path.join(image_save_dir, f"captured_img_{timestamp}.jpg")
+
+    if not cv2.imwrite(filename, frame):
+        print(f"[video] ERROR: Failed to save frame to {filename}")
+        return False
+    
+    print(f"[video] Frame saved to {filename}")
+    return True
 
 def process_single_image(settings: Dict[str, Any]) -> bool:
 
@@ -289,7 +307,7 @@ def main(
 
             # Capture
             if detected and (now - last_snap) >= SNAPSHOT_INTERVAL:
-                if save_frame(frame):
+                if capture_frame_from_pipeline(frame, settings["image_save_dir"]):
 
                     job = {
                         "time": now,

@@ -1,7 +1,7 @@
 import threading
 import time
 import subprocess
-import shutil
+from pathlib import Path
 
 from src_audio.main import main as audio_main
 from src_video.main import main as video_main
@@ -65,44 +65,24 @@ def run_video_pipeline(video_ready: threading.Event, video_failed: threading.Eve
     print("[root] VIDEO pipeline finished")
 
 
-def run_jetson_startup_tasks():
-    """Run Jetson-specific startup tasks: reset camera + start utilization map."""
+def run_jetson_startup_tasks() -> None:
+    """Run Jetson-specific startup tasks via script."""
     print("[root] Jetson detected. Running startup tasks...")
 
-    # 1) Reset camera service (nvargus-daemon)
+    script_path = Path(__file__).resolve().parent / "scripts" / "run_jetson_startup_tasks.sh"
+    if not script_path.exists():
+        print(f"[root] WARNING: Startup script not found: {script_path}")
+        return
+
     try:
-        print("[root] Resetting camera: sudo systemctl restart nvargus-daemon")
-        subprocess.run(
-            ["sudo", "systemctl", "restart", "nvargus-daemon"],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        print("[root] Camera reset complete")
+        subprocess.run([
+            "bash",
+            str(script_path),
+        ], check=True, text=True)
     except subprocess.CalledProcessError as e:
-        print(f"[root] WARNING: Camera reset failed (exit {e.returncode}). {e.stderr.strip()}")
+        print(f"[root] WARNING: Startup script failed (exit {e.returncode}).")
     except Exception as e:
-        print(f"[root] WARNING: Camera reset failed: {e}")
-
-    # 2) Start utilization map (tegrastats) in background
-    tegrastats = shutil.which("tegrastats")
-    if not tegrastats:
-        print("[root] WARNING: tegrastats not found; skipping utilization map")
-        return None
-
-    try:
-        print("[root] Utilization map (tegrastats, live @ 1s):")
-        proc = subprocess.Popen(
-            [tegrastats, "--interval", "1000"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        return proc
-    except Exception as e:
-        print(f"[root] WARNING: tegrastats failed: {e}")
-        return None
+        print(f"[root] WARNING: Startup script failed: {e}")
 
 
 def main():
@@ -117,6 +97,10 @@ def main():
     5. Graceful shutdown on completion or interrupt
     """
     start_time = time.time()
+
+    # Jetson-specific startup tasks
+    if IS_JETSON:
+        run_jetson_startup_tasks()
     
     # Synchronization events
     video_ready = threading.Event()
@@ -136,11 +120,6 @@ def main():
         args=(video_ready, video_failed),
         daemon=False,
     )
-    
-    # Jetson-specific startup tasks
-    tegrastats_proc = None
-    if IS_JETSON:
-        tegrastats_proc = run_jetson_startup_tasks()
 
     # Start video thread first (must initialize first to avoid resource contention)
     print("[root] Starting dual GStreamer pipeline orchestration")
@@ -154,7 +133,7 @@ def main():
     init_timeout_s = 15.0
     deadline = time.time() + init_timeout_s
     while time.time() < deadline and not (video_ready.is_set() or video_failed.is_set()):
-        time.sleep(0.05)
+        time.sleep(0.1)
     
     # Start audio thread (will wait for video_ready signal in its thread)
     audio_thread.start()
@@ -162,13 +141,17 @@ def main():
     # Wait for both threads to complete
     print("[root] Both pipelines started, waiting for completion")
     video_thread.join()
-    audio_thread.join()
+    if audio_thread.is_alive():
+        audio_thread.join()
 
-    if tegrastats_proc is not None and tegrastats_proc.poll() is None:
-        try:
-            tegrastats_proc.terminate()
-        except Exception:
-            pass
+    if IS_JETSON:
+        pid_file = Path("/tmp/tegrastats.pid")
+        if pid_file.exists():
+            try:
+                pid = int(pid_file.read_text().strip())
+                subprocess.run(["sudo", "kill", "-TERM", str(pid)], check=False)
+            except Exception:
+                pass
     
     elapsed = time.time() - start_time
     print(f"\n[root] ✓ All pipelines completed successfully in {elapsed:.2f}s")

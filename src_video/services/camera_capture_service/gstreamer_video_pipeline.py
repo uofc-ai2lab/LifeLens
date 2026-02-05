@@ -49,15 +49,15 @@ def get_gstreamer_video_pipeline(
         GStreamer pipeline string
     """
     return (
-        f"nvarguscamerasrc sensor-id={sensor_id} ! bufapi-version=1 ! "
+        f"nvarguscamerasrc sensor-id={sensor_id} bufapi-version=1 ! "
         f"video/x-raw(memory:NVMM), "
         f"width={capture_width}, height={capture_height}, "
-        f"format=BGRx, framerate={framerate}/1 ! "
+        f"framerate={framerate}/1 ! "
         f"nvvidconv flip-method={flip_method} ! "
-        f"video/x-raw, width={display_width}, height={display_height} ! "
+        f"video/x-raw, width={display_width}, height={display_height}, format=BGRx ! "
         f"videoconvert ! "
         f"video/x-raw, format=BGR ! "
-        f"appsink max-buffers=2 drop=true"
+        f"appsink max-buffers=2 drop=true sync=false async=false enable-last-sample=false"
     )
 
 

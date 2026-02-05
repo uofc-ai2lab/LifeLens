@@ -246,7 +246,8 @@ def get_anonymized_image(frame,
                          mask_scale: float,
                          ellipse: bool,
                          draw_scores: bool,
-                         replaceimg = None
+                         replaceimg = None,
+                         mosaicsize: int = 20
                          ) -> None:
     """
     Method for getting an anonymized image without CLI
@@ -259,7 +260,7 @@ def get_anonymized_image(frame,
     anonymize_frame(
         dets, frame, mask_scale=mask_scale,
         replacewith=replacewith, ellipse=ellipse, draw_scores=draw_scores,
-        replaceimg=replaceimg
+        replaceimg=replaceimg, mosaicsize=mosaicsize
     )
 
     return frame
