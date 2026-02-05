@@ -103,8 +103,6 @@ def extract_detections_from_crops(
     # Use the folder name as the image_id for traceability in reports.
     # (The caller-provided image_id is often "image_00X" while folders are like "captured_img_...".)
     return extract_detections_from_image_dir(target_dir, image_id=target_dir.name)
-    
-    return detections
 
 
 def load_detection_metadata(

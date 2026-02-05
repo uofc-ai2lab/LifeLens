@@ -32,6 +32,9 @@ from src_video.services.camera_capture_service.capture_img import (
     draw_overlay
 )
 
+from src_video.services.person_reid_service.session import ReIDSession
+from src_video.services.person_reid_service.tracker import PersonReIDEngine
+
 
 
 def _as_posix(path: str) -> str:
@@ -53,65 +56,75 @@ def put_latest(queue: Queue, item):
 
 
 
-def process_single_image(settings: Dict[str, Any]) -> bool:
+def process_single_image(
+    settings: Dict[str, Any],
+    image_paths: list[str],
+    reid_session: ReIDSession | None = None,
+) -> bool:
+
+    detection_output_dir = Path(settings["DETECTION_OUTPUT"])
+    crops_root = Path(settings["CROPS_ROOT"])  # .../DetectionOutput/crops
+
+    for image_path in image_paths:
+        image_path_p = Path(image_path)
+        if not image_path_p.exists():
+            print(f"[video] Skipping missing image: {image_path}")
+            continue
+
+        image_stem = image_path_p.stem
+
+        try:
+            run_detection(
+                model=settings["DETECTION_MODEL"],
+                source=_as_posix(str(image_path_p)),
+                output=_as_posix(settings["DETECTION_OUTPUT"]),
+                classes=settings["CLASSES"],
+                margin=float(settings["MARGIN"]),
+                min_area=int(settings["MIN_AREA"]),
+                device=settings.get("DEVICE"),
+                add_head=bool(settings["ADD_HEAD"]),
+                debug=bool(settings["DEBUG"]),
+                alpha_png=bool(settings["ALPHA_PNG"]),
+                max_images=1,
+                classification_export_dir=None,
+            )
+            print("[video] Detection done")
+        except Exception as e:
+            print(f"[video object] Detection failed: {e}")
+            return False
+
+        try:
+            per_image_crops_root = crops_root / image_stem
+            infer_summary = predict_injuries_on_detection_crops(
+                crops_root=_as_posix(str(per_image_crops_root)),
+                checkpoint_path=str(settings["INJURY_CHECKPOINT_PATH"]),
+                out_json_path=str(settings["INJURY_REPORT_JSON"]),
+                out_csv_path=str(settings["INJURY_REPORT_CSV"]),
+                image_size=int(settings["INJURY_IMG_SIZE"]),
+                batch_size=int(settings["INJURY_BATCH_SIZE"]),
+                num_workers=int(settings["INJURY_NUM_WORKERS"]),
+                device=None,
+                filename_delimiter="_",
+                body_part_label_position=int(settings["BODY_PART_LABEL_POSITION"]),
+            )
+
+            print("[PIPELINE] Inference done")
+        except Exception as e:
+            print(f"[ERROR] Inference failed: {e}")
+
+        if not body_ranking(settings):
+            print("[WARN] Ranking failed")
+
+        if reid_session is not None:
+            try:
+                reid_session.process_image(image_stem=image_stem)
+            except Exception as e:
+                print(f"[reid] ReID failed: {e}")
 
     try:
-
-        run_detection(
-            model=settings["DETECTION_MODEL"],
-            source=_as_posix(IMAGE_SAVE_DIR),
-            output=_as_posix(settings["DETECTION_OUTPUT"]),
-            classes=settings["CLASSES"],
-            margin=float(settings["MARGIN"]),
-            min_area=int(settings["MIN_AREA"]),
-            device=settings.get("DEVICE"),
-            add_head=bool(settings["ADD_HEAD"]),
-            debug=bool(settings["DEBUG"]),
-            alpha_png=bool(settings["ALPHA_PNG"]),
-            max_images=int(settings["MAX_IMAGES"]),
-            classification_export_dir=None,
-        )
-
-        print("[video] Detection done")
-
-    except Exception as e:
-        print(f"[video object] Detection failed: {e}")
-        return False
-
-
-    try:
-
-        crops_root = Path(settings["CROPS_ROOT"])
-
-        infer_summary = predict_injuries_on_detection_crops(
-            crops_root=_as_posix(str(crops_root)),
-            checkpoint_path=str(settings["INJURY_CHECKPOINT_PATH"]),
-            out_json_path=str(settings["INJURY_REPORT_JSON"]),
-            out_csv_path=str(settings["INJURY_REPORT_CSV"]),
-            image_size=int(settings["INJURY_IMG_SIZE"]),
-            batch_size=int(settings["INJURY_BATCH_SIZE"]),
-            num_workers=int(settings["INJURY_NUM_WORKERS"]),
-            device=None,
-            filename_delimiter="_",
-            body_part_label_position=int(settings["BODY_PART_LABEL_POSITION"]),
-        )
-
-        print("[PIPELINE] Inference done")
-
-    except Exception as e:
-        print(f"[ERROR] Inference failed: {e}")
-
-
-
-    if not body_ranking(settings):
-        print("[WARN] Ranking failed")
-
-
-    try:
-
         deidentify_result = run_deidentification(
             input_dir=_as_posix(IMAGE_SAVE_DIR),
-            output_dir=_as_posix(str(Path(settings["DETECTION_OUTPUT"]) / "deidentified")),
+            output_dir=_as_posix(str(detection_output_dir / "deidentified")),
             enabled=True,
             threshold=0.2,
             replacewith="blur",
@@ -127,20 +140,7 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
     except Exception as e:
         print(f"[video] De-identification failed: {e}")
 
-    try:
-
-        crops_root = Path(settings["CROPS_ROOT"])
-
-        if crops_root.exists():
-            shutil.rmtree(crops_root)
-            crops_root.mkdir(parents=True, exist_ok=True)
-
-    except Exception as e:
-        print(f"[WARN] Cleanup failed: {e}")
-
-
-    print("[PIPELINE] Image processed\n")
-
+    print("[PIPELINE] Batch processed\n")
     return True
 
 
@@ -151,6 +151,16 @@ def processing_worker(queue: Queue, settings: Dict[str, Any]):
 
     batch = []
     last_flush = time.time()
+
+    detection_output_dir = Path(settings["DETECTION_OUTPUT"])
+    reid_dir = detection_output_dir / "person_reid"
+    reid_engine = PersonReIDEngine(storage_dir=str(reid_dir))
+    reid_session = ReIDSession(
+        reid_engine=reid_engine,
+        detection_output_dir=detection_output_dir,
+        report_path=reid_dir / "reid_report.json",
+        saved_images_dir=Path(IMAGE_SAVE_DIR),
+    )
 
     print("[WORKER] Batching with Queue Started")
 
@@ -186,7 +196,8 @@ def processing_worker(queue: Queue, settings: Dict[str, Any]):
             print(f"[WORKER] Processing batch ({len(batch)})")
 
             try:
-                process_single_image(settings)
+                image_paths = [j.get("image_path") for j in batch if isinstance(j, dict) and j.get("image_path")]
+                process_single_image(settings, image_paths=image_paths, reid_session=reid_session)
 
             except Exception as e:
                 print(f"[WORKER ERROR] {e}")
@@ -210,7 +221,24 @@ def main() -> int:
 
     if DEV_MODE:
         print("[MODE] DEV")
-        process_single_image(settings)
+        try:
+            saved = sorted(Path(IMAGE_SAVE_DIR).glob("*.jpg"), key=lambda p: p.stat().st_mtime)
+            if not saved:
+                print(f"[DEV] No images found in {IMAGE_SAVE_DIR}")
+                return 0
+
+            detection_output_dir = Path(settings["DETECTION_OUTPUT"])
+            reid_dir = detection_output_dir / "person_reid"
+            reid_engine = PersonReIDEngine(storage_dir=str(reid_dir))
+            reid_session = ReIDSession(
+                reid_engine=reid_engine,
+                detection_output_dir=detection_output_dir,
+                report_path=reid_dir / "reid_report.json",
+                saved_images_dir=Path(IMAGE_SAVE_DIR),
+            )
+            process_single_image(settings, image_paths=[str(saved[-1])], reid_session=reid_session)
+        except Exception as e:
+            print(f"[DEV] Failed: {e}")
         return 0
 
     video_capture = initialize_camera()
@@ -274,11 +302,14 @@ def main() -> int:
             # Capture
             if detected and (now - last_snap) >= SNAPSHOT_INTERVAL:
 
-                if capture_images(video_capture):
+                saved_path = capture_images(video_capture)
+
+                if saved_path:
 
                     job = {
                         "time": now,
                         "id": int(now * 1000),
+                        "image_path": str(saved_path),
                     }
 
                     put_latest(image_queue, job)

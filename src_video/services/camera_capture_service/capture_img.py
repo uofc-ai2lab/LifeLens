@@ -56,18 +56,17 @@ def capture_images(video_capture):
 
     if not ret_val or frame is None:
         print("Error: Failed to capture frame.")
-        return False
-    
+        return None
 
     timestamp = cv2.getTickCount()
     filename = os.path.join(IMAGE_SAVE_DIR, f"captured_img_{timestamp}.jpg")
 
     if not cv2.imwrite(filename, frame):
         print("Error: Failed to save image.")
-        return False
+        return None
 
     print(f"Image saved as {filename}")
-    return True
+    return filename
 
 
 def initialize_camera(flip_method: int = 0) -> cv2.VideoCapture:
