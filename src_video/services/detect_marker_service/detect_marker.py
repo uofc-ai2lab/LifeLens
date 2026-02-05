@@ -5,6 +5,8 @@
 
 import cv2
 import numpy as np
+import sys
+import os
 from pupil_apriltags import Detector
 from src_video.domain.entities import AprilTagDetection
 from config.video_settings import (
@@ -31,17 +33,31 @@ MIN_DECISION_MARGIN = 20  # Adjust based on environment
 
 # ==================== APRILTAG DETECTOR ====================
 
-# Initialize AprilTag detector
+# Suppress verbose apriltag warnings by redirecting stderr temporarily
 print(f"Initializing AprilTag detector for {TAG_FAMILY}...")
-at_detector = Detector(
-    families=TAG_FAMILY,
-    nthreads=NTHREADS,
-    quad_decimate=QUAD_DECIMATE,
-    quad_sigma=0.0,
-    refine_edges=1,
-    decode_sharpening=0.25,
-    debug=0
-)
+
+# Redirect stderr to suppress C++ library warnings
+stderr_fd = sys.stderr.fileno()
+old_stderr = os.dup(stderr_fd)
+devnull = os.open(os.devnull, os.O_WRONLY)
+os.dup2(devnull, stderr_fd)
+
+try:
+    at_detector = Detector(
+        families=TAG_FAMILY,
+        nthreads=NTHREADS,
+        quad_decimate=QUAD_DECIMATE,
+        quad_sigma=0.0,
+        refine_edges=1,
+        decode_sharpening=0.25,
+        debug=0
+    )
+finally:
+    # Restore stderr
+    os.dup2(old_stderr, stderr_fd)
+    os.close(old_stderr)
+    os.close(devnull)
+
 print("AprilTag detector initialized successfully!")
 
 # ==================== DETECTION FUNCTIONS ====================
@@ -72,13 +88,23 @@ def detect_apriltags(source, show_visualization=True, print_info=True):
     # Convert to grayscale
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     
-    # Detect tags
-    tags = at_detector.detect(
-        gray,
-        estimate_tag_pose=True,
-        camera_params=CAMERA_PARAMS,
-        tag_size=TAG_SIZE
-    )
+    # Detect tags - suppress stderr warnings from C++ library
+    stderr_fd = sys.stderr.fileno()
+    old_stderr = os.dup(stderr_fd)
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    os.dup2(devnull, stderr_fd)
+    
+    try:
+        tags = at_detector.detect(
+            gray,
+            estimate_tag_pose=True,
+            camera_params=CAMERA_PARAMS,
+            tag_size=TAG_SIZE
+        )
+    finally:
+        os.dup2(old_stderr, stderr_fd)
+        os.close(old_stderr)
+        os.close(devnull)
 
     tags = [tag for tag in tags if tag.decision_margin > MIN_DECISION_MARGIN]
     

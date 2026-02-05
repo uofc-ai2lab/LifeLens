@@ -237,6 +237,7 @@ def main(
     # Use provided pipeline or initialize new one
     owns_pipeline = False
     if video_pipeline is None:
+        print("[VIDEO MAIN] Creating video pipeline...")
         video_pipeline = GStreamerVideoPipeline(flip_method=0)
         owns_pipeline = True
         
@@ -245,7 +246,11 @@ def main(
             if video_failed is not None:
                 video_failed.set()
             return 1
+        print("[VIDEO MAIN] Pipeline started successfully")
+    else:
+        print("[VIDEO MAIN] Using provided pipeline")
 
+    # Signal that video is ready to start processing
     if video_ready is not None:
         video_ready.set()
 
@@ -261,7 +266,8 @@ def main(
 
     window = "CSI Camera"
 
-    cv2.namedWindow(window, cv2.WINDOW_AUTOSIZE)
+    cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window, 960, 540)
 
 
     last_snap = 0
@@ -279,10 +285,14 @@ def main(
 
             ok, frame = video_pipeline.read_frame()
 
-            if not ok:
+            if not ok or frame is None:
                 print("[ERROR] Camera read failed")
                 break
 
+            # Check if frame is valid
+            if frame.size == 0:
+                print("[ERROR] Empty frame received")
+                continue
 
             # FPS
             frame_count += 1
@@ -298,12 +308,6 @@ def main(
             detected = detect_apriltags(frame)
 
             now = time.time()
-
-            keyCode = cv2.waitKey(10) & 0xFF
-            # Stop the program on the ESC key or 'q'
-            if keyCode == 27 or keyCode == ord('q'):
-                break
-
 
             # Capture
             if detected and (now - last_snap) >= SNAPSHOT_INTERVAL:
@@ -325,9 +329,11 @@ def main(
             draw_overlay(frame, fps, processing)
 
             cv2.imshow(window, frame)
+            
+            # Single waitKey with proper ESC and 'q' handling
             key = cv2.waitKey(1) & 0xFF
-
-            if key in (27, ord("q")):
+            if key == 27 or key == ord('q'):
+                print("[VIDEO MAIN] Exit key pressed")
                 break
 
 

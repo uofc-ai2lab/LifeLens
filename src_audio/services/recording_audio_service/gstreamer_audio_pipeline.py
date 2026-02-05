@@ -154,8 +154,26 @@ class GStreamerAudioPipeline:
                 
                 print("[audio] Stopping audio pipeline")
                 
-                # Set pipeline to NULL state
+                # Send EOS (End Of Stream) event to flush data and properly close the file
                 if self.pipeline is not None:
+                    print("[audio] Sending EOS event to pipeline")
+                    self.pipeline.send_event(Gst.Event.new_eos())
+                    
+                    # Wait for EOS to be processed (with timeout)
+                    bus = self.pipeline.get_bus()
+                    if bus:
+                        msg = bus.timed_pop_filtered(
+                            2 * Gst.SECOND,  # 2 second timeout
+                            Gst.MessageType.EOS | Gst.MessageType.ERROR
+                        )
+                        if msg:
+                            if msg.type == Gst.MessageType.ERROR:
+                                err, debug = msg.parse_error()
+                                print(f"[audio] Error during EOS: {err.message}")
+                            elif msg.type == Gst.MessageType.EOS:
+                                print("[audio] EOS received, file closed properly")
+                    
+                    # Now set pipeline to NULL state
                     self.pipeline.set_state(Gst.State.NULL)
                 
                 self.is_recording = False

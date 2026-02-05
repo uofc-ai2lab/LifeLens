@@ -1,3 +1,4 @@
+import asyncio
 import threading
 import time
 import subprocess
@@ -5,20 +6,22 @@ from pathlib import Path
 
 from src_audio.main import main as audio_main
 from src_video.main import main as video_main
+from src_video.services.camera_capture_service.gstreamer_video_pipeline import GStreamerVideoPipeline
 from config.audio_settings import IS_JETSON
 
 """
 Dual GStreamer Pipeline Architecture:
 - Video thread: Hardware-accelerated CSI camera capture (NVIDIA Jetson)
 - Audio thread: Multi-channel USB audio recording
-- Both run concurrently in separate threads with synchronized startup
+- Both run concurrently in separate threads
+- GStreamer pipelines initialized inside each thread
+- Async main functions run via asyncio.run() within threads
 """
 
 def run_audio_pipeline(video_ready: threading.Event, video_failed: threading.Event):
     """Runs audio GStreamer pipeline in its own thread.
     
-    Waits for video pipeline to be ready before starting audio to prevent
-    resource contention.
+    Waits for video to be ready, then runs async audio_main via asyncio.run()
     """
     print("[root] AUDIO thread: Waiting for video pipeline readiness signal")
     
@@ -39,8 +42,8 @@ def run_audio_pipeline(video_ready: threading.Event, video_failed: threading.Eve
     print("[root] AUDIO thread: Video ready, starting audio pipeline")
 
     try:
-        # Run audio processing services (chunked recording uses GStreamer internally)
-        audio_main()
+        # Run async audio_main
+        asyncio.run(audio_main())
     except Exception as e:
         print(f"[root] AUDIO pipeline error: {e}")
 
@@ -49,20 +52,64 @@ def run_audio_pipeline(video_ready: threading.Event, video_failed: threading.Eve
 
 def run_video_pipeline(video_ready: threading.Event, video_failed: threading.Event):
     """Runs video GStreamer pipeline in its own thread.
-
-    Important: Camera must be opened and closed in the SAME thread to avoid
-    Argus/GStreamer sessions lingering between runs.
+    
+    Creates the GStreamer pipeline and runs async video_main via asyncio.run()
     """
     print("[root] VIDEO thread: Starting video pipeline")
+        
+    # Initialize video pipeline in this thread
+    video_pipeline = GStreamerVideoPipeline(flip_method=0)
+    if not video_pipeline.start():
+        print("[root] VIDEO thread: Failed to start video pipeline")
+        video_failed.set()
+        return
+    
+    print("[root] VIDEO thread: Pipeline initialized, starting processing")
+    video_ready.set()
     
     try:
-        # Run video processing services (pipeline created and managed inside)
-        video_main(video_ready=video_ready, video_failed=video_failed)
+        # Run async video_main with the pipeline
+        asyncio.run(video_main(video_pipeline))
     except Exception as e:
         video_failed.set()
         print(f"[root] VIDEO pipeline error: {e}")
+    finally:
+        video_pipeline.stop()
+        video_pipeline.cleanup()
 
     print("[root] VIDEO pipeline finished")
+
+
+def run_audio_pipeline(video_ready: threading.Event, video_failed: threading.Event):
+    """Runs audio GStreamer pipeline in its own thread.
+    
+    Waits for video to be ready, then runs async audio_main via asyncio.run()
+    """
+    print("[root] AUDIO thread: Waiting for video pipeline readiness signal")
+    
+    # Wait for video to initialize (with timeout)
+    init_timeout = 15.0
+    deadline = time.time() + init_timeout
+    while time.time() < deadline and not (video_ready.is_set() or video_failed.is_set()):
+        time.sleep(0.1)
+    
+    if video_failed.is_set():
+        print("[root] AUDIO thread: Video pipeline failed, not starting audio")
+        return
+    
+    if not video_ready.is_set():
+        print("[root] AUDIO thread: Video initialization timeout, aborting audio")
+        return
+    
+    print("[root] AUDIO thread: Video ready, starting audio pipeline")
+
+    try:
+        # Run async audio_main
+        asyncio.run(audio_main())
+    except Exception as e:
+        print(f"[root] AUDIO pipeline error: {e}")
+
+    print("[root] AUDIO pipeline finished")
 
 
 def run_jetson_startup_tasks() -> None:
