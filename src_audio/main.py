@@ -1,18 +1,14 @@
-import argparse
-import asyncio
+import argparse, os, shutil, time, asyncio
 from datetime import datetime
-from typing import Dict, Any
-import os, shutil
-import time
 from pathlib import Path
 from config.audio_settings import AUDIO_DIR
+from src_audio.domain.constants import RECORDING_DIR, AUDIO_EXTS
+from src_audio.utils.make_directories import create_chunk_dir
 from src_audio.services.transcription_service.transcription_whispertrt import run_transcription
 from src_audio.services.medication_extraction_service.medication_extraction import run_medication_extraction
 from src_audio.services.intervention_extraction_service.intervention_extraction import run_intervention_extraction
 from src_audio.services.anonymization_service.transcript_anonymization import run_anonymization_service
 from src_audio.services.recording_audio_service.record_audio import record_one_chunk
-from src_audio.utils.make_directories import create_chunk_dir
-from src_audio.domain.constants import RECORDING_DIR, AUDIO_EXTS
 
 def _dev_wrap_audio_into_chunk(parent_audio_file: str, chunk_idx: int = 0) -> Path:
     """
@@ -33,7 +29,6 @@ def _dev_wrap_audio_into_chunk(parent_audio_file: str, chunk_idx: int = 0) -> Pa
 
     chunk_audio_dir = parent_audio_file.with_suffix("") / Path(chunk_filename).stem
     chunk_audio_dir.mkdir(parents=True, exist_ok=True)
-
     chunk_audio_path = chunk_audio_dir / chunk_filename
 
     # Move (or copy) the file into the chunk directory
@@ -47,6 +42,7 @@ def _make_output_path() -> str:
     os.makedirs(RECORDING_DIR, exist_ok=True) # Ensure the recording directory exists.
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     return os.path.join(RECORDING_DIR, f"recording_{timestamp}.wav")
+
 
 async def process_audio_chunk(chunk_path: str) -> None:
     try:
@@ -69,12 +65,24 @@ async def process_audio_chunk(chunk_path: str) -> None:
     except Exception as e:
         print("[audio] Service failed:", e)
 
+def put_latest_nowait(q: asyncio.Queue, item) -> None:
+    """Keep-latest queue push that never blocks the producer."""
+    if q.full():
+        try:
+            q.get_nowait()
+        except asyncio.QueueEmpty:
+            pass
+    try:
+        q.put_nowait(item)
+    except asyncio.QueueFull:
+        pass # extremely rare race; okay to drop
+
+
 async def producer(queue: asyncio.Queue, stop_event: asyncio.Event) -> None:
     """
     Records chunks forever until stop_event is set.
     Puts chunk paths into queue. Uses a sentinel None at the end.
     """
-    
     chunk_idx = 0
     parent_audio_file = _make_output_path()
     
@@ -82,25 +90,17 @@ async def producer(queue: asyncio.Queue, stop_event: asyncio.Event) -> None:
         while True:
             chunk_dir = create_chunk_dir(parent_audio_file, chunk_idx)
             audio_chunk_path = chunk_dir / f"{chunk_dir.name}.wav"
-            
             target_path = await record_one_chunk(audio_chunk_path, stop_event)
             
             if target_path:
-                if queue.full():
-                    try:
-                        _ = queue.get_nowait()
-                        queue.task_done()
-                    except Exception:
-                        pass
-
-                await queue.put(target_path)
-                
+                put_latest_nowait(queue, target_path)
+            
             chunk_idx += 1
             
             if stop_event.is_set():
                 break
     finally:
-        await queue.put(None)  # sentinel
+        put_latest_nowait(queue, None)
 
 
 async def consumer(queue: asyncio.Queue) -> None:
@@ -138,7 +138,7 @@ async def main() -> int:
 
         audio_dir = Path(AUDIO_DIR)
         files = [
-            p for p in audio_dir.rglob("*")
+            p for p in audio_dir.iterdir()
             if p.is_file() and p.suffix.lower() in AUDIO_EXTS
         ]
         
@@ -149,12 +149,10 @@ async def main() -> int:
         for f in files:
             chunked_path = _dev_wrap_audio_into_chunk(f, chunk_idx=0)
             print(f"[dev] Processing {chunked_path}")
-
             await process_audio_chunk(str(chunked_path))
 
         return 0
 
-    
     stop_event = asyncio.Event()
     queue = asyncio.Queue(maxsize=1) # maxsize=1 gives the latest only
     
@@ -172,7 +170,6 @@ async def main() -> int:
     hours, minutes = divmod(minutes, 60)
 
     print(f"Complete AUDIO pipeline time: {hours} hours, {minutes} minutes, and {seconds} seconds")
-    
     return 0
     
 if __name__ == "__main__":
