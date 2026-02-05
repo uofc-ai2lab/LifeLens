@@ -129,7 +129,7 @@ def prepare_medication_rows(administrations: list[MedicationAdministration]) -> 
         "full_text": ""
     } for a in administrations]
 
-def medication_extraction_pipeline(chunk_path: str, transcript_path: str, extractor: MedicationExtractor) -> None:
+def run_medication_extraction(chunk_path: str, transcript_path: str) -> None:
     """
     Run the full medication extraction pipeline:
     - Load transcript CSV
@@ -145,6 +145,7 @@ def medication_extraction_pipeline(chunk_path: str, transcript_path: str, extrac
     Returns:
         None
     """
+    extractor = MedicationExtractor()
     transcript_data = []
     df = load_csv_file(transcript_path)
     for _, row in df.iterrows():
@@ -169,8 +170,3 @@ def medication_extraction_pipeline(chunk_path: str, transcript_path: str, extrac
         columns=MED_COLUMNS,
         empty_ok=True,
     )
-
-async def run_medication_extraction(chunk_path: str, transcript_path: str):
-    """Async wrapper to run the medication extraction pipeline."""
-    extractor = MedicationExtractor()
-    medication_extraction_pipeline(chunk_path, transcript_path, extractor)

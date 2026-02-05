@@ -1,2 +1,0 @@
-start_time,end_time,event_type,medication (confidence score),dosage (confidence score),route (confidence score),full_text
-00:02:40.000,00:02:43.000,medication,IV (0.723),Not Found,iv (0.500),

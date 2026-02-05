@@ -43,7 +43,7 @@ def has_intervention_keyword(text_norm):
     return False
 
 
-def intervention_extraction_pipeline(chunk_path: str, transcript_path: str):
+def run_intervention_extraction(chunk_path: str, transcript_path: str):
     """Main extraction pipeline for interventions only"""
     df = load_csv_file(transcript_path)
     if MODEL_PACK is None:
@@ -118,8 +118,3 @@ def intervention_extraction_pipeline(chunk_path: str, transcript_path: str):
         columns=INTER_COLUMNS, 
         empty_ok=True,
     )
-
-async def run_intervention_extraction(chunk_path: str, transcript_path: str):
-    """Async wrapper to run the intervention extraction pipeline."""
-    intervention_extraction_pipeline(chunk_path, transcript_path)
-        

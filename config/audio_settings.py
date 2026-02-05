@@ -15,7 +15,13 @@ BASE_DIR = Path(os.getcwd()).resolve()
 SRC_DIR = BASE_DIR / "src_audio"
 DATA_DIR = BASE_DIR / "data"
 AUDIO_DIR = DATA_DIR / "audio/audio_files"
+AUDIO_CHUNKS_DIR = DATA_DIR / "audio/audio_chunks"
+PROCESSED_AUDIO_DIR = DATA_DIR / "audio/processed_audio"
+
 os.makedirs(AUDIO_DIR, exist_ok=True)
+os.makedirs(AUDIO_CHUNKS_DIR, exist_ok=True)
+os.makedirs(PROCESSED_AUDIO_DIR, exist_ok=True)
+
 
 # -------------------------
 # Audio / Transcription

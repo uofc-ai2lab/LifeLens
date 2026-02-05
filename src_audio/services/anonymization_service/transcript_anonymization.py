@@ -3,7 +3,7 @@ from src_audio.utils.export_to_csv import export_to_csv
 from src_audio.services.anonymization_service.anonymizer import TranscriptAnonymizer
 from pathlib import Path
 
-def run_anonymization(chunk_path: str, transcript_path: str, anonymizer: TranscriptAnonymizer) -> None:
+def run_anonymization(chunk_path: str, transcript_path: str) -> None:
     """
     Run the full transcript anonymization pipeline:
     - Load transcript CSV
@@ -16,6 +16,7 @@ def run_anonymization(chunk_path: str, transcript_path: str, anonymizer: Transcr
     Returns:
         None
     """
+    anonymizer = TranscriptAnonymizer()
     df = load_csv_file(transcript_path)
     anonymized_texts = []
     for _, row in df.iterrows():
@@ -35,11 +36,3 @@ def run_anonymization(chunk_path: str, transcript_path: str, anonymizer: Transcr
         columns=["start_time", "end_time", "text", "speaker"],
         empty_ok=True,
     )
-
-async def run_anonymization_service(chunk_path: str, transcript_path: str):
-    """
-    Async wrapper to run the transcript anonymization script
-    """
-    anonymizer = TranscriptAnonymizer()
-    run_anonymization(chunk_path, transcript_path, anonymizer)
-    

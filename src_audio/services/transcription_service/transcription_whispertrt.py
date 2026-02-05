@@ -145,7 +145,7 @@ def normalize_whisper_segments(segments):
         })
     return normalized
            
-async def transcribe_audio(audio_file: str, model):
+def transcribe_audio(audio_file: str, model):
     print_formatting("heading","STEP 3: RUNNING TRANSCRIPTION")
     transcribe_start = datetime.now()
     try:
@@ -287,7 +287,7 @@ async def transcribe_audio(audio_file: str, model):
 
 #     return result
 
-async def run_transcription(audio_chunk_file):
+def run_transcription(audio_chunk_file):
     print_formatting("title", "TRANSCRIPTION PIPELINE")
     
     """Main runner function for WhisperTRT (or Whisper) transcription """
@@ -307,7 +307,7 @@ async def run_transcription(audio_chunk_file):
 
     # ==================== VERIFICATION STEP 3: TRANSCRIBE ====================
     transcribe_start = datetime.now()
-    result = await transcribe_audio(audio_chunk_file, model)
+    result = transcribe_audio(audio_chunk_file, model)
 
     # ==================== VERIFICATION STEP 3.1: Diarize ====================
     # print_formatting("heading","STEP 3.1: Diarizing with pyannote...")

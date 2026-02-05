@@ -1,176 +1,172 @@
-import argparse, os, shutil, time, asyncio
+from __future__ import annotations
+
+import argparse
+import os
+import time
+import threading
 from datetime import datetime
 from pathlib import Path
-from config.audio_settings import AUDIO_DIR
-from src_audio.domain.constants import RECORDING_DIR, AUDIO_EXTS
-from src_audio.utils.make_directories import create_chunk_dir
-from src_audio.services.transcription_service.transcription_whispertrt import run_transcription
-from src_audio.services.medication_extraction_service.medication_extraction import run_medication_extraction
-from src_audio.services.intervention_extraction_service.intervention_extraction import run_intervention_extraction
-from src_audio.services.anonymization_service.transcript_anonymization import run_anonymization_service
+from queue import Queue, Empty
+
+from config.audio_settings import AUDIO_CHUNKS_DIR, PROCESSED_AUDIO_DIR
 from src_audio.services.recording_audio_service.record_audio import record_one_chunk
 
-def _dev_wrap_audio_into_chunk(parent_audio_file: str, chunk_idx: int = 0) -> Path:
-    """
-    DEV helper:
-    Takes an existing wav file and wraps it into the same
-    chunk directory structure used by recording function.
-    """
-    parent_audio_file = Path(parent_audio_file)
-
-    # skip junk
-    if parent_audio_file.suffix.lower() not in AUDIO_EXTS:
-        raise ValueError(f"Unsupported audio ext: {parent_audio_file.suffix}")
-
-    chunk_filename = (
-        f"{parent_audio_file.stem}_chunk_{chunk_idx}"
-        f"{parent_audio_file.suffix}"
-    )
-
-    chunk_audio_dir = parent_audio_file.with_suffix("") / Path(chunk_filename).stem
-    chunk_audio_dir.mkdir(parents=True, exist_ok=True)
-    chunk_audio_path = chunk_audio_dir / chunk_filename
-
-    # Move (or copy) the file into the chunk directory
-    if not chunk_audio_path.exists():
-        shutil.move(parent_audio_file, chunk_audio_path)
-
-    return chunk_audio_path
+from src_audio.services.transcription_service.transcription_whispertrt import run_transcription
+from src_audio.services.anonymization_service.transcript_anonymization import run_anonymization
+from src_audio.services.medication_extraction_service.medication_extraction import run_medication_extraction
+from src_audio.services.intervention_extraction_service.intervention_extraction import run_intervention_extraction
 
 
-def _make_output_path() -> str:
-    os.makedirs(RECORDING_DIR, exist_ok=True) # Ensure the recording directory exists.
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
-    return os.path.join(RECORDING_DIR, f"recording_{timestamp}.wav")
-
-
-async def process_audio_chunk(chunk_path: str) -> None:
-    try:
-        print("[audio] Starting transcription...")
-        transcript_path = await run_transcription(chunk_path)
-        print("[audio] Transcription finished.")
-        
-        print("[audio] Starting anonymization...")
-        await run_anonymization_service(chunk_path, transcript_path)
-        print("[audio] Anonymization finished.")
-        
-        print("[audio] Starting medication extraction...")
-        await run_medication_extraction(chunk_path, transcript_path)
-        print("[audio] Medication extraction finished.")
-        
-        print("[audio] Starting intervention extraction...")
-        await run_intervention_extraction(chunk_path, transcript_path)
-        print("[audio] Intervention extraction finished.")
-        
-    except Exception as e:
-        print("[audio] Service failed:", e)
-
-def put_latest_nowait(q: asyncio.Queue, item) -> None:
-    """Keep-latest queue push that never blocks the producer."""
-    if q.full():
+def put_latest(queue: Queue, item):
+    """Drop old signal if queue is full, keep newest."""
+    if queue.full():
         try:
-            q.get_nowait()
-        except asyncio.QueueEmpty:
+            queue.get_nowait()
+        except:
             pass
-    try:
-        q.put_nowait(item)
-    except asyncio.QueueFull:
-        pass # extremely rare race; okay to drop
+    queue.put(item)
 
-
-async def producer(queue: asyncio.Queue, stop_event: asyncio.Event) -> None:
+def move_chunk_to_processed(chunk_path: Path) -> Path:
     """
-    Records chunks forever until stop_event is set.
-    Puts chunk paths into queue. Uses a sentinel None at the end.
+    Move chunk file from AUDIO_CHUNKS_DIR into: PROCESSED_AUDIO_DIR/<chunk_stem>/<chunk_filename>
+    Returns new path.
     """
-    chunk_idx = 0
-    parent_audio_file = _make_output_path()
-    
+    chunk_stem = chunk_path.stem  # recording_1323243_chunk_0
+    dest_dir = PROCESSED_AUDIO_DIR / chunk_stem
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    dest_path = dest_dir / chunk_path.name
+    chunk_path.replace(dest_path)
+    return dest_path
+
+
+def process_latest_audio_chunk() -> bool:
+    """
+    Processes whatever is currently in AUDIO_CHUNKS_DIR.
+    """
     try:
-        while True:
-            chunk_dir = create_chunk_dir(parent_audio_file, chunk_idx)
-            audio_chunk_path = chunk_dir / f"{chunk_dir.name}.wav"
-            target_path = await record_one_chunk(audio_chunk_path, stop_event)
-            
-            if target_path:
-                put_latest_nowait(queue, target_path)
-            
-            chunk_idx += 1
-            
-            if stop_event.is_set():
-                break
-    finally:
-        put_latest_nowait(queue, None)
+        inbox = Path(AUDIO_CHUNKS_DIR)
+        files = sorted([p for p in inbox.glob("*") if p.is_file()])
+        if not files:
+            print("[audio] No chunks to process")
+            return False
+
+        # Process newest chunk
+        latest = files[-1]
+        print(f"[audio] Found latest chunk in inbox: {latest.name}")
+
+        # MOVE into processed folder (this also prevents reprocessing)
+        chunk_path = move_chunk_to_processed(latest)
+        print(f"[audio] Moved to processed dir: {chunk_path}")
+
+        transcript_path = run_transcription(str(chunk_path))
+        print(f"[audio] Transcription complete for {chunk_path.name}\n")
+        run_anonymization(str(chunk_path), transcript_path)
+        print(f"[audio] Anonymization complete for {chunk_path.name}\n")
+        run_medication_extraction(str(chunk_path), transcript_path)
+        print(f"[audio] Med Extraction complete for {chunk_path.name}\n")
+        run_intervention_extraction(str(chunk_path), transcript_path)
+        print(f"[audio] Intervention Extraction complete for {chunk_path.name}\n")
+
+        print(f"[audio] {chunk_path.name} processed\n")
+        return True
+
+    except Exception as e:
+        print(f"[audio ERROR] Processing failed: {e}")
+        return False
 
 
-async def consumer(queue: asyncio.Queue) -> None:
-    """ Processes chunks until stop is received """
+def processing_worker(queue: Queue):
+    """
+    Worker thread: waits for signals, processes audio directory.
+    """
+    print("[AUDIO WORKER] Started")
+
     while True:
-        item = await queue.get()
-        if item is None:
+        try:
+            job = queue.get(timeout=0.5)
+        except Empty:
+            continue
+
+        if job == "STOP":
             queue.task_done()
             break
-        await process_audio_chunk(item)
-        queue.task_done()
-      
-        
-async def wait_for_enter(stop_event: asyncio.Event) -> None:
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, input, "\nPress ENTER to stop recording...\n")
-    stop_event.set()
-        
-        
-async def main() -> int:
-    """
-    Main function to run microservices found in their respective folders using the command line.
-    """
+
+        try:
+            process_latest_audio_chunk()
+        except Exception as e:
+            print(f"[AUDIO WORKER ERROR] {e}")
+        finally:
+            queue.task_done()
+
+    print("[AUDIO WORKER] Stopped")
+
+
+def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dev", action="store_true")
     args = parser.parse_args()
-    
+
     start_time = datetime.now()
-    end_time = start_time
-    
-    DEV_MODE = args.dev
-    
-    if DEV_MODE:
+
+    if args.dev:
         print("[AUDIO MODE] DEV")
-
-        audio_dir = Path(AUDIO_DIR)
-        files = [
-            p for p in audio_dir.iterdir()
-            if p.is_file() and p.suffix.lower() in AUDIO_EXTS
-        ]
-        
-        if not files:
-            print(f"[dev] No audio files found in {audio_dir} with {AUDIO_EXTS}")
-            return 0
-
-        for f in files:
-            chunked_path = _dev_wrap_audio_into_chunk(f, chunk_idx=0)
-            print(f"[dev] Processing {chunked_path}")
-            await process_audio_chunk(str(chunked_path))
-
+        process_latest_audio_chunk()
         return 0
 
-    stop_event = asyncio.Event()
-    queue = asyncio.Queue(maxsize=1) # maxsize=1 gives the latest only
-    
-    await asyncio.gather(
-        producer(queue, stop_event),
-        consumer(queue),
-        wait_for_enter(stop_event),
+    audio_queue = Queue(maxsize=2)
+
+    worker = threading.Thread(
+        target=processing_worker,
+        args=(audio_queue,),
+        daemon=True,
     )
-    
-    end_time = datetime.now()
-    total_time = end_time - start_time
-    
-    total_seconds = int(total_time.total_seconds())
+    worker.start()
+
+    stop_event = threading.Event()
+
+    def wait_for_enter():
+        input("\nPress ENTER to stop recording...\n")
+        stop_event.set()
+        print("[AUDIO MAIN] Stop requested")
+
+    threading.Thread(target=wait_for_enter, daemon=True).start()
+
+    print("[MAIN AUDIO PIPELINE] Started\n")
+
+    try:
+        while True:
+            # - record ~3 min or until stop_event
+            # - save chunk into AUDIO_CHUNKS_DIR
+            # - return True if a chunk was written
+            chunk_written = record_one_chunk(
+                output_dir=AUDIO_CHUNKS_DIR,
+                stop_event=stop_event,
+            )
+
+            if chunk_written:
+                put_latest(audio_queue, {"time": time.time()})
+                print("[MAIN AUDIO] Chunk queued")
+
+            if stop_event.is_set():
+                break
+
+    except KeyboardInterrupt:
+        print("\n[AUDIO MAIN] Interrupted")
+
+    finally:
+        print("[AUDIO MAIN] Shutting down")
+        audio_queue.put("STOP")
+        worker.join(timeout=10)
+
+    elapsed = datetime.now() - start_time
+    total_seconds = int(elapsed.total_seconds())
     minutes, seconds = divmod(total_seconds, 60)
     hours, minutes = divmod(minutes, 60)
 
-    print(f"Complete AUDIO pipeline time: {hours} hours, {minutes} minutes, and {seconds} seconds")
+    print(f"Complete AUDIO pipeline time: {hours}h {minutes}m {seconds}s")
     return 0
-    
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    raise SystemExit(main())
