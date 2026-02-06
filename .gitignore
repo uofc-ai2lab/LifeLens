@@ -3,6 +3,10 @@ data/data_p3.2/
 data/audio/processed_audio/
 jetson-containers/
 
+data/audio/unused/
+data/video/unused/
+
+
 .gitignore
 # OS / Editor
 .DS_Store
