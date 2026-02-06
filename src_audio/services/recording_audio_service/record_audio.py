@@ -2,6 +2,9 @@ import time
 from pathlib import Path
 from src_audio.domain.constants import CHUNK_SECONDS
 from src_audio.services.recording_audio_service.gstreamer_audio_pipeline import GStreamerAudioPipeline
+from config.logger import Logger
+
+log = Logger("[audio][recorder]")
 
 def record_one_chunk(output_dir: str | Path, stop_event) -> bool:
     """
@@ -24,7 +27,7 @@ def record_one_chunk(output_dir: str | Path, stop_event) -> bool:
     ts = time.strftime("%Y%m%d_%H%M%S")
     out_path = output_dir / f"recording_{ts}.wav"
 
-    print(f"[audio] Recording chunk -> {out_path}")
+    log.info(f"Recording chunk -> {out_path.name}")
 
     # Create GStreamer audio pipeline for this chunk
     pipeline = GStreamerAudioPipeline(str(out_path))
@@ -32,7 +35,7 @@ def record_one_chunk(output_dir: str | Path, stop_event) -> bool:
     try:
         # Start recording
         if not pipeline.start():
-            print(f"[audio] ERROR: Failed to start recording pipeline for {out_path}")
+            log.error(f"Failed to start recording pipeline")
             return False
 
         # Record for CHUNK_SECONDS or until stop_event is set
@@ -40,13 +43,13 @@ def record_one_chunk(output_dir: str | Path, stop_event) -> bool:
         while True:
             # Check if stop event was set (user pressed ENTER)
             if stop_event.is_set():
-                print("[audio] Stop event received, stopping chunk recording")
+                log.info("Stop event received, stopping chunk recording")
                 break
             
             # Check if chunk duration exceeded
             elapsed = time.time() - start_time
             if elapsed >= CHUNK_SECONDS:
-                print(f"[audio] Chunk duration ({elapsed:.1f}s) reached, saving chunk")
+                log.info(f"Chunk duration ({elapsed:.1f}s) reached, saving chunk")
                 break
             
             # Poll frequently to respond quickly to stop_event
@@ -57,7 +60,7 @@ def record_one_chunk(output_dir: str | Path, stop_event) -> bool:
         pipeline.cleanup()
 
     except Exception as e:
-        print(f"[audio] ERROR during chunk recording: {e}")
+        log.error(f"Error during chunk recording: {e}")
         try:
             pipeline.stop()
             pipeline.cleanup()
@@ -69,9 +72,9 @@ def record_one_chunk(output_dir: str | Path, stop_event) -> bool:
     ok = out_path.exists() and out_path.stat().st_size > 0
     if ok:
         file_size_mb = out_path.stat().st_size / (1024 * 1024)
-        print(f"[audio] ✓ Chunk written -> {out_path} ({file_size_mb:.2f}MB)")
+        log.success(f"Chunk written -> {out_path.name} ({file_size_mb:.2f}MB)")
     else:
-        print("[audio] ✗ Chunk missing or empty; skipping")
+        log.warning("Chunk missing or empty; skipping")
 
     return ok
 

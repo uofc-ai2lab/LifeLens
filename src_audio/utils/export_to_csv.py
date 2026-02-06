@@ -3,8 +3,10 @@ from pathlib import Path
 import pandas as pd
 from datetime import datetime
 from typing import List, Dict, Callable, Optional, Union
-from src_audio.domain.constants import bcolors
+from config.logger import Logger
 from src_audio.utils.format_timestamp import format_timestamp
+
+log = Logger("[audio][exporting]")
 
 def _transform_row_fn(data, columns):
     # Apply default transformations
@@ -72,9 +74,9 @@ def export_to_csv(
     # Warn if data is empty
     if not data or (isinstance(data, list) and len(data) == 0) or (isinstance(data, pd.DataFrame) and data.empty):
         if not empty_ok:
-            print(bcolors.FAIL + "ERROR: No data to export." + bcolors.ENDC)
+            log.error("No data to export")
             return
-        print(bcolors.WARNING + f"WARNING: Exporting empty CSV → {full_output_path}" + bcolors.ENDC)
+        log.warning(f"Exporting empty CSV → {full_output_path}")
     
     try:
         # Case 1: DataFrame
@@ -102,10 +104,10 @@ def export_to_csv(
                 for row in rows:
                     writer.writerow([row.get(c, "") for c in cols_to_write])
                 
-        print(bcolors.OKGREEN + f"CSV exported successfully -> {full_output_path.resolve()}" + bcolors.ENDC)
+        log.success(f"CSV exported -> {full_output_path.resolve()}")
         
     except Exception as e:
-        print(bcolors.FAIL + f"ERROR exporting CSV: {e}" + bcolors.ENDC)
+        log.error(f"Error exporting CSV: {e}")
         raise
 
     return full_output_path

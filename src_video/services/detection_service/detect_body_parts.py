@@ -4,6 +4,7 @@ from typing import List, Optional, Dict, Any
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageOps
+from config.logger import Logger
 from ultralytics import YOLO
 from huggingface_hub import snapshot_download, hf_hub_download
 import dill  # required for some legacy checkpoints
@@ -18,12 +19,14 @@ import torch  # needed for classification device selection
 # 'torso' keeps the pipeline simpler.
 PART_DEFAULT = ["face", "arm", "hand", "leg", "foot", "neck", "torso", "head"]
 
+log = Logger("[video][detection]")
+
 
 def load_model(model_path: str):
     """Load YOLO model with HF direct file preference."""
     p = Path(model_path)
     if p.exists():
-        print(f"[loader] Local weight found: {p}")
+        log.info(f"Local weight found: {p}")
         return YOLO(str(p))
     if '/' in model_path:
         repo_id = model_path.strip()
@@ -33,27 +36,27 @@ def load_model(model_path: str):
         ]
         for fname in preferred:
             try:
-                print(f"[loader] Trying hf_hub_download: {repo_id} :: {fname}")
+                log.info(f"Trying hf_hub_download: {repo_id} :: {fname}")
                 weight_path = hf_hub_download(repo_id=repo_id, filename=fname)
-                print(f"[loader] Using downloaded checkpoint: {weight_path}")
+                log.info(f"Using downloaded checkpoint: {weight_path}")
                 return YOLO(weight_path)
             except Exception as e:
-                print(f"[loader] Failed direct fetch {fname}: {e}")
+                log.warning(f"Failed direct fetch {fname}: {e}")
         try:
-            print(f"[loader] Falling back to snapshot for repo: {repo_id}")
+            log.info(f"Falling back to snapshot for repo: {repo_id}")
             repo_dir = Path(snapshot_download(repo_id=repo_id))
             pt_files = sorted(repo_dir.rglob('*.pt'))
             if not pt_files:
                 raise FileNotFoundError("No .pt weights after snapshot.")
             seg_candidates = [f for f in pt_files if 'seg' in f.name.lower()]
             chosen = seg_candidates[0] if seg_candidates else max(pt_files, key=lambda f: f.stat().st_size)
-            print(f"[loader] Using snapshot checkpoint: {chosen} ({chosen.stat().st_size/1e6:.1f}MB)")
+            log.info(f"Using snapshot checkpoint: {chosen} ({chosen.stat().st_size/1e6:.1f}MB)")
             return YOLO(str(chosen))
         except Exception as e:
-            print(f"[loader] Snapshot fallback failed: {e}")
-            print("[loader] Reverting to official yolov8n-seg.pt")
+            log.warning(f"Snapshot fallback failed: {e}")
+            log.warning("Reverting to official yolov8n-seg.pt")
             return YOLO('yolov8n-seg.pt')
-    print(f"[loader] Delegating to YOLO for spec: {model_path}")
+    log.info(f"Delegating to YOLO for spec: {model_path}")
     return YOLO(model_path)
 
 
@@ -241,7 +244,7 @@ def process_image(
     if auto_rotate_subject:
         best_deg = choose_best_rotation(model, image_np, device=device, candidate_degrees=[0, 180])
         if best_deg != 0 and debug:
-            print(f"[detect] auto_rotate_subject: using {best_deg} degrees for {image_path.name}")
+            log.debug(f"auto_rotate_subject: using {best_deg} degrees for {image_path.name}")
         image_np = rotate_image_np(image_np, best_deg)
 
     # Key for crop/annotated alignment: run YOLO on the same pixels we're cropping.
@@ -250,7 +253,7 @@ def process_image(
         predict_kwargs["device"] = device
     results = model.predict(**predict_kwargs)
 
-    print(f"Processing {image_path.name}: {len(results)} result(s)")
+    log.info(f"Processing {image_path.name}: {len(results)} result(s)")
     vis_boxes: List[tuple[int, int, int, int]] = []
     vis_labels: List[str] = []
 
@@ -269,7 +272,7 @@ def process_image(
                 Image.fromarray(annotated_img).save((output_dir / "annotated" / image_path.name))
             except Exception as e:
                 if debug:
-                    print(f"[debug] failed to plot annotated image: {e}")
+                    log.debug(f"failed to plot annotated image: {e}")
 
         names_map = result.names
         if getattr(result, "boxes", None) is None or getattr(result.boxes, "cls", None) is None:
@@ -338,7 +341,7 @@ def process_image(
                         Image.open(crops_root / filename).save(cls_dir / filename)
                     except Exception as e:
                         if debug_print:
-                            print(f"[debug] classification export failed for {filename}: {e}")
+                            log.debug(f"classification export failed for {filename}: {e}")
 
     if add_head:
         head_components: List[np.ndarray] = []
@@ -373,7 +376,7 @@ def process_image(
                             Image.open(crops_root / head_filename).save(cls_dir / head_filename)
                         except Exception as e:
                             if debug_print:
-                                print(f"[debug] classification export failed for composite head: {e}")
+                                log.debug(f"classification export failed for composite head: {e}")
 
     vis_dir = output_dir / "vis"
     ensure_dir(vis_dir)
@@ -425,7 +428,7 @@ def iterate_source(
     if (max_images is not None) and (max_images > 0):
         all_imgs = all_imgs[:max_images]
         if debug:
-            print(f"[debug] Limiting to first {len(all_imgs)} images")
+            log.debug(f"Limiting to first {len(all_imgs)} images")
     for img_path in all_imgs:
         process_image(
             model,
@@ -475,6 +478,7 @@ def run_detection(
     - `rotate_degrees`: deterministic 0/90/180/270 rotation for fixed camera setups.
     - `auto_rotate_subject`: tries 0 vs 180 and picks the best detection signal (helps upside-down photos).
     """
+    log.header("Starting Object Detection...")
     classes = PART_DEFAULT if classes is None else classes
 
     source_path = Path(source)
@@ -483,7 +487,7 @@ def run_detection(
 
     effective_add_head = bool(add_head or ("head" in classes))
     if ("head" in classes) and (not add_head):
-        print("[detect] 'head' is in classes; enabling composite head crop.")
+        log.info("'head' is in classes; enabling composite head crop.")
 
     model_obj = load_model(model)
 
@@ -521,5 +525,5 @@ def run_detection(
         "rotate_degrees": rotate_degrees,
         "auto_rotate_subject": auto_rotate_subject,
     }
-    print(f"[detect] Done. Outputs in {output_path}")
+    log.success(f"Done. Outputs in {output_path}")
     return summary

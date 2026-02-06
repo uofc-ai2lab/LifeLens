@@ -15,6 +15,9 @@ gi.require_version("Gst", "1.0")
 from gi.repository import Gst, GLib
 
 from src_audio.domain.constants import get_gstreamer_audio_pipeline
+from config.logger import Logger
+
+log = Logger("[audio][gstreamer]")
 
 
 class GStreamerAudioPipeline:
@@ -60,11 +63,11 @@ class GStreamerAudioPipeline:
         try:
             pipeline_string = get_gstreamer_audio_pipeline(self.output_file)
             
-            print(f"[GStreamer Audio] Starting pipeline: {pipeline_string}")
+            log.debug(f"Starting pipeline: {pipeline_string}")
             
             self.pipeline = Gst.parse_launch(pipeline_string)
             if not self.pipeline:
-                print("[GStreamer Audio] ERROR: Failed to create pipeline")
+                log.error("Failed to create pipeline")
                 return False
             
             self.bus = self.pipeline.get_bus()
@@ -72,15 +75,15 @@ class GStreamerAudioPipeline:
             
             ret = self.pipeline.set_state(Gst.State.PLAYING)
             if ret == Gst.StateChangeReturn.FAILURE:
-                print("[GStreamer Audio] ERROR: Failed to set pipeline to PLAYING state")
+                log.error("Failed to set pipeline to PLAYING state")
                 return False
             
             self.is_recording = True
-            print(f"[GStreamer Audio] Recording started to {self.output_file}")
+            log.success(f"Recording started to {self.output_file}")
             return True
             
         except Exception as e:
-            print(f"[GStreamer Audio] ERROR starting pipeline: {e}")
+            log.error(f"Error starting pipeline: {e}")
             return False
     
     def stop(self) -> bool:
@@ -96,14 +99,14 @@ class GStreamerAudioPipeline:
             
             ret = self.pipeline.set_state(Gst.State.NULL)
             if ret == Gst.StateChangeReturn.FAILURE:
-                print("[GStreamer Audio] WARNING: Pipeline may not have stopped cleanly")
+                log.warning("Pipeline may not have stopped cleanly")
             
             self.is_recording = False
-            print(f"[GStreamer Audio] Recording stopped. File saved to {self.output_file}")
+            log.success(f"Recording stopped. File saved to {self.output_file}")
             return True
             
         except Exception as e:
-            print(f"[GStreamer Audio] ERROR stopping pipeline: {e}")
+            log.error(f"Error stopping pipeline: {e}")
             return False
     
     def is_recording_active(self) -> bool:
@@ -128,4 +131,4 @@ class GStreamerAudioPipeline:
                 self.pipeline.set_state(Gst.State.NULL)
                 self.pipeline = None
         except Exception as e:
-            print(f"[GStreamer Audio] WARNING: Error during cleanup: {e}")
+            log.warning(f"Error during cleanup: {e}")

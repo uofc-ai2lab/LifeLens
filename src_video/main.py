@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from queue import Queue, Empty
 
+from src_audio.domain.logger import video_logger as log
+
 
 from config.video_settings import (
     load_video_pipeline_settings,
@@ -77,16 +79,16 @@ def capture_frame_from_pipeline(frame, image_save_dir: str) -> bool:
     Saves a single frame to disk from the video pipeline.
     """
     if frame is None:
-        print("[video] ERROR: No frame to save")
+        log.error("No frame to save")
         return False
     timestamp = cv2.getTickCount()
     filename = os.path.join(image_save_dir, f"captured_img_{timestamp}.jpg")
 
     if not cv2.imwrite(filename, frame):
-        print(f"[video] ERROR: Failed to save frame to {filename}")
+        log.error(f"Failed to save frame to {filename}")
         return False
     
-    print(f"[video] Frame saved to {filename}")
+    log.info(f"Frame saved to {filename}")
     return True
 
 def process_single_image(settings: Dict[str, Any]) -> bool:
@@ -108,10 +110,10 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
             classification_export_dir=None,
         )
 
-        print("[video] Detection done")
+        log.success("Detection done")
 
     except Exception as e:
-        print(f"[video object] Detection failed: {e}")
+        log.error(f"Detection failed: {e}")
         return False
 
 
@@ -132,15 +134,15 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
             body_part_label_position=int(settings["BODY_PART_LABEL_POSITION"]),
         )
 
-        print("[PIPELINE] Inference done")
+        log.success("Classification done")
 
     except Exception as e:
-        print(f"[ERROR] Inference failed: {e}")
+        log.error(f"Classification failed: {e}")
 
 
 
     if not body_ranking(settings):
-        print("[WARN] Ranking failed")
+        log.warning("Ranking failed")
 
 
     try:
@@ -156,12 +158,12 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
             draw_scores=False,
         )
         if deidentify_result.get("success"):
-            print(f"[video] De-identification complete: {deidentify_result['processed_count']} images processed.\n")
+            log.success(f"De-identification complete: {deidentify_result['processed_count']} images")
         else:
-            print(f"[video] De-identification warning: {deidentify_result.get('note', deidentify_result.get('error'))}\n")
+            log.warning(f"De-identification issue: {deidentify_result.get('note', deidentify_result.get('error'))}")
 
     except Exception as e:
-        print(f"[video] De-identification failed: {e}")
+        log.error(f"De-identification failed: {e}")
 
     try:
 
@@ -172,10 +174,10 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
             crops_root.mkdir(parents=True, exist_ok=True)
 
     except Exception as e:
-        print(f"[WARN] Cleanup failed: {e}")
+        log.warning(f"Cleanup failed: {e}")
 
 
-    print("[PIPELINE] Image processed\n")
+    log.info("Image processed")
 
     return True
 
@@ -188,7 +190,7 @@ def processing_worker(queue: Queue, settings: Dict[str, Any]):
     batch = []
     last_flush = time.time()
 
-    print("[WORKER] Batching with Queue Started")
+    log.info("Processing worker started")
 
     while True:
 
@@ -220,19 +222,19 @@ def processing_worker(queue: Queue, settings: Dict[str, Any]):
             or (now - last_flush) >= BATCH_TIMEOUT
         ):
 
-            print(f"[WORKER] Processing batch ({len(batch)})")
+            log.info(f"Processing batch ({len(batch)} jobs)")
 
             try:
                 process_single_image(settings)
 
             except Exception as e:
-                print(f"[WORKER ERROR] {e}")
+                log.error(f"Batch processing error: {e}")
 
             batch.clear()
             last_flush = now
 
 
-    print("[WORKER] Stopped")
+    log.info("Processing worker stopped")
 
 
 def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
@@ -253,7 +255,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
     settings = load_video_pipeline_settings()
 
     if DEV_MODE:
-        print("[MODE] DEV")
+        log.header("DEV Mode")
         process_single_image(settings)
         return 0
 
@@ -288,7 +290,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
 
     processing = False
 
-    print("[MAIN VIDEO PIPELINE] Started\n")
+    log.header("Video Pipeline Started")
 
 
     try:
@@ -297,12 +299,12 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
             ok, frame = read_frame_from_pipeline(video_pipeline)
 
             if not ok or frame is None:
-                print("[ERROR] Camera read failed")
+                log.error("Camera read failed")
                 break
 
             # Check if frame is valid
             if frame.size == 0:
-                print("[ERROR] Empty frame received")
+                log.error("Empty frame received")
                 continue
 
             # FPS
@@ -335,7 +337,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
                     processing = True
                     last_snap = now
 
-                    print("[MAIN] Job queued")
+                    log.success("Job queued")
 
 
             draw_overlay(frame, fps, processing)
@@ -345,18 +347,18 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
             # Single waitKey with proper ESC and 'q' handling
             key = cv2.waitKey(1) & 0xFF
             if key == 27 or key == ord('q'):
-                print("[VIDEO MAIN] Exit key pressed")
+                log.info("Exit key pressed")
                 break
 
 
     except KeyboardInterrupt:
 
-        print("\n[VIDEO MAIN] Interrupted")
+        log.info("Interrupted")
 
 
     finally:
 
-        print("[VIDEO MAIN] Shutting down")
+        log.info("Shutting down")
 
         image_queue.put("STOP")
         worker.join(timeout=5)

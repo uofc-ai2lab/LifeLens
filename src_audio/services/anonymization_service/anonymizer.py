@@ -9,6 +9,8 @@ import hmac
 import hashlib
 import base64
 import os
+from config.logger import Logger
+log = Logger("[audio][anonymizer]")
 
 class TranscriptAnonymizer:
     """
@@ -27,9 +29,11 @@ class TranscriptAnonymizer:
         Raises:
             RuntimeError: If the PHI_PSEUDONYM_KEY environment variable is not set.
         """
+        log.info("Initializing transcript anonymizer")
         self.analyzer = AnalyzerEngine()
         self.anonymizer = AnonymizerEngine()
         self.entity_operators = self._create_anonymized_entity_operators()
+        log.success("Anonymizer ready")
     
     def _create_anonymized_entity_operators(self):
         """

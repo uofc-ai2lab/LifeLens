@@ -12,6 +12,7 @@ from src_audio.services.transcription_service.transcription_whispertrt import ru
 from src_audio.services.anonymization_service.transcript_anonymization import run_anonymization
 from src_audio.services.medication_extraction_service.medication_extraction import run_medication_extraction
 from src_audio.services.intervention_extraction_service.intervention_extraction import run_intervention_extraction
+from config.logger import audio_logger as log
 
 
 def put_latest(queue: Queue, item):
@@ -44,31 +45,26 @@ def process_audio_chunk() -> bool:
         inbox = Path(AUDIO_CHUNKS_DIR)
         files = sorted([p for p in inbox.glob("*") if p.is_file()])
         if not files:
-            print("[audio] No chunks to process")
+            log.info("No chunks to process")
             return False
 
         # Process the first chunk in folder (FIFO)
         latest = files[0]
-        print(f"[audio] Found latest chunk in inbox: {latest.name}")
+        log.info(f"Found chunk: {latest.name}")
 
         # MOVE into processed folder (this also prevents reprocessing)
         chunk_path = move_chunk_to_processed(latest)
-        print(f"[audio] Moved to processed dir: {chunk_path}")
+        log.info(f"Moved to processed dir: {chunk_path}")
 
         transcript_path = run_transcription(str(chunk_path))
-        print(f"[audio] Transcription complete for {chunk_path.name}\n")
         run_anonymization(str(chunk_path), transcript_path)
-        print(f"[audio] Anonymization complete for {chunk_path.name}\n")
         run_medication_extraction(str(chunk_path), transcript_path)
-        print(f"[audio] Med Extraction complete for {chunk_path.name}\n")
         run_intervention_extraction(str(chunk_path), transcript_path)
-        print(f"[audio] Intervention Extraction complete for {chunk_path.name}\n")
-
-        print(f"[audio] {chunk_path.name} processed\n")
+        log.success(f"{chunk_path.name} processed")
         return True
 
     except Exception as e:
-        print(f"[audio ERROR] Processing failed: {e}")
+        log.error(f"Processing failed: {e}")
         return False
 
 
@@ -76,7 +72,7 @@ def processing_worker(queue: Queue):
     """
     Worker thread: waits for signals, processes audio directory.
     """
-    print("[AUDIO WORKER] Started")
+    log.info("Processing worker started")
 
     while True:
         try:
@@ -91,11 +87,11 @@ def processing_worker(queue: Queue):
         try:
             process_audio_chunk()
         except Exception as e:
-            print(f"[AUDIO WORKER ERROR] {e}")
+            log.error(f"Worker error: {e}")
         finally:
             queue.task_done()
 
-    print("[AUDIO WORKER] Stopped")
+    log.info("Processing worker stopped")
 
 
 def main() -> int:
@@ -106,7 +102,7 @@ def main() -> int:
     start_time = datetime.now()
 
     if args.dev:
-        print("[AUDIO MODE] DEV")
+        log.header("DEV Mode")
         process_audio_chunk()
         return 0
 
@@ -126,11 +122,11 @@ def main() -> int:
     def wait_for_enter():
         input("\nPress ENTER to stop recording...\n")
         stop_event.set()
-        print("[AUDIO MAIN] Stop requested")
+        log.info("Stop requested")
 
     threading.Thread(target=wait_for_enter, daemon=True).start()
 
-    print("[MAIN AUDIO PIPELINE] Started\n")
+    log.header("Audio Pipeline Started")
 
     try:
         while True:
@@ -144,21 +140,21 @@ def main() -> int:
 
             if chunk_written:
                 put_latest(audio_queue, {"time": time.time()})
-                print("[MAIN AUDIO] Chunk queued")
+                log.success("Chunk queued")
 
             if stop_event.is_set():
                 break
 
     except KeyboardInterrupt:
-        print("\n[AUDIO MAIN] Interrupted")
+        log.info("Interrupted")
 
     finally:
-        print("[AUDIO MAIN] Recording stopped. Waiting for processing to finish...")
+        log.info("Recording stopped, waiting for processing...")
         
         # Wait until worker finishes all queued work
         audio_queue.join()
 
-        print("[AUDIO MAIN] Processing finished. Shutting down worker...")
+        log.info("Processing finished, shutting down worker...")
         audio_queue.put("STOP")
         worker.join()
 
@@ -167,7 +163,7 @@ def main() -> int:
     minutes, seconds = divmod(total_seconds, 60)
     hours, minutes = divmod(minutes, 60)
 
-    print(f"Complete AUDIO pipeline time: {hours}h {minutes}m {seconds}s")
+    log.success(f"Complete pipeline time: {hours}h {minutes}m {seconds}s")
     return 0
 
 

@@ -8,11 +8,13 @@ Handles pipeline initialization, frame capture, and state management.
 import gi
 import cv2
 import os
-from typing import Optional
+from config.logger import Logger
 
 # Initialize GStreamer bindings
 gi.require_version("Gst", "1.0")
 from gi.repository import Gst
+
+log = Logger("[video][camera]")
 
 from src_video.domain.constants import (
     CAPTURE_WIDTH,
@@ -114,31 +116,31 @@ class GStreamerVideoPipeline:
                 
                 debug = os.getenv("VIDEO_CAMERA_DEBUG", "0").strip().lower() in {"1", "true", "yes", "on"}
                 if debug:
-                    print(f"[video][camera] Attempt {attempt + 1}/{max_retries}")
-                    print(f"[video][camera] GStreamer pipeline: {pipeline}")
+                    log.debug(f"Attempt {attempt + 1}/{max_retries}")
+                    log.debug(f"Pipeline: {pipeline}")
 
                 self.video_capture = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
                 if not self.video_capture.isOpened():
-                    print(f"[video][camera] Pipeline failed to open (attempt {attempt + 1}/{max_retries})")
+                    log.error(f"Pipeline failed to open (attempt {attempt + 1}/{max_retries})")
                     if attempt < max_retries - 1:
                         import time
                         time.sleep(1)
                     continue
 
-                print(f"[video][camera] Pipeline created, warming up (attempt {attempt + 1}/{max_retries})...")
+                log.info(f"Pipeline created, warming up (attempt {attempt + 1}/{max_retries})...")
                 
                 # Extended warmup sequence with more patience
                 warmup_attempts = 30
                 for i in range(warmup_attempts):
                     ok, frame = self.video_capture.read()
                     if ok and frame is not None:
-                        print(f"[video][camera] Warmup complete on frame {i+1} - camera ready")
+                        log.success(f"Warmup complete on frame {i+1} - camera ready")
                         self.is_initialized = True
                         return True
                     import time
                     time.sleep(0.1)
 
-                print(f"[video][camera] Warmup failed after {warmup_attempts} frames (attempt {attempt + 1}/{max_retries})")
+                log.warning(f"Warmup failed after {warmup_attempts} frames (attempt {attempt + 1}/{max_retries})")
                 self.video_capture.release()
                 
                 if attempt < max_retries - 1:
@@ -146,7 +148,7 @@ class GStreamerVideoPipeline:
                     time.sleep(2)
                     
             except Exception as e:
-                print(f"[video][camera] Exception during startup (attempt {attempt + 1}/{max_retries}): {e}")
+                log.error(f"Exception during startup (attempt {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
                     import time
                     time.sleep(1)

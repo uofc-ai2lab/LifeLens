@@ -2,13 +2,18 @@ from transformers import AutoTokenizer, AutoModelForTokenClassification
 import torch
 from src_audio.domain.entities import MedicationEntity
 from src_audio.utils.calculate_mean import mean
+from config.logger import Logger
+
+log = Logger("[audio][medication]")
 
 class MedicationExtractor:
     def __init__(self):
+        log.info("Loading biomedical NER model for medication extraction")
         self.NER_MODEL = "d4data/biomedical-ner-all" # pretrained biomedical NER model
         self.model = AutoModelForTokenClassification.from_pretrained(self.NER_MODEL)
         self.tokenizer = AutoTokenizer.from_pretrained(self.NER_MODEL, use_fast=True)
         self.model.eval()
+        log.success("NER model ready")
 
     def _run_ner(self, text):
         """

@@ -3,9 +3,9 @@
 import time 
 import cv2
 import os
+from config.logger import Logger
 from config.video_settings import IMAGE_SAVE_DIR
 from src_video.domain.constants import (
-    # Camera settings
     CAPTURE_WIDTH,
     CAPTURE_HEIGHT,
     DISPLAY_WIDTH,
@@ -14,6 +14,8 @@ from src_video.domain.constants import (
     FRAME_RATE,
     FLIP_METHOD
     )
+
+log = Logger("[video][camera]")
 
 """ 
 gstreamer_pipeline returns a GStreamer pipeline for capturing from the CSI camera
@@ -55,7 +57,7 @@ def capture_images(video_capture):
     ret_val, frame = video_capture.read()
 
     if not ret_val or frame is None:
-        print("Error: Failed to capture frame.")
+        log.error("Failed to capture frame")
         return False
     
 
@@ -63,10 +65,10 @@ def capture_images(video_capture):
     filename = os.path.join(IMAGE_SAVE_DIR, f"captured_img_{timestamp}.jpg")
 
     if not cv2.imwrite(filename, frame):
-        print("Error: Failed to save image.")
+        log.error("Failed to save image")
         return False
 
-    print(f"Image saved as {filename}")
+    log.info(f"Image saved as {filename}")
     return True
 
 
@@ -90,7 +92,7 @@ def initialize_camera(flip_method: int = 0) -> cv2.VideoCapture:
             flip_method=flip_method,
         )
         if debug:
-            print(f"[video][camera] gstreamer pipeline: {pipeline}")
+            log.debug(f"gstreamer pipeline: {pipeline}")
 
         video_capture = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
         if not video_capture.isOpened():
@@ -102,7 +104,7 @@ def initialize_camera(flip_method: int = 0) -> cv2.VideoCapture:
         for _ in range(20):
             ok, frame = video_capture.read()
             if ok and frame is not None:
-                print("[CAMERA] Started successfully\n")
+                log.success("Camera started successfully")
                 return video_capture
             last_err = "read() returned no frame"
             time.sleep(0.05)

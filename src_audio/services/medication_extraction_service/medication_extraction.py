@@ -6,6 +6,9 @@ from src_audio.domain.constants import ROUTES, LOW_CONFIDENCE_SCORE, HIGH_CONFID
 from src_audio.domain.entities import MedicationEntity, MedicationAdministration
 from src_audio.services.medication_extraction_service.extractor import MedicationExtractor
 from src_audio.services.medication_extraction_service.postprocessing import postprocess_entities, fallback_dosage_or_route
+from config.logger import Logger
+
+log = Logger("[audio][medication]")
 
 def build_medication_record(
     ent: MedicationEntity, 
@@ -145,9 +148,12 @@ def run_medication_extraction(chunk_path: str, transcript_path: str) -> None:
     Returns:
         None
     """
+    log.header("Starting Medication Extraction...")
     extractor = MedicationExtractor()
     transcript_data = []
     df = load_csv_file(transcript_path)
+    log.info(f"Processing {len(df)} segments")
+    
     for _, row in df.iterrows():
         extracted_entities = extractor.extract_medication_info_from_ner(row["text"])
         extracted_entities = postprocess_entities(extracted_entities, row["text"])
@@ -170,3 +176,5 @@ def run_medication_extraction(chunk_path: str, transcript_path: str) -> None:
         columns=MED_COLUMNS,
         empty_ok=True,
     )
+    log.info(f"{len(rows)} medications found")
+    log.success("Medication extraction completed successfully!")

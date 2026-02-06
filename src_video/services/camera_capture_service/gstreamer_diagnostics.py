@@ -8,6 +8,9 @@ Helps identify buffer memory problems, daemon issues, and configuration problems
 import subprocess
 import os
 import sys
+from config.logger import Logger
+
+log = Logger("[video][diag]")
 
 
 def check_nvargus_daemon() -> bool:
@@ -26,10 +29,10 @@ def check_nvargus_daemon() -> bool:
         )
         is_running = result.returncode == 0
         status = "✓ Running" if is_running else "✗ Not running"
-        print(f"[DIAG] nvargus-daemon: {status}")
+        log.info(f"nvargus-daemon: {status}")
         return is_running
     except Exception as e:
-        print(f"[DIAG] Error checking nvargus-daemon: {e}")
+        log.error(f"Error checking nvargus-daemon: {e}")
         return False
 
 
@@ -43,16 +46,16 @@ def check_camera_device() -> bool:
     try:
         camera_exists = os.path.exists("/dev/video0")
         status = "✓ Exists" if camera_exists else "✗ Not found"
-        print(f"[DIAG] /dev/video0: {status}")
+        log.info(f"/dev/video0: {status}")
         
         if camera_exists:
             camera_readable = os.access("/dev/video0", os.R_OK)
             readable_status = "✓ Readable" if camera_readable else "✗ Not readable"
-            print(f"[DIAG] /dev/video0 permission: {readable_status}")
+            log.info(f"/dev/video0 permission: {readable_status}")
             return camera_readable
         return False
     except Exception as e:
-        print(f"[DIAG] Error checking camera device: {e}")
+        log.error(f"Error checking camera device: {e}")
         return False
 
 
@@ -72,17 +75,17 @@ def check_camera_in_use() -> bool:
         )
         in_use = result.returncode == 0
         if in_use:
-            print("[DIAG] Camera in use by:")
-            print(result.stdout)
+            log.warning("Camera in use by:")
+            log.info(result.stdout.strip())
             return True
         else:
-            print("[DIAG] Camera: ✓ Available (not in use)")
+            log.info("Camera: ✓ Available (not in use)")
             return False
     except subprocess.CalledProcessError:
-        print("[DIAG] Camera: ✓ Available (not in use)")
+        log.info("Camera: ✓ Available (not in use)")
         return False
     except Exception as e:
-        print(f"[DIAG] Error checking camera usage: {e}")
+        log.error(f"Error checking camera usage: {e}")
         return False
 
 
@@ -105,10 +108,10 @@ def check_gstreamer_plugin(plugin_name: str) -> bool:
         )
         available = result.returncode == 0
         status = "✓ Available" if available else "✗ Not found"
-        print(f"[DIAG] GStreamer plugin '{plugin_name}': {status}")
+        log.info(f"GStreamer plugin '{plugin_name}': {status}")
         return available
     except Exception as e:
-        print(f"[DIAG] Error checking GStreamer plugin '{plugin_name}': {e}")
+        log.error(f"Error checking GStreamer plugin '{plugin_name}': {e}")
         return False
 
 
@@ -126,7 +129,7 @@ def check_gstreamer_plugins() -> dict:
         "appsink": False,
     }
     
-    print("\n[DIAG] Checking GStreamer plugins...")
+    log.info("Checking GStreamer plugins...")
     for plugin in plugins.keys():
         plugins[plugin] = check_gstreamer_plugin(plugin)
     
@@ -153,10 +156,10 @@ def check_system_memory() -> tuple:
         available = int(mem_info[6])
         percent_used = ((total - available) / total) * 100
         
-        print(f"[DIAG] System Memory: {available}MB / {total}MB available ({percent_used:.1f}% used)")
+        log.info(f"System Memory: {available}MB / {total}MB available ({percent_used:.1f}% used)")
         return total, available, percent_used
     except Exception as e:
-        print(f"[DIAG] Error checking system memory: {e}")
+        log.error(f"Error checking system memory: {e}")
         return 0, 0, 0
 
 
@@ -176,13 +179,13 @@ def check_nvargus_daemon_logs() -> None:
         relevant_lines = [l for l in lines if 'nvargus' in l.lower() or 'video' in l.lower()]
         
         if relevant_lines:
-            print("\n[DIAG] Recent dmesg entries related to nvargus/video:")
+            log.info("Recent dmesg entries related to nvargus/video:")
             for line in relevant_lines[-10:]:
-                print(f"       {line}")
+                log.info(f"       {line}")
         else:
-            print("[DIAG] No recent nvargus/video entries in dmesg")
+            log.info("No recent nvargus/video entries in dmesg")
     except Exception as e:
-        print(f"[DIAG] Error checking dmesg: {e}")
+        log.error(f"Error checking dmesg: {e}")
 
 
 def run_full_diagnostics() -> bool:
@@ -192,9 +195,7 @@ def run_full_diagnostics() -> bool:
     Returns:
         bool: True if all checks pass, False if any check fails
     """
-    print("\n" + "="*60)
-    print("GStreamer Camera Diagnostics")
-    print("="*60 + "\n")
+    log.header("GStreamer Camera Diagnostics")
     
     # Basic checks
     daemon_ok = check_nvargus_daemon()
@@ -212,26 +213,22 @@ def run_full_diagnostics() -> bool:
     check_nvargus_daemon_logs()
     
     # Summary
-    print("\n" + "-"*60)
-    print("Summary:")
-    print("-"*60)
+    log.info("Summary:")
     all_ok = daemon_ok and camera_ok and plugins_ok and not camera_in_use
     
     if all_ok:
-        print("✓ All checks passed. Camera should be ready to use.")
+        log.success("All checks passed. Camera should be ready to use.")
     else:
-        print("✗ Some checks failed. Troubleshooting required:")
+        log.warning("Some checks failed. Troubleshooting required:")
         if not daemon_ok:
-            print("  - Run: sudo systemctl restart nvargus-daemon")
+            log.info("  - Run: sudo systemctl restart nvargus-daemon")
         if not camera_ok:
-            print("  - Check camera connection and ribbon cable")
+            log.info("  - Check camera connection and ribbon cable")
         if camera_in_use:
-            print("  - Stop other processes using the camera")
+            log.info("  - Stop other processes using the camera")
         if not plugins_ok:
-            print("  - Install missing GStreamer plugins")
-            print("    For NVIDIA Jetson, check CUDA/JetPack installation")
-    
-    print("-"*60 + "\n")
+            log.info("  - Install missing GStreamer plugins")
+            log.info("    For NVIDIA Jetson, check CUDA/JetPack installation")
     return all_ok
 
 
