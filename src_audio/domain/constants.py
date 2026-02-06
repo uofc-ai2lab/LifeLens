@@ -13,9 +13,33 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
+### ------------------------------- AUDIO RECORDING SERVICE ------------------------------- ###
 AUDIO_EXTS = {".wav", ".mp3", ".m4a", ".flac"}
 
+MAX_RECORD_SECONDS = 300  # 5 minutes
+RECORDING_DIR = "/home/capstone/recordings"
+SIGNAL_FILE = os.path.join(RECORDING_DIR, "recording_done.flag")
 
+# GStreamer Audio Pipeline Configuration
+ARECORD_DEVICE = "hw:CARD=ArrayUAC10,DEV=0"
+AUDIO_SAMPLE_RATE = 16000
+AUDIO_CHANNELS = 6
+AUDIO_FORMAT = "S16LE"
+CHUNK_SECONDS=20
+
+def get_gstreamer_audio_pipeline(output_file: str) -> str:
+    """
+    Returns a GStreamer pipeline for audio recording from multi-channel USB audio device.
+    """
+    return (
+        f"alsasrc device={ARECORD_DEVICE} ! "
+        f"audioconvert ! "
+        f"audioresample ! "
+        f"audio/x-raw,format={AUDIO_FORMAT},rate={AUDIO_SAMPLE_RATE},channels={AUDIO_CHANNELS} ! "
+        f"wavenc ! "
+        f"filesink location={output_file}"
+    )
+    
 ### ------------------------------- INTERVENTION SERVICE ------------------------------- ###
 INTERVENTIONS = {
     "CPR": ["cardiopulmonary resuscitation", "cpr", "chest compressions"],
@@ -153,34 +177,3 @@ MED_COLUMNS = [
     "route (confidence score)",
     "full_text"
 ]
-
-### ------------------------------- AUDIO RECORDING SERVICE ------------------------------- ###
-MAX_RECORD_SECONDS = 300  # 5 minutes
-RECORDING_DIR = "/home/capstone/recordings"
-SIGNAL_FILE = os.path.join(RECORDING_DIR, "recording_done.flag")
-
-# GStreamer Audio Pipeline Configuration
-ARECORD_DEVICE = "hw:CARD=ArrayUAC10,DEV=0"
-AUDIO_SAMPLE_RATE = 16000
-AUDIO_CHANNELS = 6
-AUDIO_FORMAT = "S16LE"
-CHUNK_SECONDS=20
-
-def get_gstreamer_audio_pipeline(output_file: str) -> str:
-    """
-    Returns a GStreamer pipeline for audio recording from multi-channel USB audio device.
-    
-    Args:
-        output_file: Path to write the output WAV file
-    
-    Returns:
-        GStreamer pipeline string for audio capture and recording
-    """
-    return (
-        f"alsasrc device={ARECORD_DEVICE} ! "
-        f"audioconvert ! "
-        f"audioresample ! "
-        f"audio/x-raw,format={AUDIO_FORMAT},rate={AUDIO_SAMPLE_RATE},channels={AUDIO_CHANNELS} ! "
-        f"wavenc ! "
-        f"filesink location={output_file}"
-    )

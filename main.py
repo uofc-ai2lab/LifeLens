@@ -7,7 +7,7 @@ from pathlib import Path
 from src_audio.main import main as audio_main
 from src_video.main import main as video_main
 from src_video.services.camera_capture_service.gstreamer_video_pipeline import GStreamerVideoPipeline
-from config.audio_settings import IS_JETSON
+from config.audio_settings import IS_JETSON, STARTUP_SCRIPT_PATH
 """
 Dual GStreamer Pipeline Architecture
 =====================================
@@ -81,13 +81,12 @@ def run_video_pipeline(video_ready: threading.Event, video_failed: threading.Eve
 
 def run_jetson_startup_tasks():
     """Run Jetson-specific startup tasks via external script."""
-    script_path = Path(__file__).parent / "scripts" / "run_jetson_startup_tasks.sh"
-    if not script_path.exists():
-        print(f"[root] WARNING: Startup script not found: {script_path}")
+    if not STARTUP_SCRIPT_PATH.exists():
+        print(f"[root] WARNING: Startup script not found: {STARTUP_SCRIPT_PATH}")
         return
     
     try:
-        subprocess.run(["bash", str(script_path)], check=True)
+        subprocess.run(["bash", str(STARTUP_SCRIPT_PATH)], check=True)
     except subprocess.CalledProcessError as e:
         print(f"[root] ERROR: Startup tasks failed with exit code {e.returncode}")
         raise
@@ -107,10 +106,9 @@ def main():
     - Error handling and cleanup
     - Timing statistics
     """
-    # Run Jetson startup tasks if on Jetson platform
-    if IS_JETSON:
-        print("[root] Jetson detected. Running startup tasks...")
-        run_jetson_startup_tasks()
+
+    print("[root] Running startup tasks...")
+    run_jetson_startup_tasks()
     
     start_time = time.time()
 

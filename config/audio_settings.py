@@ -22,6 +22,7 @@ os.makedirs(AUDIO_DIR, exist_ok=True)
 os.makedirs(AUDIO_CHUNKS_DIR, exist_ok=True)
 os.makedirs(PROCESSED_AUDIO_DIR, exist_ok=True)
 
+STARTUP_SCRIPT_PATH = BASE_DIR / "scripts" / "run_jetson_startup_tasks.sh"
 
 # -------------------------
 # Audio / Transcription
@@ -58,14 +59,3 @@ else:
     print("MEDCAT DISABLED. Please enable prior to running intervention extraction.")
     MODEL_PACK = None
     NLP = None
-
-ENABLE_SEMANTIC_FILTERING = int(os.getenv("ENABLE_SEMANTIC_FILTERING", "0"))
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", None)
-GENAI_MODEL = None
-GENAI_CLIENT = None
-
-if ENABLE_SEMANTIC_FILTERING:
-    if not GOOGLE_API_KEY:
-        print("Error: GOOGLE_API_KEY or GEMINI_API_KEY not found in environment variables.")
-    GENAI_MODEL = "gemini-flash-latest"
-    GENAI_CLIENT = genai.Client()
