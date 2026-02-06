@@ -60,13 +60,6 @@ def release_pipeline(pipeline):
     elif hasattr(pipeline, "release"):
         pipeline.release()
 
-
-def save_frame(frame) -> bool:
-    timestamp = cv2.getTickCount()
-    filename = os.path.join(IMAGE_SAVE_DIR, f"captured_img_{timestamp}.jpg")
-    return cv2.imwrite(filename, frame)
-
-
 def capture_frame_from_pipeline(frame, image_save_dir: str) -> bool:
     """
     Saves a single frame to disk from the video pipeline.

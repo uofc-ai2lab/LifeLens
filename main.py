@@ -2,7 +2,6 @@ import asyncio
 import threading
 import time
 import subprocess
-from pathlib import Path
 
 from src_audio.main import main as audio_main
 from src_video.main import main as video_main
