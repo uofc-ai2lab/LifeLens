@@ -8,12 +8,10 @@ import cv2
 import argparse
 
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from queue import Queue, Empty
 
-from src_audio.domain.logger import video_logger as log
-
-
+from config.logger import video_logger as log
 from config.video_settings import (
     load_video_pipeline_settings,
     SNAPSHOT_INTERVAL,
@@ -22,20 +20,13 @@ from config.video_settings import (
 
 from src_video.services.detection_service.detect_body_parts import run_detection
 from src_video.services.body_ranking.body_injury_ranking import body_ranking
-from src_video.services.classification_service.infer_injuries_on_crops import (
-    predict_injuries_on_detection_crops,
-)
+from src_video.services.classification_service.infer_injuries_on_crops import predict_injuries_on_detection_crops
 from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
 from src_video.services.camera_capture_service.capture_img import (
-    gstreamer_pipeline,
-    capture_images,
     initialize_camera,
     draw_overlay
 )
-from src_video.services.camera_capture_service.gstreamer_video_pipeline import GStreamerVideoPipeline
-
-
 
 def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")
@@ -51,6 +42,7 @@ def put_latest(queue: Queue, item):
         except Empty:
             pass
     queue.put(item)
+
 
 def read_frame_from_pipeline(pipeline):
     """Read a frame from either VideoCapture or GStreamerVideoPipeline."""
@@ -68,11 +60,12 @@ def release_pipeline(pipeline):
     elif hasattr(pipeline, "release"):
         pipeline.release()
 
+
 def save_frame(frame) -> bool:
     timestamp = cv2.getTickCount()
     filename = os.path.join(IMAGE_SAVE_DIR, f"captured_img_{timestamp}.jpg")
-
     return cv2.imwrite(filename, frame)
+
 
 def capture_frame_from_pipeline(frame, image_save_dir: str) -> bool:
     """
@@ -92,9 +85,7 @@ def capture_frame_from_pipeline(frame, image_save_dir: str) -> bool:
     return True
 
 def process_single_image(settings: Dict[str, Any]) -> bool:
-
     try:
-
         run_detection(
             model=settings["DETECTION_MODEL"],
             source=_as_posix(IMAGE_SAVE_DIR),
@@ -116,11 +107,8 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
         log.error(f"Detection failed: {e}")
         return False
 
-
     try:
-
         crops_root = Path(settings["CROPS_ROOT"])
-
         infer_summary = predict_injuries_on_detection_crops(
             crops_root=_as_posix(str(crops_root)),
             checkpoint_path=str(settings["INJURY_CHECKPOINT_PATH"]),
@@ -139,14 +127,10 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
     except Exception as e:
         log.error(f"Classification failed: {e}")
 
-
-
     if not body_ranking(settings):
         log.warning("Ranking failed")
 
-
     try:
-
         deidentify_result = run_deidentification(
             input_dir=_as_posix(IMAGE_SAVE_DIR),
             output_dir=_as_posix(str(Path(settings["DETECTION_OUTPUT"]) / "deidentified")),
@@ -166,9 +150,7 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
         log.error(f"De-identification failed: {e}")
 
     try:
-
         crops_root = Path(settings["CROPS_ROOT"])
-
         if crops_root.exists():
             shutil.rmtree(crops_root)
             crops_root.mkdir(parents=True, exist_ok=True)
@@ -176,30 +158,24 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
     except Exception as e:
         log.warning(f"Cleanup failed: {e}")
 
-
     log.info("Image processed")
-
     return True
 
 
 def processing_worker(queue: Queue, settings: Dict[str, Any]):
-
     BATCH_SIZE = 2
     BATCH_TIMEOUT = 2.0
-
     batch = []
     last_flush = time.time()
 
     log.info("Processing worker started")
 
     while True:
-
         try:
             job = queue.get(timeout=0.5)
 
         except Empty:
             job = None
-
 
         # Shutdown
         if job is None and batch:
@@ -211,7 +187,6 @@ def processing_worker(queue: Queue, settings: Dict[str, Any]):
             queue.task_done()
             break
 
-
         batch.append(job)
         queue.task_done()
 
@@ -221,23 +196,19 @@ def processing_worker(queue: Queue, settings: Dict[str, Any]):
             len(batch) >= BATCH_SIZE
             or (now - last_flush) >= BATCH_TIMEOUT
         ):
-
             log.info(f"Processing batch ({len(batch)} jobs)")
-
             try:
                 process_single_image(settings)
-
             except Exception as e:
                 log.error(f"Batch processing error: {e}")
 
             batch.clear()
             last_flush = now
 
-
     log.info("Processing worker stopped")
 
 
-def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
+def main() -> int:
     """
     Main video processing pipeline.
     
@@ -249,12 +220,10 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dev", action="store_true")
     args = parser.parse_args()
-
-    DEV_MODE = args.dev
-
+    
     settings = load_video_pipeline_settings()
 
-    if DEV_MODE:
+    if args.dev:
         log.header("DEV Mode")
         process_single_image(settings)
         return 0
@@ -276,12 +245,9 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
     )
 
     worker.start()
-
     window = "CSI Camera"
-
     cv2.namedWindow(window, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(window, 960, 540)
-
 
     last_snap = 0
     frame_count = 0
@@ -289,15 +255,11 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
     fps = 0.0
 
     processing = False
-
     log.header("Video Pipeline Started")
-
 
     try:
         while True:
-
             ok, frame = read_frame_from_pipeline(video_pipeline)
-
             if not ok or frame is None:
                 log.error("Camera read failed")
                 break
@@ -316,10 +278,8 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
                 frame_count = 0
                 start_time = time.time()
 
-
             # Marker detection
             detected = detect_apriltags(frame)
-
             now = time.time()
 
             # Capture
@@ -333,7 +293,6 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
                     }
 
                     put_latest(image_queue, job)
-
                     processing = True
                     last_snap = now
 
@@ -341,7 +300,6 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
 
 
             draw_overlay(frame, fps, processing)
-
             cv2.imshow(window, frame)
             
             # Single waitKey with proper ESC and 'q' handling
@@ -352,14 +310,10 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
 
 
     except KeyboardInterrupt:
-
         log.info("Interrupted")
 
-
     finally:
-
         log.info("Shutting down")
-
         image_queue.put("STOP")
         worker.join(timeout=5)
 
@@ -369,10 +323,8 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
         
         cv2.destroyAllWindows()
 
-
     return 0
 
 if __name__ == "__main__":
-
     raise SystemExit(main())
 

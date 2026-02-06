@@ -5,10 +5,7 @@ Provides GStreamer-based audio recording using alsasrc (ALSA audio input).
 Handles multi-channel USB audio device recording with proper pipeline management.
 """
 
-import gi
-import os
-import time
-from typing import Optional
+import gi, os
 
 # Initialize GStreamer bindings
 gi.require_version("Gst", "1.0")
@@ -27,8 +24,6 @@ class GStreamerAudioPipeline:
     Features:
     - Multi-channel audio capture from USB audio devices
     - Automatic WAV encoding
-    - Proper pipeline state management
-    - Thread-safe operation
     """
     
     def __init__(self, output_file: str):
@@ -54,12 +49,8 @@ class GStreamerAudioPipeline:
             os.makedirs(output_dir, exist_ok=True)
     
     def start(self) -> bool:
-        """
-        Start the audio recording pipeline.
+        """Start the audio recording pipeline."""
         
-        Returns:
-            bool: True if pipeline started successfully, False otherwise
-        """
         try:
             pipeline_string = get_gstreamer_audio_pipeline(self.output_file)
             
@@ -87,12 +78,7 @@ class GStreamerAudioPipeline:
             return False
     
     def stop(self) -> bool:
-        """
-        Stop the audio recording pipeline.
-        
-        Returns:
-            bool: True if pipeline stopped successfully, False otherwise
-        """
+        """Stop the audio recording pipeline."""
         try:
             if self.pipeline is None:
                 return False
@@ -110,12 +96,7 @@ class GStreamerAudioPipeline:
             return False
     
     def is_recording_active(self) -> bool:
-        """
-        Check if the pipeline is actively recording.
-        
-        Returns:
-            bool: True if recording is active
-        """
+        """Check if the pipeline is actively recording."""
         if self.pipeline is None:
             return False
         

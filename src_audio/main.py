@@ -24,6 +24,7 @@ def put_latest(queue: Queue, item):
             pass
     queue.put(item)
 
+
 def move_chunk_to_processed(chunk_path: Path) -> Path:
     """
     Move chunk file from AUDIO_CHUNKS_DIR into: PROCESSED_AUDIO_DIR/<chunk_stem>/<chunk_filename>
@@ -36,6 +37,7 @@ def move_chunk_to_processed(chunk_path: Path) -> Path:
     dest_path = dest_dir / chunk_path.name
     chunk_path.replace(dest_path)
     return dest_path
+
 
 def process_audio_chunk() -> bool:
     """
@@ -130,9 +132,6 @@ def main() -> int:
 
     try:
         while True:
-            # - record ~3 min or until stop_event
-            # - save chunk into AUDIO_CHUNKS_DIR
-            # - return True if a chunk was written
             chunk_written = record_one_chunk(
                 output_dir=AUDIO_CHUNKS_DIR,
                 stop_event=stop_event,
@@ -150,8 +149,6 @@ def main() -> int:
 
     finally:
         log.info("Recording stopped, waiting for processing...")
-        
-        # Wait until worker finishes all queued work
         audio_queue.join()
 
         log.info("Processing finished, shutting down worker...")

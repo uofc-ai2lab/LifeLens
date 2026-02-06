@@ -9,8 +9,7 @@ log = Logger("[audio][recorder]")
 def record_one_chunk(output_dir: str | Path, stop_event) -> bool:
     """
     Records ONE audio chunk using GStreamer pipeline.
-    
-    Records for CHUNK_SECONDS (180s) or until stop_event is set.
+    Records for CHUNK_SECONDS or until stop_event is set.
     Saves the chunk as WAV file in output_dir.
     
     Args:
@@ -23,14 +22,13 @@ def record_one_chunk(output_dir: str | Path, stop_event) -> bool:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Generate timestamped filename
     ts = time.strftime("%Y%m%d_%H%M%S")
-    out_path = output_dir / f"recording_{ts}.wav"
+    output_path = output_dir / f"recording_{ts}.wav"
 
-    log.info(f"Recording chunk -> {out_path.name}")
+    log.info(f"Recording chunk -> {output_path.name}")
 
     # Create GStreamer audio pipeline for this chunk
-    pipeline = GStreamerAudioPipeline(str(out_path))
+    pipeline = GStreamerAudioPipeline(str(output_path))
 
     try:
         # Start recording
@@ -52,10 +50,8 @@ def record_one_chunk(output_dir: str | Path, stop_event) -> bool:
                 log.info(f"Chunk duration ({elapsed:.1f}s) reached, saving chunk")
                 break
             
-            # Poll frequently to respond quickly to stop_event
             time.sleep(0.1)
 
-        # Stop recording
         pipeline.stop()
         pipeline.cleanup()
 
@@ -68,11 +64,10 @@ def record_one_chunk(output_dir: str | Path, stop_event) -> bool:
             pass
         return False
 
-    # Verify chunk was written successfully
-    ok = out_path.exists() and out_path.stat().st_size > 0
+    ok = output_path.exists() and output_path.stat().st_size > 0
     if ok:
-        file_size_mb = out_path.stat().st_size / (1024 * 1024)
-        log.success(f"Chunk written -> {out_path.name} ({file_size_mb:.2f}MB)")
+        file_size_mb = output_path.stat().st_size / (1024 * 1024)
+        log.success(f"Chunk written -> {output_path.name} ({file_size_mb:.2f}MB)")
     else:
         log.warning("Chunk missing or empty; skipping")
 

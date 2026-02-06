@@ -25,7 +25,6 @@ from src_video.domain.constants import (
     FLIP_METHOD,
 )
 
-
 def get_gstreamer_video_pipeline(
     sensor_id: int = 0,
     capture_width: int = CAPTURE_WIDTH,
