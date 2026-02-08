@@ -120,6 +120,7 @@ If operating on a jetson-nano, also install jetson-specific dependencies:
 ```sh
 pip install -r requirements-jetson.txt
 sudo pip install ultralytics --no-deps 
+sudo pip install deface --no-deps
 #Need to manually install ultralytics due to dependency issues 
 ```
 

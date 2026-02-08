@@ -30,23 +30,14 @@ class AprilTagDetection:
 #basic body parts that will be updated with real patient info
 def create_body_parts():
     return {
-        "head": {"image_id": None, "injury_pred": None, "accuracy": None},
-        "face": {"image_id": None, "injury_pred": None, "accuracy": None},
-        "neck": {"image_id": None, "injury_pred": None, "accuracy": None},
-        "arm": {"image_id": None, "injury_pred": None, "accuracy": None},
-        "left-arm": {"image_id": None, "injury_pred": None, "accuracy": None},
-        "right-arm": {"image_id": None, "injury_pred": None, "accuracy": None},
-        "hand": {"image_id": None, "injury_pred": None, "accuracy": None},
-        "left-hand": {"image_id": None, "injury_pred": None, "accuracy": None},
-        "right-hand": {"image_id": None, "injury_pred": None, "accuracy": None},
-        "chest": {"image_id": None, "injury_pred": None, "accuracy": None},
-        "abdomen": {"image_id": None, "injury_pred": None, "accuracy": None},
-        "back": {"image_id": None, "injury_pred": None, "accuracy": None},
-        "leg": {"image_id": None, "injury_pred": None, "accuracy": None},
-        "left-leg": {"image_id": None, "injury_pred": None, "accuracy": None},
-        "right-leg": {"image_id": None, "injury_pred": None, "accuracy": None},
-        "foot": {"image_id": None, "injury_pred": None, "accuracy": None},
-        "left-foot": {"image_id": None, "injury_pred": None, "accuracy": None},
-        "right-foot": {"image_id": None, "injury_pred": None, "accuracy": None},
+        "head": {"injuries": {}},
+        "face": {"injuries": {}},
+        "neck": {"injuries": {}},
+        "arm": {"injuries": {}},
+        "hand": {"injuries": {}},
+        "chest": {"injuries": {}},
+        "abdomen": {"injuries": {}},
+        "back": {"injuries": {}},
+        "leg": {"injuries": {}},
+        "foot": {"injuries": {}},
     }
-
