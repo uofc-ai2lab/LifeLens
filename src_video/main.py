@@ -227,6 +227,7 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
             alpha_png=bool(settings["ALPHA_PNG"]),
             max_images=int(settings["MAX_IMAGES"]),
             classification_export_dir=None,
+            side_labels=bool(settings.get("SIDE_LABELS", True)),
         )
         print("\n[video] Detection finished.\n")
 

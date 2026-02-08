@@ -301,6 +301,10 @@ Create your local `.env` in the repo root (as described above) and set at minimu
 - `PIPELINE_ROOT` (defaults to `data/video/output_files`)
 - `PIPELINE_DETECTION_OUTPUT` (defaults to `data/video/output_files/DetectionOutput`)
 - `PIPELINE_INJURY_CHECKPOINT` (checkpoint used for injury inference)
+- `PIPELINE_SIDE_LABELS` (defaults to `true`; set to `false` to disable `left-*` / `right-*` limb labels)
+
+When `PIPELINE_SIDE_LABELS=true` (default), limb crops are named `left-arm` / `right-arm` (same for hand/leg/foot).
+This is currently a heuristic based on the detected torso/head midline in the image (camera POV).
 
 ## Running the Video Pipeline
 

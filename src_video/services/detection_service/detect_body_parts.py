@@ -19,6 +19,69 @@ import torch  # needed for classification device selection
 PART_DEFAULT = ["face", "arm", "hand", "leg", "foot", "neck", "torso", "head"]
 
 
+_SIDEABLE_PARTS = {"arm", "hand", "leg", "foot"}
+_MIDLINE_PARTS = {"torso", "head", "face", "neck"}
+
+
+def _bbox_center_x(bbox: tuple[int, int, int, int]) -> float:
+    x1, _, x2, _ = bbox
+    return (float(x1) + float(x2)) * 0.5
+
+
+def _bbox_area(bbox: tuple[int, int, int, int]) -> float:
+    x1, y1, x2, y2 = bbox
+    w = max(0.0, float(x2) - float(x1))
+    h = max(0.0, float(y2) - float(y1))
+    return w * h
+
+
+def _compute_body_midline_x(results, image_width: int) -> float:
+    """Estimate body midline in image coordinates.
+
+    Heuristic: weighted average of center-x for torso/head/face/neck detections.
+    This yields *image-left/right* (camera POV), not guaranteed anatomical left/right.
+    """
+    weighted_sum = 0.0
+    weight = 0.0
+
+    for result in results:
+        if getattr(result, "boxes", None) is None or getattr(result.boxes, "cls", None) is None:
+            continue
+        names_map = getattr(result, "names", {})
+        try:
+            cls_ids = result.boxes.cls.cpu().numpy().astype(int)
+            xyxy_boxes = result.boxes.xyxy.cpu().numpy()
+        except Exception:
+            continue
+
+        for idx, cls_id in enumerate(cls_ids):
+            if idx >= len(xyxy_boxes):
+                continue
+            cls_name = names_map.get(int(cls_id), str(cls_id))
+            if cls_name not in _MIDLINE_PARTS:
+                continue
+            x1, y1, x2, y2 = xyxy_boxes[idx].tolist()
+            bbox = (int(round(x1)), int(round(y1)), int(round(x2)), int(round(y2)))
+            area = _bbox_area(bbox)
+            if area <= 1.0:
+                continue
+            weighted_sum += _bbox_center_x(bbox) * area
+            weight += area
+
+    if weight > 0.0:
+        return float(weighted_sum / weight)
+    return float(image_width) * 0.5
+
+
+def _label_with_side(cls_name: str, bbox: tuple[int, int, int, int], midline_x: float) -> str:
+    """Return a label like 'left-arm' / 'right-arm' for side-able parts."""
+    if cls_name not in _SIDEABLE_PARTS:
+        return cls_name
+    side = "left" if _bbox_center_x(bbox) < float(midline_x) else "right"
+    # Use '-' so downstream filename parsing (split on '_') keeps this as one token.
+    return f"{side}-{cls_name}"
+
+
 def load_model(model_path: str):
     """Load YOLO model with HF direct file preference."""
     p = Path(model_path)
@@ -220,6 +283,7 @@ def process_image(
     auto_rotate_subject: bool = True,
     classification_export_dir: Optional[Path] = None,
     save_annotated: bool = True,
+    side_labels: bool = True,
     debug: bool = False,
     debug_print: bool = False,
 ):
@@ -249,6 +313,13 @@ def process_image(
     if device is not None:
         predict_kwargs["device"] = device
     results = model.predict(**predict_kwargs)
+
+    midline_x = None
+    if side_labels:
+        try:
+            midline_x = _compute_body_midline_x(results, image_width=int(image_np.shape[1]))
+        except Exception:
+            midline_x = float(image_np.shape[1]) * 0.5
 
     print(f"Processing {image_path.name}: {len(results)} result(s)")
     vis_boxes: List[tuple[int, int, int, int]] = []
@@ -319,20 +390,24 @@ def process_image(
             if (bbox[2] <= bbox[0] or bbox[3] <= bbox[1]) and mask_bin is not None:
                 bbox = mask_to_bbox(mask_bin, margin=margin, image_shape=image_np.shape[:2])
 
-            filename = f"{image_path.stem}_{cls_name}_{idx}.jpg"
+            export_cls_name = cls_name
+            if side_labels and (midline_x is not None):
+                export_cls_name = _label_with_side(cls_name, bbox, midline_x)
+
+            filename = f"{image_path.stem}_{export_cls_name}_{idx}.jpg"
             saved = save_crop(image_np, bbox, crops_root / filename)
             if alpha_png and saved and mask_bin is not None:
                 save_alpha_masked(
                     image_np,
                     mask_bin,
                     bbox,
-                    crops_root / f"{image_path.stem}_{cls_name}_{idx}_alpha.png",
+                    crops_root / f"{image_path.stem}_{export_cls_name}_{idx}_alpha.png",
                 )
             if saved:
                 vis_boxes.append(bbox)
-                vis_labels.append(cls_name)
+                vis_labels.append(export_cls_name)
                 if classification_export_dir is not None:
-                    cls_dir = classification_export_dir / cls_name
+                    cls_dir = classification_export_dir / export_cls_name
                     ensure_dir(cls_dir)
                     try:
                         Image.open(crops_root / filename).save(cls_dir / filename)
@@ -396,6 +471,7 @@ def iterate_source(
     auto_rotate_subject: bool = True,
     classification_export_dir: Optional[Path] = None,
     save_annotated: bool = True,
+    side_labels: bool = True,
     debug: bool = False,
     debug_print: bool = False,
 ):
@@ -415,6 +491,7 @@ def iterate_source(
             auto_rotate_subject=auto_rotate_subject,
             classification_export_dir=classification_export_dir,
             save_annotated=save_annotated,
+            side_labels=side_labels,
             debug=debug,
             debug_print=debug_print,
         )
@@ -442,6 +519,7 @@ def iterate_source(
             auto_rotate_subject=auto_rotate_subject,
             classification_export_dir=classification_export_dir,
             save_annotated=save_annotated,
+            side_labels=side_labels,
             debug=debug,
             debug_print=debug_print,
         )
@@ -463,6 +541,7 @@ def run_detection(
     rotate_degrees: int = 0,
     auto_rotate_subject: bool = True,
     classification_export_dir: Optional[str] = None,
+    side_labels: bool = True,
 ) -> Dict[str, Any]:
     """Run YOLO segmentation + crop extraction.
 
@@ -507,6 +586,7 @@ def run_detection(
         auto_rotate_subject=auto_rotate_subject,
         classification_export_dir=export_dir_path,
         save_annotated=True,
+        side_labels=side_labels,
         debug=debug,
         debug_print=debug,
     )
@@ -520,6 +600,7 @@ def run_detection(
         "auto_orient": auto_orient,
         "rotate_degrees": rotate_degrees,
         "auto_rotate_subject": auto_rotate_subject,
+        "side_labels": bool(side_labels),
     }
     print(f"[detect] Done. Outputs in {output_path}")
     return summary
