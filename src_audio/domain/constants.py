@@ -44,177 +44,173 @@ INTER_COLUMNS = [
 
 ### ------------------------------- MEDICATION SERVICE ------------------------------- ###
 MEDICATIONS = {
-    "Pressure Infuser": {
-        "aliases": [],
-        "default_dosage": None
-    },
     "Normal Saline": {
         "aliases": ["NS", "Electrolyte"],
-        "default_dosage": "1000 ml"
+        "default_dosage": "100 mL"
     },
-    "Syringe": {
-        "aliases": [],
-        "default_dosage": None
-    },
-    "ASA": {
-        "aliases": ["ASA"],
-        "default_dosage": "325 mg"
+    "Acetylsalicylic Acid": {
+        "aliases": ["ASA", "Aspirin"],
+        "default_dosage": "80 mg"
     },
     "Adenosine": {
         "aliases": ["Adeno"],
-        "default_dosage": "6 mg"
+        "default_dosage": "6 mg /2 mL"
     },
     "Amiodarone": {
         "aliases": ["Amio"],
-        "default_dosage": "300 mg"
+        "default_dosage": "150 mg / 3 mL"
     },
     "Atropine": {
         "aliases": ["Atropine"],
-        "default_dosage": "1 mg"
+        "default_dosage": "1 mg / 1 mL"
     },
     "Calcium Chloride": {
-        "aliases": ["CaCl₂"],
-        "default_dosage": "1 g"
+        "aliases": ["Calcium", "Cal Chlor"],
+        "default_dosage": "1 g /10 mL"
     },
     "Carboprost": {
         "aliases": ["Hemabate"],
-        "default_dosage": "250 mcg"
+        "default_dosage": "250 mcg / 1 mL"
     },
     "Clopidogrel": {
         "aliases": ["Plavix"],
-        "default_dosage": "300 mg"
+        "default_dosage": "300 mL"
     },
-    "D5W": {
+    "Dextrose 5% in Water": {
         "aliases": ["D5W"],
-        "default_dosage": "500 ml"
+        "default_dosage": "100 ml"
     },
-    "Dextrose": {
+    "Dextrose 50% in Water": {
         "aliases": ["D50"],
-        "default_dosage": "25 g"
+        "default_dosage": None
     },
     "Epinephrine": {
         "aliases": ["Epi"],
-        "default_dosage": "1 mg"
+        "default_dosage": "1 mg / 10 mL"
+    },
+    "Norepinephrine": {
+        "aliases": ["Levo", "Norepi"],
+        "default_dosage": "4 mg / 4 mL"
     },
     "Furosemide": {
         "aliases": ["Lasix"],
-        "default_dosage": "40 mg"
+        "default_dosage": "40 mg / 4 mL"
     },
     "Isoproterenol": {
         "aliases": ["Iso", "Isuprel"],
-        "default_dosage": "2 mcg/min"
+        "default_dosage": "0.2 mg / 1 mL"
     },
     "Labetalol": {
-        "aliases": ["Labetalol"],
-        "default_dosage": "20 mg"
+        "aliases": ["Labetalol", "Trandate"],
+        "default_dosage": "100 mg / 20 mL"
     },
     "Metoprolol": {
         "aliases": ["Metoprolol", "Lopressor"],
-        "default_dosage": "5 mg"
+        "default_dosage": "5 mg / 5 mL"
     },
     "Nitroglycerin": {
-        "aliases": ["NTG"],
+        "aliases": ["NTG", "Nitro", "Tridil"],
         "default_dosage": "0.4 mg"
-    },
-    "Norepinephrine": {
-        "aliases": ["Levo", "NE"],
-        "default_dosage": "0.1 mcg/kg/min"
     },
     "Phenylephrine": {
         "aliases": ["Neo", "Phenyl"],
-        "default_dosage": "100 mcg"
+        "default_dosage": "500 mcg / 10 mL"
     },
     "Sodium Bicarbonate": {
-        "aliases": ["Bicarb"],
-        "default_dosage": "50 mEq"
+        "aliases": ["Bicarb", "Sodium Bicarb", "Bicarbonate"],
+        "default_dosage": "50 mEq / 50 mL"
     },
     "Salbutamol": {
-        "aliases": ["Salbutamol", "Ventolin"],
-        "default_dosage": "2.5 mg"
+        "aliases": ["Albuterol", "Ventolin"],
+        "default_dosage": "0.5 mg / mL"
     },
     "Ipratropium": {
-        "aliases": ["Ipratropium", "Atrovent"],
-        "default_dosage": "0.5 mg"
+        "aliases": ["Atrovent"],
+        "default_dosage": "250 mcg / 2 mL NEB"
     },
     "Dimenhydrinate": {
         "aliases": ["Gravol"],
-        "default_dosage": "50 mg"
+        "default_dosage": "50 mg / 1 mL"
     },
     "Diphenhydramine": {
         "aliases": ["Benadryl"],
-        "default_dosage": "25 mg"
+        "default_dosage": "50 mg / 1 mL"
     },
     "Metoclopramide": {
-        "aliases": ["Maxeran", "Reglan"],
-        "default_dosage": "10 mg"
+        "aliases": ["Reglan", "Maxeran", "Primperan"],
+        "default_dosage": "10 mg / 2 mL"
     },
     "Loperamide": {
         "aliases": ["Imodium"],
-        "default_dosage": "4 mg"
+        "default_dosage": "2 mg"
     },
     "Ondansetron": {
         "aliases": ["Zofran"],
-        "default_dosage": "4 mg"
+        "default_dosage": "4 mg / 2 mL"
     },
     "Enoxaparin": {
         "aliases": ["Lovenox"],
-        "default_dosage": "40 mg"
+        "default_dosage": "100 mg / 1 mL"
     },
     "Heparin": {
-        "aliases": ["Heparin"],
-        "default_dosage": "5000 units"
+        "aliases": ["Hep"],
+        "default_dosage": "5000 units / 0.5 mL"
     },
     "Humulin R": {
-        "aliases": ["Regular insulin", "R-insulin"],
-        "default_dosage": "10 units"
+        "aliases": ["Regular insulin", "R-insulin", "Reg", "Reg Insulin"],
+        "default_dosage": "1000 units / 10 mL"
     },
     "Magnesium sulfate": {
-        "aliases": ["Mag sulfate", "MgSO₄"],
-        "default_dosage": "2 g"
+        "aliases": ["Mag sulfate", "Mag"],
+        "default_dosage": "5 g / 10 mL"
+    },
+        "Potassium Chloride": {
+        "aliases": ["KCl"],
+        "default_dosage": "10mmol / 100 mL"
     },
     "Vitamin K": {
-        "aliases": ["Phytonadione"],
-        "default_dosage": "10 mg"
+        "aliases": ["Phytonadione", "Vit K"],
+        "default_dosage": "10 mg / 1 mL"
     },
     "Misoprostol": {
         "aliases": ["Miso"],
-        "default_dosage": "800 mcg"
+        "default_dosage": "200 mcg"
     },
     "Oxytocin": {
-        "aliases": ["Oxy", "Pitocin"],
+        "aliases": ["Oxy", "Pitocin"], # Double check these abbreviations
         "default_dosage": "10 units"
     },
     "Propofol": {
-        "aliases": ["Propofol", "Diprivan"],
-        "default_dosage": "50 mg"
+        "aliases": ["Prop", "Diprivan"],
+        "default_dosage": "100 mL"
     },
     "Lidocaine": {
-        "aliases": ["Lido", "Lido oint"],
-        "default_dosage": "100 mg"
+        "aliases": ["Lido", "Lido oint", "Xylocaine"],
+        "default_dosage": "2% x 10 mL"
     },
     "Naloxone": {
         "aliases": ["Narcan"],
-        "default_dosage": "0.4 mg"
+        "default_dosage": "4 mg / 10 mL"
     },
     "Intralipid": {
-        "aliases": ["Intralipid"],
-        "default_dosage": "100 ml"
+        "aliases": [],
+        "default_dosage": None
     },
     "Dexamethasone": {
         "aliases": ["Dex", "Decadron"],
-        "default_dosage": "10 mg"
+        "default_dosage": "4 mg / 1 mL"
     },
     "Solu-Medrol": {
-        "aliases": ["Solu-Medrol", "Methylpred"],
+        "aliases": ["Solu-Med", "Methylpred", "MPS"],
         "default_dosage": "125 mg"
     },
-    "Plavix": {
+    "Clopidogrel": { 
         "aliases": ["Plavix"],
-        "default_dosage": "300 mg"
+        "default_dosage": "75 mg"
     },
     "Ticagrelor": {
         "aliases": ["Brilinta"],
-        "default_dosage": "180 mg"
+        "default_dosage": "90 mg"
     },
     "TNKase": {
         "aliases": ["TNK"],
@@ -222,22 +218,26 @@ MEDICATIONS = {
     },
     "Tranexamic Acid": {
         "aliases": ["TXA"],
-        "default_dosage": "1 g"
+        "default_dosage": "1000 mg / 10 mL"
+    },
+    "Ceftriaxone": {
+        "aliases": ["Rocephin", "CRO"],
+        "default_dosage": "1 gram"
+    },
+    "Haloperidol": {
+        "aliases": ["Haldol"],
+        "default_dosage": "5 mg / 2 mL"
     },
     "Indomethacin": {
-        "aliases": ["Indomethacin", "Indocin"],
-        "default_dosage": "50 mg"
+        "aliases": ["Indo", "Indocin", "Tivorbex"],
+        "default_dosage": "100 mg"
     },
     "Bug Spray": {
         "aliases": [],
         "default_dosage": None
     },
-    "NS flush": {
-        "aliases": ["NS flush"],
-        "default_dosage": "10 ml"
-    },
     "Sterile Water": {
-        "aliases": ["SW"],
+        "aliases": [],
         "default_dosage": "10 ml"
     }
 }

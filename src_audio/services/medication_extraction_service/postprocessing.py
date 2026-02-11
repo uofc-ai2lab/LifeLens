@@ -100,28 +100,29 @@ def fallback_dosage_or_route(sentence: str, med_start_idx: int, mode: str = "dos
         Optional[str]: Extracted dosage or route, or None if not found.
     """
     text = sentence.lower()
-    after_med = text[med_start_idx:]
+    start = max(0, med_start_idx - 2)  # look back up to 2 words before medication
+    end = min(len(text), med_start_idx + 3)  # look ahead up to 2 words after medication
+    window = text[start:end]
 
     if mode == "dosage":
         # Tokenize: Grab numbers/fractions OR words
-        tokens = DOSAGE_TOKEN_PATTERN.findall(after_med)
+        tokens = DOSAGE_TOKEN_PATTERN.findall(window)
         
         for i in range(len(tokens) - 1):
             number_token, unit_token = tokens[i], tokens[i + 1]
             
         # Check if the second word is a valid unit
-        if unit_tok in DOSAGES:
+        if unit_token in DOSAGES:
             # Check if the first word is a numeric string
-            if NUMBER_PATTERN.fullmatch(num_tok):
-                return f"{num_tok} {unit_tok}"
+            if NUMBER_PATTERN.fullmatch(number_token):
+                return f"{number_token} {unit_token}"
             
             # Check if the first word is a text-based number
-            if num_tok in TEXT_NUMBERS:
-                return f"{TEXT_NUMBERS.get(num_tok)} {unit_tok}" 
-
+            if number_token in TEXT_NUMBERS:
+                return f"{TEXT_NUMBERS.get(number_token)} {unit_token}" 
     elif mode == "route":
         # Look through whole sentence (that has been tokenized) for a possible route.
-        for token in re.findall(r"[a-z']+", after_med):
+        for token in re.findall(r"[a-z']+", text):
             if token in ROUTES:
                 return token
 
