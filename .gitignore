@@ -3,6 +3,11 @@ data/data_p3.2/
 data/audio/processed_audio/
 jetson-containers/
 
+data/audio/unused/
+data/video/unused/
+
+simple_camera.py
+
 .gitignore
 # OS / Editor
 .DS_Store
