@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-import threading
+import threading, asyncio
 import shutil
 import cv2
 import argparse
@@ -279,5 +279,20 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
     return 0
 
 if __name__ == "__main__":
-    raise SystemExit(main())
-
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dev", action="store_true")
+    args = parser.parse_args()
+    
+    if args.dev:
+        raise SystemExit(main())
+    else:
+        # Standalone camera mode
+        video_pipeline = GStreamerVideoPipeline(flip_method=0)
+        if not video_pipeline.start():
+            log.error("Failed to initialize camera")
+            raise SystemExit(1)
+        
+        try:
+            raise SystemExit(main(video_pipeline))
+        finally:
+            video_pipeline.cleanup()
