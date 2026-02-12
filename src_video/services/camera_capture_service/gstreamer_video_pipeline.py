@@ -5,25 +5,26 @@ Provides GStreamer-based video capture from CSI camera using NVIDIA Jetson hardw
 Handles pipeline initialization, frame capture, and state management.
 """
 
-import gi
-import cv2
-import os
+import cv2, os
 from config.logger import Logger
-
-# Initialize GStreamer bindings
-gi.require_version("Gst", "1.0")
-from gi.repository import Gst
-
 from src_video.domain.constants import (
     CAPTURE_WIDTH,
     CAPTURE_HEIGHT,
     DISPLAY_WIDTH,
     DISPLAY_HEIGHT,
+    COLOR_TEXT,
     FRAME_RATE,
     FLIP_METHOD,
 )
+from config.audio_settings import IS_JETSON
 
 log = Logger("[video][camera]")
+
+# Initialize GStreamer bindings
+if IS_JETSON:
+    import gi
+    gi.require_version("Gst", "1.0")
+    from gi.repository import Gst
 
 def get_gstreamer_video_pipeline(
     sensor_id: int = 0,
@@ -71,6 +72,44 @@ def get_gstreamer_video_pipeline(
         )
     )
 
+def capture_frame_from_pipeline(frame, image_save_dir: str) -> bool:
+    """
+    Saves a single frame to disk from the video pipeline.
+    """
+    if frame is None:
+        log.error("No frame to save")
+        return False
+    timestamp = cv2.getTickCount()
+    filename = os.path.join(image_save_dir, f"captured_img_{timestamp}.jpg")
+
+    if not cv2.imwrite(filename, frame):
+        log.error(f"Failed to save frame to {filename}")
+        return False
+    
+    log.info(f"Frame saved to {filename}")
+    return True
+
+def draw_overlay(frame, fps: float, processing: bool):
+    cv2.putText(
+        frame,
+        f"FPS: {fps:.1f}",
+        (10, 30),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        COLOR_TEXT,
+        2,
+    )
+
+    if processing:
+        cv2.putText(
+            frame,
+            "PROCESSING...",
+            (10, 60),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 165, 255),
+            2,
+        )
 
 class GStreamerVideoPipeline:
     """

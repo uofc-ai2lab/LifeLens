@@ -12,6 +12,7 @@ from src_audio.services.transcription_service.transcription_whispertrt import ru
 from src_audio.services.anonymization_service.transcript_anonymization import run_anonymization
 from src_audio.services.medication_extraction_service.medication_extraction import run_medication_extraction
 from src_audio.services.intervention_extraction_service.intervention_extraction import run_intervention_extraction
+from src_audio.services.recording_audio_service.gstreamer_audio_pipeline import record_one_chunk
 from config.logger import audio_logger as log
 
 
@@ -107,8 +108,6 @@ def main() -> int:
         log.header("DEV Mode")
         process_audio_chunk()
         return 0
-
-    from src_audio.services.recording_audio_service.record_audio import record_one_chunk
     
     audio_queue = Queue(maxsize=2)
 

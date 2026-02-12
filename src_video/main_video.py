@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import time
 import threading
 import shutil
@@ -8,7 +7,7 @@ import cv2
 import argparse
 
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from queue import Queue, Empty
 
 from config.logger import video_logger as log
@@ -18,16 +17,16 @@ from config.video_settings import (
     IMAGE_SAVE_DIR,
 )
 
+from src_video.services.camera_capture_service.gstreamer_video_pipeline import (
+    GStreamerVideoPipeline,
+    draw_overlay,
+    capture_frame_from_pipeline,
+)
 from src_video.services.detection_service.detect_body_parts import run_detection
 from src_video.services.body_ranking.body_injury_ranking import body_ranking
 from src_video.services.classification_service.infer_injuries_on_crops import predict_injuries_on_detection_crops
 from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
-from src_video.services.camera_capture_service.capture_img import (
-    initialize_camera,
-    draw_overlay,
-    capture_frame_from_pipeline
-)
 
 def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")
@@ -43,23 +42,6 @@ def put_latest(queue: Queue, item):
         except Empty:
             pass
     queue.put(item)
-
-
-def read_frame_from_pipeline(pipeline):
-    """Read a frame from either VideoCapture or GStreamerVideoPipeline."""
-    if hasattr(pipeline, "read_frame"):
-        return pipeline.read_frame()
-    return pipeline.read()
-
-
-def release_pipeline(pipeline):
-    """Release any pipeline type safely."""
-    if hasattr(pipeline, "cleanup"):
-        pipeline.cleanup()
-    elif hasattr(pipeline, "stop"):
-        pipeline.stop()
-    elif hasattr(pipeline, "release"):
-        pipeline.release()
 
 def process_single_image(settings: Dict[str, Any]) -> bool:
     try:
@@ -185,13 +167,12 @@ def processing_worker(queue: Queue, settings: Dict[str, Any]):
     log.info("Processing worker stopped")
 
 
-def main() -> int:
+def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
     """
     Main video processing pipeline.
     
     Args:
-        video_pipeline: Optional GStreamer video pipeline object. If None, initializes own pipeline.
-                       When called from orchestrator, passes pre-initialized pipeline.
+        video_pipeline: Pre-initialized GStreamer video pipeline object from orchestrator.
     """
 
     parser = argparse.ArgumentParser()
@@ -199,19 +180,16 @@ def main() -> int:
     args = parser.parse_args()
     
     settings = load_video_pipeline_settings()
-
-    if args.dev:
+    DEV_MODE = args.dev
+    
+    if video_pipeline is None and not DEV_MODE:
+        log.error("VIDEO pipeline failed to initialize camera")
+        return 1
+        
+    if DEV_MODE:
         log.header("DEV Mode")
         process_single_image(settings)
         return 0
-
-    # Use provided pipeline or initialize new one
-    if video_pipeline is None:
-        video_pipeline = initialize_camera()
-        owns_pipeline = True
-    else:
-        # Use the pipeline passed from orchestrator (already initialized)
-        owns_pipeline = False
 
     image_queue = Queue(maxsize=3)
 
@@ -236,7 +214,7 @@ def main() -> int:
 
     try:
         while True:
-            ok, frame = read_frame_from_pipeline(video_pipeline)
+            ok, frame = video_pipeline.read_frame()
             if not ok or frame is None:
                 log.error("Camera read failed")
                 break
@@ -294,9 +272,7 @@ def main() -> int:
         image_queue.put("STOP")
         worker.join(timeout=5)
 
-        # Only release pipeline if we created it (not if passed from orchestrator)
-        if owns_pipeline and video_pipeline is not None:
-            release_pipeline(video_pipeline)
+        video_pipeline.cleanup()
         
         cv2.destroyAllWindows()
 

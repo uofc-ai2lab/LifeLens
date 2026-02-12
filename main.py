@@ -3,10 +3,10 @@ import threading
 import time
 import subprocess
 
-from src_audio.main import main as audio_main
-from src_video.main import main as video_main
+from src_audio.main_audio import main as audio_main
+from src_video.main_video import main as video_main
 from src_video.services.camera_capture_service.gstreamer_video_pipeline import GStreamerVideoPipeline
-from config.audio_settings import IS_JETSON, STARTUP_SCRIPT_PATH
+from config.audio_settings import STARTUP_SCRIPT_PATH
 from src_audio.domain.logger import root_logger as log
 """
 Dual GStreamer Pipeline Architecture
