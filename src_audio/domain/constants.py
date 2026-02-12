@@ -16,19 +16,6 @@ AUDIO_CHANNELS = 6
 AUDIO_FORMAT = "S16LE"
 CHUNK_SECONDS=20
 
-def get_gstreamer_audio_pipeline(output_file: str) -> str:
-    """
-    Returns a GStreamer pipeline for audio recording from multi-channel USB audio device.
-    """
-    return (
-        f"alsasrc device={ARECORD_DEVICE} ! "
-        f"audioconvert ! "
-        f"audioresample ! "
-        f"audio/x-raw,format={AUDIO_FORMAT},rate={AUDIO_SAMPLE_RATE},channels={AUDIO_CHANNELS} ! "
-        f"wavenc ! "
-        f"filesink location={output_file}"
-    )
-    
 ### ------------------------------- INTERVENTION SERVICE ------------------------------- ###
 INTERVENTIONS = {
     "CPR": ["cardiopulmonary resuscitation", "cpr", "chest compressions"],

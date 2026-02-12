@@ -14,8 +14,6 @@ from config.logger import Logger
 gi.require_version("Gst", "1.0")
 from gi.repository import Gst
 
-log = Logger("[video][camera]")
-
 from src_video.domain.constants import (
     CAPTURE_WIDTH,
     CAPTURE_HEIGHT,
@@ -24,6 +22,8 @@ from src_video.domain.constants import (
     FRAME_RATE,
     FLIP_METHOD,
 )
+
+log = Logger("[video][camera]")
 
 def get_gstreamer_video_pipeline(
     sensor_id: int = 0,

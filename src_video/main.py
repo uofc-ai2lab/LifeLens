@@ -25,7 +25,8 @@ from src_video.services.deidentification_service.deidentify import run_deidentif
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
 from src_video.services.camera_capture_service.capture_img import (
     initialize_camera,
-    draw_overlay
+    draw_overlay,
+    capture_frame_from_pipeline
 )
 
 def _as_posix(path: str) -> str:
@@ -59,23 +60,6 @@ def release_pipeline(pipeline):
         pipeline.stop()
     elif hasattr(pipeline, "release"):
         pipeline.release()
-
-def capture_frame_from_pipeline(frame, image_save_dir: str) -> bool:
-    """
-    Saves a single frame to disk from the video pipeline.
-    """
-    if frame is None:
-        log.error("No frame to save")
-        return False
-    timestamp = cv2.getTickCount()
-    filename = os.path.join(image_save_dir, f"captured_img_{timestamp}.jpg")
-
-    if not cv2.imwrite(filename, frame):
-        log.error(f"Failed to save frame to {filename}")
-        return False
-    
-    log.info(f"Frame saved to {filename}")
-    return True
 
 def process_single_image(settings: Dict[str, Any]) -> bool:
     try:

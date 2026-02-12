@@ -4,7 +4,7 @@ from src_audio.domain.constants import CHUNK_SECONDS
 from src_audio.services.recording_audio_service.gstreamer_audio_pipeline import GStreamerAudioPipeline
 from config.logger import Logger
 
-log = Logger("[audio][recorder]")
+log = Logger("[audio][microphone]")
 
 def record_one_chunk(output_dir: str | Path, stop_event) -> bool:
     """

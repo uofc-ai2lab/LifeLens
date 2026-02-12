@@ -10,13 +10,32 @@ import gi, os
 # Initialize GStreamer bindings
 gi.require_version("Gst", "1.0")
 from gi.repository import Gst, GLib
-
-from src_audio.domain.constants import get_gstreamer_audio_pipeline
 from config.logger import Logger
 
-log = Logger("[audio][gstreamer]")
 
+from src_audio.domain.constants import (
+    ARECORD_DEVICE,
+    AUDIO_FORMAT,
+    AUDIO_SAMPLE_RATE,
+    AUDIO_CHANNELS
+)
 
+log = Logger("[audio][microphone]")
+
+def get_gstreamer_audio_pipeline(output_file: str) -> str:
+    """
+    Returns a GStreamer pipeline for audio recording from multi-channel USB audio device.
+    """
+    return (
+        f"alsasrc device={ARECORD_DEVICE} ! "
+        f"audioconvert ! "
+        f"audioresample ! "
+        f"audio/x-raw,format={AUDIO_FORMAT},rate={AUDIO_SAMPLE_RATE},channels={AUDIO_CHANNELS} ! "
+        f"wavenc ! "
+        f"filesink location={output_file}"
+    )
+    
+    
 class GStreamerAudioPipeline:
     """
     Manages a GStreamer audio recording pipeline using ALSA source.

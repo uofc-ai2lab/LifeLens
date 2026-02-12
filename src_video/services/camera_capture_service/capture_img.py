@@ -70,6 +70,24 @@ def initialize_camera(flip_method: int = 0) -> cv2.VideoCapture:
         f"({last_err})"
     )
 
+def capture_frame_from_pipeline(frame, image_save_dir: str) -> bool:
+    """
+    Saves a single frame to disk from the video pipeline.
+    """
+    if frame is None:
+        log.error("No frame to save")
+        return False
+    timestamp = cv2.getTickCount()
+    filename = os.path.join(image_save_dir, f"captured_img_{timestamp}.jpg")
+
+    if not cv2.imwrite(filename, frame):
+        log.error(f"Failed to save frame to {filename}")
+        return False
+    
+    log.info(f"Frame saved to {filename}")
+    return True
+
+
 def draw_overlay(frame, fps: float, processing: bool):
 
     cv2.putText(
