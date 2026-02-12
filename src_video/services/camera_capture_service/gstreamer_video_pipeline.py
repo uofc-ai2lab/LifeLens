@@ -20,6 +20,13 @@ from config.audio_settings import IS_JETSON
 
 log = Logger("[video][camera]")
 
+configs = [
+    (CAPTURE_WIDTH, CAPTURE_HEIGHT, DISPLAY_WIDTH, DISPLAY_HEIGHT),
+    (1280, 720, 960, 540),
+    (1280, 720, 640, 360),
+    (640, 480, 640, 360),
+]
+
 # Initialize GStreamer bindings
 if IS_JETSON:
     import gi
@@ -54,13 +61,12 @@ def get_gstreamer_video_pipeline(
         GStreamer pipeline string for video capture via appsink
     """
     return (
-        "nvarguscamerasrc sensor-id=%d bufapi-version=1 ! "
+        "nvarguscamerasrc sensor-id=%d ! "
         "video/x-raw(memory:NVMM), width=(int)%d, height=(int)%d, framerate=(fraction)%d/1 ! "
         "nvvidconv flip-method=%d ! "
         "video/x-raw, width=(int)%d, height=(int)%d, format=(string)BGRx ! "
         "videoconvert ! "
-        "video/x-raw, format=(string)BGR ! "
-        "appsink max-buffers=2 drop=true"
+        "video/x-raw, format=(string)BGR ! appsink drop=true max-buffers=1 sync=false"
         % (
             sensor_id,
             capture_width,
