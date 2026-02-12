@@ -122,7 +122,7 @@ def _monitor_loop(stop_event: threading.Event, interval: float, log_path: Path, 
 
         if show_stderr_line:
             msg = _format_status(cpu, mem, gpu, power_w)
-            print("\r" + msg + " " * 10, end="", file=os.sys.stderr, flush=True)
+            print("\r" + msg + " " * 10, end="\n", file=os.sys.stderr, flush=True)
 
         end_t = time.time() + interval
         while time.time() < end_t:

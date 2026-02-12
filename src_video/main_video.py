@@ -196,9 +196,6 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
         return 0
 
     log.header("Video Pipeline Starting")
-    log.info("Running startup tasks...")
-    run_jetson_startup_tasks()
-    start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
 
     image_queue = Queue(maxsize=3)
 
@@ -284,8 +281,6 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
         video_pipeline.cleanup()
         
         cv2.destroyAllWindows()
-        
-        stop_monitoring()
 
     return 0
 
@@ -298,6 +293,9 @@ if __name__ == "__main__":
         raise SystemExit(main())
     else:
         # Standalone camera mode
+        log.info("Running startup tasks...")
+        run_jetson_startup_tasks()
+        start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
         video_pipeline = GStreamerVideoPipeline(flip_method=0)
         if not video_pipeline.start():
             log.error("Failed to initialize camera")
@@ -307,3 +305,4 @@ if __name__ == "__main__":
             raise SystemExit(main(video_pipeline))
         finally:
             video_pipeline.cleanup()
+            stop_monitoring()

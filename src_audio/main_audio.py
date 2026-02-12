@@ -115,10 +115,6 @@ def main() -> int:
         return 0
     
     log.header("Audio Pipeline Starting")
-    log.info("Running startup tasks...")
-    run_jetson_startup_tasks()
-    start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
-    
     audio_queue = Queue(maxsize=2)
 
     worker = threading.Thread(
@@ -163,7 +159,6 @@ def main() -> int:
         log.info("Processing finished, shutting down worker...")
         audio_queue.put("STOP")
         worker.join()
-        stop_monitoring()
 
     elapsed = datetime.now() - start_time
     total_seconds = int(elapsed.total_seconds())
@@ -175,4 +170,19 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dev", action="store_true")
+    args = parser.parse_args()
+    
+    if args.dev:
+        raise SystemExit(main())
+    else:
+        # Standalone mic mode
+        log.info("Running startup tasks...")
+        run_jetson_startup_tasks()
+        start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
+        try:
+            raise SystemExit(main())
+        finally:
+            stop_monitoring()
+    

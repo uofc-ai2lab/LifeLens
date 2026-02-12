@@ -22,7 +22,6 @@ os.makedirs(AUDIO_DIR, exist_ok=True)
 os.makedirs(AUDIO_CHUNKS_DIR, exist_ok=True)
 os.makedirs(PROCESSED_AUDIO_DIR, exist_ok=True)
 
-STARTUP_SCRIPT_PATH = BASE_DIR / "scripts" / "run_jetson_startup_tasks.sh"
 USAGE_FILE_PATH = DATA_DIR / "resource_usage.csv"
 
 # -------------------------
