@@ -1,18 +1,15 @@
-"""
-System resource monitoring utility.
-
-- Logs CPU/RAM/GPU to a CSV file from a background thread.
-- GPU is read on Jetson via `tegrastats` (parses GR3D_FREQ).
-- Optional single-line display to STDERR (to avoid messing with pipeline STDOUT).
-"""
-
 from __future__ import annotations
 
-import csv, os, re, time
-import subprocess, threading
+import csv
+import os
+import re
+import time
+import subprocess
+import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
+
 import psutil
 from config.audio_settings import USAGE_FILE_PATH
 
@@ -21,18 +18,24 @@ _stop_event: Optional[threading.Event] = None
 _log_lock = threading.Lock()
 
 _GR3D_RE = re.compile(r"GR3D_FREQ\s+(\d+)%")
+_POM_IN_RE = re.compile(r"POM_5V_IN\s+(\d+)(?:/(\d+))?")  # current/avg in mW (often)
 
-def _get_jetson_gpu_percent(timeout_s: float = 1.5) -> Optional[float]:
+def _parse_gpu_percent(line: str) -> Optional[float]:
+    m = _GR3D_RE.search(line)
+    return float(m.group(1)) if m else None
+
+def _parse_power_in_mw(line: str) -> Optional[float]:
+    m = _POM_IN_RE.search(line)
+    if not m:
+        return None
+    current_mw = float(m.group(1))
+    return current_mw
+
+def _run_tegrastats(timeout_s: float = 1.5) -> Tuple[Optional[float], Optional[float]]:
     """
-    Try to read Jetson GPU utilization (%).
-
-    Uses `tegrastats` and parses output like:
-      "... GR3D_FREQ 12% ..."
-    Returns None if unavailable.
+    Returns (gpu_percent, power_watts). Either may be None if not found.
     """
     try:
-        # Run tegrastats briefly, capture one line, then stop it.
-        # tegrastats usually prints ~1 line/sec by default.
         proc = subprocess.Popen(
             ["tegrastats"],
             stdout=subprocess.PIPE,
@@ -40,6 +43,7 @@ def _get_jetson_gpu_percent(timeout_s: float = 1.5) -> Optional[float]:
             text=True,
             bufsize=1,
         )
+
         try:
             start = time.time()
             line = None
@@ -51,90 +55,82 @@ def _get_jetson_gpu_percent(timeout_s: float = 1.5) -> Optional[float]:
                     break
 
             if not line:
-                return None
+                return None, None
 
-            m = _GR3D_RE.search(line)
-            if not m:
-                return None
-            return float(m.group(1))
+            gpu_percent = _parse_gpu_percent(line)
+            power_mw = _parse_power_in_mw(line)
+            power_watts = (power_mw / 1000.0) if power_mw is not None else None
+
+            return gpu_percent, power_watts
+
         finally:
-            # Ensure tegrastats stops
             proc.terminate()
             try:
                 proc.wait(timeout=0.5)
             except subprocess.TimeoutExpired:
                 proc.kill()
-    except FileNotFoundError:
-        return None
-    except Exception:
-        return None
 
+    except FileNotFoundError:
+        # Not a Jetson / tegrastats missing
+        return None, None
+    except Exception:
+        return None, None
 
 def _ensure_csv_header(log_path: Path) -> None:
-    if log_path.exists() and log_path.stat().st_size > 0:
-        return
     log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Always overwrite file at start
     with _log_lock, log_path.open("w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["timestamp_iso", "cpu_percent", "mem_percent", "gpu_percent"])
-
-
-def _append_csv(log_path: Path, cpu: float, mem: float, gpu: Optional[float]) -> None:
+        writer.writerow([
+            "timestamp_iso",
+            "cpu_percent",
+            "mem_percent",
+            "gpu_percent",
+            "power_watts",
+        ])
+        
+        
+def _append_csv(log_path: Path, cpu: float, mem: float, gpu: Optional[float], power_w: Optional[float]) -> None:
     ts = datetime.now().isoformat(timespec="seconds")
     with _log_lock, log_path.open("a", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow([ts, f"{cpu:.2f}", f"{mem:.2f}", "N/A" if gpu is None else f"{gpu:.2f}"])
+        writer.writerow([
+            ts,
+            f"{cpu:.2f}",
+            f"{mem:.2f}",
+            "" if gpu is None else f"{gpu:.2f}",
+            "" if power_w is None else f"{power_w:.3f}",
+        ])
 
+def _format_status(cpu: float, mem: float, gpu: Optional[float], power_w: Optional[float]) -> str:
+    gpu_str = "  N/A " if gpu is None else f"{gpu:6.2f}%"
+    pwr_str = "  N/A " if power_w is None else f"{power_w:6.3f}W"
+    return f"CPU {cpu:6.2f}% | MEM {mem:6.2f}% | GPU {gpu_str} | PWR {pwr_str}"
 
-def _format_status(cpu: float, mem: float, gpu: Optional[float]) -> str:
-    if gpu is None:
-        return f"CPU {cpu:6.2f}% | MEM {mem:6.2f}% | GPU   N/A"
-    return f"CPU {cpu:6.2f}% | MEM {mem:6.2f}% | GPU {gpu:6.2f}%"
-
-
-def _monitor_loop(
-    stop_event: threading.Event,
-    interval: float,
-    log_path: Path,
-    show_stderr_line: bool,
-) -> None:
+def _monitor_loop(stop_event: threading.Event, interval: float, log_path: Path, show_stderr_line: bool) -> None:
     _ensure_csv_header(log_path)
 
-    psutil.cpu_percent(interval=None) # Prime cpu_percent so first reading isn't weird
+    psutil.cpu_percent(interval=None)  # prime
 
     while not stop_event.is_set():
         cpu = psutil.cpu_percent(interval=None)
         mem = psutil.virtual_memory().percent
-        gpu = _get_jetson_gpu_percent()
 
-        _append_csv(log_path, cpu, mem, gpu)
+        gpu, power_w = _run_tegrastats()
+        _append_csv(log_path, cpu, mem, gpu, power_w)
 
         if show_stderr_line:
-            # Print to STDERR, single-line update
-            msg = _format_status(cpu, mem, gpu)
+            msg = _format_status(cpu, mem, gpu, power_w)
             print("\r" + msg + " " * 10, end="", file=os.sys.stderr, flush=True)
 
-        # Sleep in small chunks so stop_event is responsive
         end_t = time.time() + interval
         while time.time() < end_t:
             if stop_event.is_set():
                 break
             time.sleep(min(0.1, interval))
 
-
-def start_monitoring(
-    interval: float = 1.0,
-    log_file: str | Path = "logs/resource_usage.csv",
-    show_stderr_line: bool = False,
-) -> None:
-    """
-    Start resource monitoring in a background thread.
-
-    Args:
-        interval: sampling interval in seconds
-        log_file: CSV file path
-        show_stderr_line: if True, prints a single updating status line to STDERR
-    """
+def start_monitoring(interval: float = 1.0, log_file: str | Path = USAGE_FILE_PATH, show_stderr_line: bool = False) -> None:
     global _monitor_thread, _stop_event
 
     if _monitor_thread is not None and _monitor_thread.is_alive():
@@ -151,9 +147,7 @@ def start_monitoring(
     )
     _monitor_thread.start()
 
-
 def stop_monitoring() -> None:
-    """Stop the monitoring thread."""
     global _monitor_thread, _stop_event
 
     if _stop_event is not None:
@@ -164,7 +158,6 @@ def stop_monitoring() -> None:
 
     _monitor_thread = None
     _stop_event = None
-
 
 if __name__ == "__main__":
     start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
