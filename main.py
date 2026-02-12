@@ -1,13 +1,14 @@
 import asyncio
 import threading
 import time
-import subprocess
 
 from src_audio.main_audio import main as audio_main
 from src_video.main_video import main as video_main
 from src_video.services.camera_capture_service.gstreamer_video_pipeline import GStreamerVideoPipeline
-from config.audio_settings import STARTUP_SCRIPT_PATH
-from src_audio.domain.logger import root_logger as log
+from config.jetson_startup import run_jetson_startup_tasks
+from config.logger import root_logger as log
+from config.audio_settings import USAGE_FILE_PATH
+from config.resource_usage import start_monitoring, stop_monitoring
 """
 Dual GStreamer Pipeline Architecture
 =====================================
@@ -78,23 +79,6 @@ def run_video_pipeline(video_ready: threading.Event, video_failed: threading.Eve
     
     log.info("VIDEO pipeline finished")
 
-
-def run_jetson_startup_tasks():
-    """Run Jetson-specific startup tasks via external script."""
-    if not STARTUP_SCRIPT_PATH.exists():
-        log.warning(f"Startup script not found: {STARTUP_SCRIPT_PATH}")
-        return
-    
-    try:
-        subprocess.run(["bash", str(STARTUP_SCRIPT_PATH)], check=True)
-    except subprocess.CalledProcessError as e:
-        log.error(f"Startup tasks failed with exit code {e.returncode}")
-        raise
-    except Exception as e:
-        log.error(f"Could not run startup tasks: {e}")
-        raise
-
-
 def main():
     """
     Main orchestrator for dual GStreamer pipeline execution.
@@ -110,6 +94,7 @@ def main():
     log.header("LifeLens Dual Pipeline System Starting")
     log.info("Running startup tasks...")
     run_jetson_startup_tasks()
+    start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
     
     start_time = time.time()
 
@@ -153,6 +138,8 @@ def main():
     video_thread.join()
     if audio_thread.is_alive():
         audio_thread.join()
+    
+    stop_monitoring()
     
     elapsed = time.time() - start_time
     log.success(f"All pipelines completed in {elapsed:.2f}s")

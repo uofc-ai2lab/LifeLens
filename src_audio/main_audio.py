@@ -13,6 +13,9 @@ from src_audio.services.anonymization_service.transcript_anonymization import ru
 from src_audio.services.medication_extraction_service.medication_extraction import run_medication_extraction
 from src_audio.services.intervention_extraction_service.intervention_extraction import run_intervention_extraction
 from src_audio.services.recording_audio_service.gstreamer_audio_pipeline import record_one_chunk
+from config.jetson_startup import run_jetson_startup_tasks
+from config.audio_settings import USAGE_FILE_PATH
+from config.resource_usage import start_monitoring, stop_monitoring
 from config.logger import audio_logger as log
 
 
@@ -106,8 +109,15 @@ def main() -> int:
 
     if args.dev:
         log.header("DEV Mode")
+        start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
         process_audio_chunk()
+        stop_monitoring()
         return 0
+    
+    log.header("Audio Pipeline Starting")
+    log.info("Running startup tasks...")
+    run_jetson_startup_tasks()
+    start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
     
     audio_queue = Queue(maxsize=2)
 
@@ -153,6 +163,7 @@ def main() -> int:
         log.info("Processing finished, shutting down worker...")
         audio_queue.put("STOP")
         worker.join()
+        stop_monitoring()
 
     elapsed = datetime.now() - start_time
     total_seconds = int(elapsed.total_seconds())

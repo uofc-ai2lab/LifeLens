@@ -8,7 +8,6 @@ import sys
 # driven by python.envFile.
 load_dotenv()
 
-
 # -------------------------
 # Base paths (video)
 # -------------------------

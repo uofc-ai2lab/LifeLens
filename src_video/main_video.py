@@ -5,11 +5,13 @@ import threading, asyncio
 import shutil
 import cv2
 import argparse
-
 from pathlib import Path
 from typing import Dict, Any, Optional
 from queue import Queue, Empty
 
+from config.jetson_startup import run_jetson_startup_tasks
+from config.resource_usage import start_monitoring, stop_monitoring
+from config.audio_settings import USAGE_FILE_PATH
 from config.logger import video_logger as log
 from config.video_settings import (
     load_video_pipeline_settings,
@@ -188,8 +190,15 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
         
     if DEV_MODE:
         log.header("DEV Mode")
+        start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
         process_single_image(settings)
+        stop_monitoring()
         return 0
+
+    log.header("Video Pipeline Starting")
+    log.info("Running startup tasks...")
+    run_jetson_startup_tasks()
+    start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
 
     image_queue = Queue(maxsize=3)
 
@@ -275,6 +284,8 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
         video_pipeline.cleanup()
         
         cv2.destroyAllWindows()
+        
+        stop_monitoring()
 
     return 0
 
