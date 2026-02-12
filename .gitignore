@@ -2,6 +2,10 @@ data/audio/audio_pipeline_metadata.json
 data/data_p3.2/
 data/audio/processed_audio/
 jetson-containers/
+simple_camera.py
+data/resource_usage.csv
+data/audio/unused/
+data/video/unused/
 
 data/audio/unused/
 data/video/unused/

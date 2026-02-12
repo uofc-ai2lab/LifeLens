@@ -21,6 +21,9 @@ import timm
 from PIL import Image
 
 from src_video.domain.entities import CropPrediction
+from config.logger import Logger
+
+log = Logger("[video][classification]")
 
 
 def load_model_from_checkpoint(checkpoint_path: str, device: torch.device) -> Tuple[torch.nn.Module, List[str]]:
@@ -86,6 +89,7 @@ def _collect_crop_paths(crops_root: str) -> List[Path]:
     )
     if not crop_paths:
         raise RuntimeError(f"No crop images found under {crops_root}")
+    log.info(f"Collected {len(crop_paths)} crops")
     return crop_paths
 
 
@@ -217,6 +221,8 @@ def predict_injuries_on_detection_crops(
     body_part_label_position: int = -2,
 ) -> Dict[str, Any]:
     """Run injury classifier on detection crops and write reports."""
+    log.header("Starting Injury Classification...")
+    
     crop_paths = _collect_crop_paths(crops_root)
 
     if device is None:
@@ -254,6 +260,8 @@ def predict_injuries_on_detection_crops(
         predictions=predictions,
         per_part_summary=per_part_summary,
     )
+
+    log.success(f"Classification complete: {len(predictions)} crops")
 
     return {
         "out_json": out_json_path,

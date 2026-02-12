@@ -9,6 +9,9 @@ scripts.
 """
 
 import os
+from config.logger import Logger
+
+log = Logger("[video][classification]")
 from typing import Tuple, Optional, Dict, Any, List
 
 import time
@@ -469,7 +472,7 @@ def plot_confusion_matrix_image(
     y_pred = np.concatenate(all_pred, axis=0) if all_pred else np.array([], dtype=int)
 
     if y_true.size == 0 or y_pred.size == 0:
-        print("Confusion matrix skipped: no predictions/labels available.")
+        log.warning("Confusion matrix skipped: no predictions/labels available")
         return
 
     cm = confusion_matrix(y_true, y_pred, labels=list(range(num_classes)))
@@ -493,7 +496,7 @@ def plot_confusion_matrix_image(
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     plt.savefig(save_path, dpi=150)
     plt.close(fig)
-    print(f"Saved confusion matrix image to {save_path}")
+    log.info(f"Saved confusion matrix image to {save_path}")
 
 
 def _setup_device_and_pin_memory(device: Optional[torch.device]) -> Tuple[torch.device, bool]:
@@ -615,7 +618,7 @@ def _run_training_loop(
         tr_loss = train_one_epoch(model, train_loader, device, optimizer, criterion)
         val_loss, val_acc, metrics = validate(model, val_loader, device, criterion, num_classes)
         
-        print(_format_epoch_log(epoch, epochs, tr_loss, val_loss, val_acc, metrics))
+        log.info(_format_epoch_log(epoch, epochs, tr_loss, val_loss, val_acc, metrics))
         
         if val_acc > best_val_accuracy:
             best_val_accuracy = val_acc
@@ -692,14 +695,14 @@ def _generate_confusion_matrices(
         out_png = os.path.join(save_root, "confusion_matrix_swin_tiny.png")
         plot_confusion_matrix_image(model, val_loader, device, class_names, out_png)
     except (OSError, ValueError, RuntimeError) as _e:
-        print(f"Could not create confusion matrix plot: {_e}")
+        log.warning(f"Could not create confusion matrix plot: {_e}")
     
     if test_loader is not None:
         try:
             out_test_png = os.path.join(save_root, "confusion_matrix_swin_tiny_test.png")
             plot_confusion_matrix_image(model, test_loader, device, class_names, out_test_png)
         except (OSError, ValueError, RuntimeError) as _e:
-            print(f"Could not create test confusion matrix plot: {_e}")
+            log.warning(f"Could not create test confusion matrix plot: {_e}")
 
 
 def train_swin_tiny(
@@ -782,7 +785,7 @@ def train_swin_tiny(
         num_classes=num_classes,
     )
     
-    print(f"Done. Best val acc: {best_val_accuracy:.4f}. Saved to {checkpoint_path}")
+    log.success(f"Done. Best val acc: {best_val_accuracy:.4f}. Saved to {checkpoint_path}")
     
     _generate_confusion_matrices(
         make_confusion_matrices=make_confusion_matrices,

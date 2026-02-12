@@ -12,6 +12,9 @@ from typing import Any, Dict
 import imageio.v2 as iio
 
 from src_video.services.deidentification_service.defacer import get_anonymized_image
+from config.logger import Logger
+
+log = Logger("[video][blurring]")
 
 
 def run_deidentification(
@@ -90,7 +93,7 @@ def run_deidentification(
                 processed_count += 1
                 
             except Exception as e:
-                print(f"[WARNING] Failed to process {image_file.name}: {e}")
+                log.warning(f"Failed to process {image_file.name}: {e}")
                 failed_count += 1
         
         return {

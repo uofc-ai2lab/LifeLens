@@ -3,6 +3,8 @@ A complete audio-to-transcript and transcript-to-meaning pipeline with services 
 
 Line for restarting camera: sudo systemctl restart nvargus-daemon
 
+For technical details, see [TECHNICAL.md](TECHNICAL.md).
+
 **Note: Ensure you are running all of the following commands from the project root unless otherwise specified.**
 
 ## Environment Setup
@@ -121,7 +123,10 @@ If operating on a jetson-nano, also install jetson-specific dependencies:
 pip install -r requirements-jetson.txt
 sudo pip install ultralytics --no-deps 
 sudo pip install deface --no-deps
-#Need to manually install ultralytics due to dependency issues 
+sudo apt update
+sudo apt install -y python3-gi gir1.2-gstreamer-1.0 gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good
+
+# Need to manually install ultralytics due to dependency issues 
 ```
 
 ###  Download MedCAT Model (One-Time Setup) - for Medication Intervention
@@ -168,24 +173,21 @@ Dataset Assets (Priv_personpart):
    - Register at [Hugging Face](https://huggingface.co)
    - Get your access token with READ permissions from [Settings > Access Tokens](https://huggingface.co/settings/tokens)
 
-2. **OpenAI API Key**
-   - Sign up at [OpenAI Platform](https://platform.openai.com)
-   - Navigate to [API Keys](https://platform.openai.com/api-keys)
-   - Create a new secret key
-
-3. **Google API Key**
-   - Go to [Google AI Studio](https://aistudio.google.com/app/apikey)
-   - Create a new API key
-   - (Alternative: Use [Google Cloud Console](https://console.cloud.google.com/apis/credentials) for Gemini API access)
-
-4. **Create .env file**
+2. **Create .ENV file**
    - Copy `env.template` from `/config` to `.env` in the root folder
-   - Add your API keys:
+   - Add your API key:
      ```dotenv
      HUGGINGFACE_TOKEN=your_hf_token_here
-     OPENAI_API_KEY=your_openai_key_here
-     GOOGLE_API_KEY=your_google_key_here
      ```
+   - Add all additional variables 
+
+3. **Video .ENV Variables**
+   Video pipeline configuration lives in the `VIDEO PIPELINE ENVIRONMENT VARIABLES` section. Set at minimum:
+
+   - `PIPELINE_DETECTION_SOURCE` (defaults to `data/video/source_files`)
+   - `PIPELINE_ROOT` (defaults to `data/video/output_files`)
+   - `PIPELINE_DETECTION_OUTPUT` (defaults to `data/video/output_files/DetectionOutput`)
+   - `PIPELINE_INJURY_CHECKPOINT` (checkpoint used for injury inference)
 
 **Keep env.template updated with any new variables your services require.**
 
@@ -198,15 +200,13 @@ Place all testing and input data under the `data/audio/` directory using the str
 data/audio/
 ├── audio_files/
 │   └── <parent_audio>.<wav|mp3|m4a>
-│
-├── processed_audio/
-│   └── <parent_audio>/
-│       └── <parent_audio>_chunk_<n>/
-│           ├── <timestamp>_transcript_<parent_audio>_chunk_<n>.csv
-│           ├── <timestamp>_semantic_<parent_audio>_chunk_<n>.csv
-│           ├── <timestamp>_medX_<parent_audio>_chunk_<n>.csv
-│           ├── <timestamp>_intervention_<parent_audio>_chunk_<n>.csv
-│           └── <timestamp>_final_<parent_audio>_chunk_<n>.csv
+├── audio_chunks/
+│   └── recording_<timestamp>_chunk_<n>.wav
+└── processed_audio/
+   └── recording_<timestamp>_chunk_<n>/
+      ├── recording_<timestamp>_chunk_<n>.wav
+      ├── <service>_*.csv
+      └── <service>_*.json
 ```
 
 #### `audio_files/`
@@ -215,6 +215,10 @@ data/audio/
 * These are the source files that will be chunked and processed.
 * If `AUDIO_FILES` is specified in configuration, only those files will be processed.
 * If `AUDIO_FILES` is left empty, **all files in this directory will be processed**.
+
+#### `audio_chunks/`
+
+* Temporary directory for recorded chunks (created by the audio pipeline).
 
 #### `processed_audio/`
 
@@ -229,51 +233,30 @@ All files are named in the format: `"{service}_{input_filename}.csv"`
 - `service`: whatever processing was done such as `medX`, `transcription`, etc.
 - `input_filename`: outputs are always colocated with their corresponding audio chunk and transcript.
 
-## Running Audio Services (Pipeline)
+## Running Audio Pipeline
 
-### Run All Audio Services
+### Dev Mode (No Mic Required)
 
-Run all audio services from the **root folder** using the following command (no arguments):
-
-```sh
-python -m src_audio.main
-```
-
-This will run transcription -> medication extraction -> intervention extraction
-(semantic filtering is currently excluded from the full pipeline run until med/inter extraction is complete, it can still be ran independently.)
-
-### Run Individual Audio Services
-
-Run services from the **root folder** using the following command pattern:
+Process whatever is already in `data/audio/audio_chunks/`:
 
 ```sh
-python -m src_audio.main <service_name>
+python -m src_audio.main_audio --dev
 ```
 
-### Available Services
+### Audio Pipeline (Mic Required)
 
-| Service Name     | Description                       |
-| ---------------- | --------------------------------- |
-| `transcribe`     | Run audio-to-transcript service   |
-| `anonymize` | Run transcript anonymization service   |
-| `meds`           | Run medication extraction service |
-| `inter`          | Run NLP intervention extraction   |
-| `sem`            | Run semantic filtering service |
-
-
-### Examples
+Run the audio pipeline (mic + processing) from the **root folder** using the following command (no arguments):
 
 ```sh
-# Run medication extraction
-python -m src_audio.main meds
-
-# Run transcription
-python -m src_audio.main transcribe
+python -m src_audio.main_audio
 ```
+
+This runs: record -> transcription -> anonymization -> medication extraction -> intervention extraction.
 
 ### Important Notes:
 - Always run from the **root** folder.
-- Run as a module (`src_audio.main`), not as a file (`src_audio/main.py`).
+- Run as a module (`src_audio.main_audio`), not as a file.
+- Individual service CLIs are not currently wired; call the service modules directly if needed.
 
 
 # Video Processing Pipeline
@@ -284,6 +267,7 @@ A detection + crop extraction pipeline with an injury-classification inference s
 Place your video/image test data under:
 
 - `data/video/source_files/` - Input images to process
+- `data/video/saved_imgs/` - Snapshots captured from the camera
 - `data/video/output_files/` - All video pipeline outputs
    - `DetectionOutput/`
       - `annotated/` - Annotated detection visualizations
@@ -293,31 +277,35 @@ Place your video/image test data under:
       - `injury_predictions.json` - Per-crop predictions + summary
       - `injury_predictions_summary.csv` - Per-image/per-body-part summary
 
-## Video .ENV Variables
-
-Video pipeline configuration lives in the **VIDEO PIPELINE ENVIRONMENT VARIABLES** section of `config/.env.template`.
-Create your local `.env` in the repo root (as described above) and set at minimum:
-
-- `PIPELINE_DETECTION_SOURCE` (defaults to `data/video/source_files`)
-- `PIPELINE_ROOT` (defaults to `data/video/output_files`)
-- `PIPELINE_DETECTION_OUTPUT` (defaults to `data/video/output_files/DetectionOutput`)
-- `PIPELINE_INJURY_CHECKPOINT` (checkpoint used for injury inference)
-
 ## Running the Video Pipeline
 
-Run the full video pipeline (no arguments) from the **root folder**:
+### Dev Mode (Image Processing Only)
+
+Process whatever is already in `data/videp/saved_imgs/`:
 
 ```sh
-python -m src_video.main
+python -m src_video.main_video --dev
 ```
 
 This will run:
 1. Detection + crop extraction
 2. Injury inference on crops (using the configured checkpoint)
 
+
+### Video Pipeline (Camera Required)
+
+Run the video pipeline with live camera capture (no audio):
+
+```sh
+python -m src_video.main_video
+```
+
+This captures frames from the CSI camera and processes them through the full video pipeline.
+
 ### Important Notes:
-- If you see no outputs, ensure `data/video/source_files/` is not empty (or set `PIPELINE_DETECTION_SOURCE` to a folder that contains images).
-- De-identification is currently a placeholder step and is disabled by default.
+- If you see no outputs in dev mode, ensure `data/video/saved_ims/` is not empty.
+- The live camera pipeline can be run standalone with `python -m src_video.main_video` or together with audio via [main.py](main.py).
+
 
 ## Model Checkpoints
 
@@ -343,4 +331,20 @@ The default training script assumes the dataset is located at:
 `data/video/source_files/Images/Wound_dataset/`
 
 If you save to a different location (or store the dataset elsewhere), set `PIPELINE_INJURY_CHECKPOINT` in your `.env` to point at the resulting `.pt` file and/or pass `--data-dir` to the training script.
+
+# Full System (Camera + Audio)
+
+Run both pipelines together (camera + mic):
+
+```sh
+python -m main
+```
+
+This runs:
+- Video capture from CSI camera → detection → injury classification
+- Audio recording from USB mic → transcription → medication/intervention extraction
+
+### Important Notes:
+- If the camera fails to initialize, the audio pipeline will not start.
+- De-identification is currently enabled but is a placeholder implementation.
 

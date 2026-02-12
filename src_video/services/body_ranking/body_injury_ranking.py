@@ -3,10 +3,10 @@ import csv
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from src_video.domain.entities import create_body_parts
+from config.logger import Logger
 import time
 
-
-
+log = Logger("[video][ranking]")
 
 def body_ranking(settings: Dict[str, Any]) -> bool:
     """
@@ -22,7 +22,7 @@ def body_ranking(settings: Dict[str, Any]) -> bool:
 
     try:
         if not prediction_json.exists():
-            print(f"[WARNING] Prediction file not found: {prediction_json}")
+            log.warning(f"Prediction file not found: {prediction_json}")
             return False
 
         # Load predictions
@@ -34,7 +34,7 @@ def body_ranking(settings: Dict[str, Any]) -> bool:
             with open(template_json, "r") as f:
                 best_results = json.load(f)
         else:
-            print(f"[INFO] Creating new visual_output file: {template_json}")
+            log.info(f"Creating new visual_output file: {template_json}")
             best_results = create_body_parts()
 
         updated_count = 0
@@ -110,12 +110,12 @@ def body_ranking(settings: Dict[str, Any]) -> bool:
 
                     first = False
 
-        print(f"\n[INFO] Body ranking complete. Updated {updated_count} entries.")
-        print(f"[INFO] JSON output: {template_json}")
-        print(f"[INFO] CSV output: {output_csv}\n")
+        log.success(f"Body ranking complete. Updated {updated_count} entries")
+        log.info(f"JSON output: {template_json}")
+        log.info(f"CSV output: {output_csv}")
 
         return True
 
     except Exception as e:
-        print(f"[ERROR] Body ranking failed: {e}")
+        log.error(f"Body ranking failed: {e}")
         return False
