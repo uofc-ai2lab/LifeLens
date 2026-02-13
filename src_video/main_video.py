@@ -30,6 +30,9 @@ from src_video.services.classification_service.infer_injuries_on_crops import pr
 from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
 
+from ultralytics import YOLO
+from boxmot import OCSORT
+
 def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")
 
@@ -205,6 +208,15 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
         daemon=True,
     )
 
+    tracker = OCSORT(
+        conf_thres=0.3,
+        iou_thres=0.3,
+        max_age=30
+    )
+
+    patient_id = None
+    person_model = YOLO("yolov8n.pt")  
+
     worker.start()
     window = "CSI Camera"
     cv2.namedWindow(window, cv2.WINDOW_NORMAL)
@@ -224,6 +236,21 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
             if not ok or frame is None:
                 log.error("Camera read failed")
                 break
+
+            results = person_model.predict(frame, classes=[0], verbose=False)
+
+            detections = []
+
+            for r in results:
+                boxes = r.boxes
+                for box in boxes:
+                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                    conf = box.conf[0].cpu().numpy()
+                    detections.append([x1, y1, x2, y2, conf, 0])  
+            tracks = tracker.update(detections, frame)
+
+
+            detections = np.array(detections)
 
             # Check if frame is valid
             if frame.size == 0:
@@ -260,7 +287,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
                     log.success("Job queued")
 
 
-            draw_overlay(frame, fps, processing)
+            draw_overlay(frame, fps, processing, tracks)
             cv2.imshow(window, frame)
             
             # Single waitKey with proper ESC and 'q' handling
