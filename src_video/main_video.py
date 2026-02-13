@@ -8,6 +8,7 @@ import argparse
 from pathlib import Path
 from typing import Dict, Any, Optional
 from queue import Queue, Empty
+import numpy as np
 
 from config.jetson_startup import run_jetson_startup_tasks
 from config.resource_usage import start_monitoring, stop_monitoring
@@ -18,7 +19,8 @@ from config.video_settings import (
     SNAPSHOT_INTERVAL,
     IMAGE_SAVE_DIR,
 )
-
+from ultralytics import YOLO
+from boxmot import OcSort
 from src_video.services.camera_capture_service.gstreamer_video_pipeline import (
     GStreamerVideoPipeline,
     draw_overlay,
@@ -204,6 +206,14 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
         args=(image_queue, settings),
         daemon=True,
     )
+    tracker = OcSort(
+        conf_thres=0.3,
+        iou_thres=0.3,
+        max_age=30
+    )
+
+    patient_id = None
+    person_model = YOLO("yolov8n.pt")  
 
     worker.start()
     window = "CSI Camera"
@@ -224,6 +234,19 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
             if not ok or frame is None:
                 log.error("Camera read failed")
                 break
+
+            results = person_model.predict(frame, classes=[0], verbose=False)
+
+            detections = []
+
+            for r in results:
+                boxes = r.boxes
+                for box in boxes:
+                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                    conf = box.conf[0].cpu().numpy()
+                    detections.append([x1, y1, x2, y2, conf, 0])  
+            detections = np.array(detections, dtype=float)
+            tracks = tracker.update(detections, frame)
 
             # Check if frame is valid
             if frame.size == 0:
@@ -260,7 +283,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
                     log.success("Job queued")
 
 
-            draw_overlay(frame, fps, processing)
+            draw_overlay(frame, fps, processing, tracks)
             cv2.imshow(window, frame)
             
             # Single waitKey with proper ESC and 'q' handling
