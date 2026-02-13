@@ -262,12 +262,35 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
                 frame_count = 0
                 start_time = time.time()
 
-            # Marker detection
-            detected = detect_apriltags(frame)
+            # Marker detection (only until we assign patient_id)
+            tag_detections = []
+            if patient_id is None:
+                tag_detections = detect_apriltags(frame)
             now = time.time()
 
-            # Capture
-            if detected and (now - last_snap) >= SNAPSHOT_INTERVAL:
+            # Assign patient_id when a tag is inside a tracked person box
+            if patient_id is None and tag_detections and tracks is not None and len(tracks) > 0:
+                for tag in tag_detections:
+                    tag_x = float(tag.center_x)
+                    tag_y = float(tag.center_y)
+                    for trk in tracks:
+                        x1, y1, x2, y2 = trk[0], trk[1], trk[2], trk[3]
+                        if x1 <= tag_x <= x2 and y1 <= tag_y <= y2:
+                            patient_id = int(trk[4])
+                            log.success(f"Patient assigned to track ID {patient_id}")
+                            break
+                    if patient_id is not None:
+                        break
+
+            # Capture when the assigned patient is in view (no tag needed after assignment)
+            patient_in_view = False
+            if patient_id is not None and tracks is not None and len(tracks) > 0:
+                for trk in tracks:
+                    if int(trk[4]) == patient_id:
+                        patient_in_view = True
+                        break
+
+            if patient_in_view and (now - last_snap) >= SNAPSHOT_INTERVAL:
 
                 if capture_frame_from_pipeline(frame, IMAGE_SAVE_DIR):
 
