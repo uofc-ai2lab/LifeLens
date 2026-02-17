@@ -32,6 +32,9 @@ from src_video.services.classification_service.infer_injuries_on_crops import pr
 from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
 
+from ultralytics import YOLO
+from boxmot import OCSORT
+
 def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")
 
