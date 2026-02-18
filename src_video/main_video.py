@@ -19,8 +19,7 @@ from config.video_settings import (
     SNAPSHOT_INTERVAL,
     IMAGE_SAVE_DIR,
 )
-from ultralytics import YOLO
-from boxmot import OcSort
+
 from src_video.services.camera_capture_service.gstreamer_video_pipeline import (
     GStreamerVideoPipeline,
     draw_overlay,
@@ -32,8 +31,6 @@ from src_video.services.classification_service.infer_injuries_on_crops import pr
 from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
 
-from ultralytics import YOLO
-from boxmot import OCSORT
 
 def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")
@@ -173,6 +170,16 @@ def processing_worker(queue: Queue, settings: Dict[str, Any]):
 
     log.info("Processing worker stopped")
 
+def find_patient_track_id(tag_detections, tracks) -> Optional[int]:
+    for tag in tag_detections:
+        tag_x = float(tag.center_x)
+        tag_y = float(tag.center_y)
+        for trk in tracks:
+            x1, y1, x2, y2 = trk[0], trk[1], trk[2], trk[3]
+            if x1 <= tag_x <= x2 and y1 <= tag_y <= y2:
+                return int(trk[4])
+    return None
+
 
 def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
     """
@@ -199,6 +206,9 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
         process_single_image(settings)
         stop_monitoring()
         return 0
+    
+    from ultralytics import YOLO
+    from boxmot import OcSort
 
     log.header("Video Pipeline Starting")
 
@@ -273,17 +283,9 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
 
             # Assign patient_id when a tag is inside a tracked person box
             if patient_id is None and tag_detections and tracks is not None and len(tracks) > 0:
-                for tag in tag_detections:
-                    tag_x = float(tag.center_x)
-                    tag_y = float(tag.center_y)
-                    for trk in tracks:
-                        x1, y1, x2, y2 = trk[0], trk[1], trk[2], trk[3]
-                        if x1 <= tag_x <= x2 and y1 <= tag_y <= y2:
-                            patient_id = int(trk[4])
-                            log.success(f"Patient assigned to track ID {patient_id}")
-                            break
-                    if patient_id is not None:
-                        break
+                found_patient_id = find_patient_track_id(tag_detections, tracks)
+                if found_patient_id is not None:
+                    log.success(f"Patient assigned to track ID {found_patient_id}")
 
             # Capture when the assigned patient is in view (no tag needed after assignment)
             patient_in_view = False
