@@ -30,7 +30,7 @@ class ResNet50ReIDExtractor:
         self.model_path = Path(model_path)
         self.device = device
         self.model = None
-        self.input_size = (256, 128)  # Standard ReID input size
+        self.input_size = (128, 256)  # Standard ReID input size
         
         self._load_model()
     
@@ -109,13 +109,15 @@ class ResNet50ReIDExtractor:
         
         # Normalize (ImageNet stats)
         img = img.astype(np.float32) / 255.0
-        img = (img - np.array([0.485, 0.456, 0.406])) / np.array([0.229, 0.224, 0.225])
+        mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+        std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+        img = (img - mean) / std
         
         # Add batch dimension and transpose to CHW
         img = np.transpose(img, (2, 0, 1))  # HWC -> CHW
         img = np.expand_dims(img, 0)  # Add batch
         
-        return img
+        return img.astype(np.float32)
     
     def _infer(self, img: np.ndarray) -> np.ndarray:
         """Run inference and get feature vector."""

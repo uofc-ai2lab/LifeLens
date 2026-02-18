@@ -213,16 +213,25 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
     )
     tracker = OcSort(
         conf_thres=0.3,
-        iou_thres=0.3,
-        max_age=30
+        iou_thres=0.1,  # Lower for better re-identification
+        max_age=300  # 10 seconds at 30fps (was 30 = 1 second)
     )
 
     # Initialize ReID extractor for person re-identification
     reid_extractor = ResNet50ReIDExtractor(
-        model_path="resnet50_market1501_aicity156.onnx",
+        model_path="src_video/resnet50_market1501_aicity156.onnx",
         device="cpu"
     )
-    track_features = {}  # Maps track_id -> feature vector for appearance-based matching
+    
+    # Persistent person tracking
+    track_to_persistent_id = {}  # Maps OcSort track_id -> persistent_person_id
+    persistent_id_counter = 0  # Counter for assigning persistent IDs
+    persistent_features = {}  # Maps persistent_person_id -> feature vector
+    
+    # Primary person tracking
+    primary_person_id = None  # Persistent ID of person with marker
+    primary_person_feature = None  # Stored feature for re-identification
+    primary_person_assigned = False
 
     patient_id = None
     person_model = YOLO("yolov8n.pt")
@@ -243,6 +252,14 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
     try:
         while True:
             ok, frame = video_pipeline.read_frame()
+            if not ok or frame is None:
+                log.error("Camera read failed")
+                break
+
+            # Check if frame is valid
+            if frame.size == 0:
+                log.error("Empty frame received")
+                continue
             results = person_model.predict(frame, classes=[0], verbose=False)
 
             detections = []
@@ -260,22 +277,48 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
             # Extract ReID features for improved person re-identification
             if len(tracks) > 0 and len(detections) > 0:
                 person_features = reid_extractor.extract_features(frame, detections)
+                
+                # Assign persistent IDs to tracks
                 for i, track in enumerate(tracks):
                     track_id = int(track[4])
+                    
+                    # If track already has a persistent ID, skip
+                    if track_id in track_to_persistent_id:
+                        continue
+                    
+                    # Try to match with primary person using appearance features
+                    if primary_person_feature is not None and i < len(person_features) and len(person_features[i]) > 0:
+                        current_feature = person_features[i]
+                        distance = 1 - np.dot(current_feature, primary_person_feature) / (
+                            np.linalg.norm(current_feature) * np.linalg.norm(primary_person_feature) + 1e-5
+                        )
+                        
+                        # If feature distance is low, it's the same person
+                        if distance < 0.5:  # Cosine distance threshold
+                            track_to_persistent_id[track_id] = primary_person_id
+                            log.success(f"Re-identified primary person with new track {track_id} (distance: {distance:.3f})")
+                            continue
+                    
+                    # Assign new persistent ID for new person
+                    persistent_id_counter += 1
+                    track_to_persistent_id[track_id] = persistent_id_counter
+                    
                     if i < len(person_features) and len(person_features[i]) > 0:
-                        track_features[track_id] = person_features[i]
+                        persistent_features[persistent_id_counter] = person_features[i]
+                    
+                    log.info(f"New person {persistent_id_counter} detected (track {track_id})")
 
 
             # detections = np.array(detections)
 
-            if not ok or frame is None:
-                log.error("Camera read failed")
-                break
+            # if not ok or frame is None:
+            #     log.error("Camera read failed")
+            #     break
 
-            # Check if frame is valid
-            if frame.size == 0:
-                log.error("Empty frame received")
-                continue
+            # # Check if frame is valid
+            # if frame.size == 0:
+            #     log.error("Empty frame received")
+            #     continue
 
             # FPS
             frame_count += 1
@@ -289,9 +332,60 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
             # Marker detection
             detected = detect_apriltags(frame)
             now = time.time()
+            
+            # Assign primary person when AprilTag detected
+            if detected and not primary_person_assigned and tracks is not None and len(tracks) > 0:
+                # Find which track has the AprilTag
+                for i, tag in enumerate(detected if isinstance(detected, list) else [detected]):
+                    if not hasattr(tag, 'center_x'):
+                        continue
+                    tag_x = float(tag.center_x)
+                    tag_y = float(tag.center_y)
+                    
+                    for j, trk in enumerate(tracks):
+                        x1, y1, x2, y2 = trk[0], trk[1], trk[2], trk[3]
+                        track_id = int(trk[4])
+                        
+                        # Check if AprilTag is inside bounding box
+                        if x1 <= tag_x <= x2 and y1 <= tag_y <= y2:
+                            # Get or create persistent ID for this person
+                            if track_id not in track_to_persistent_id:
+                                persistent_id_counter += 1
+                                track_to_persistent_id[track_id] = persistent_id_counter
+                            
+                            primary_person_id = track_to_persistent_id[track_id]
+                            
+                            # Store primary person's feature
+                            if j < len(person_features) and len(person_features[j]) > 0:
+                                primary_person_feature = person_features[j].copy()
+                                persistent_features[primary_person_id] = primary_person_feature
+                            
+                            primary_person_assigned = True
+                            patient_id = primary_person_id
+                            
+                            log.success(f"Primary person assigned: persistent ID {primary_person_id} (track {track_id})")
+                            break
+                    
+                    if primary_person_assigned:
+                        break
 
-            # Capture
-            if detected and (now - last_snap) >= SNAPSHOT_INTERVAL:
+            # Capture when primary person is in view or AprilTag is detected
+            should_capture = False
+
+            if detected:
+                should_capture = True
+
+            elif primary_person_assigned and primary_person_id is not None:
+                # Or capture when primary person is in view
+                for trk in (tracks if tracks is not None else []):
+                    track_id = int(trk[4])
+                    if track_id in track_to_persistent_id:
+                        if track_to_persistent_id[track_id] == primary_person_id:
+                            should_capture = True
+                            break
+
+            # if primary_in_view and (now - last_snap) >= SNAPSHOT_INTERVAL:
+            if should_capture and (now - last_snap) >= SNAPSHOT_INTERVAL:
 
                 if capture_frame_from_pipeline(frame, IMAGE_SAVE_DIR):
 
