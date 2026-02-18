@@ -1,7 +1,7 @@
 import re
 from functools import lru_cache
 from src_audio.domain.constants import ROUTES, DOSAGES, TEXT_NUMBERS, NUMBER_PATTERN, MEDICATIONS, LOW_CONFIDENCE_SCORE, HIGH_CONFIDENCE_SCORE, DOSAGE_TOKEN_PATTERN
-from src_audio.domain.entities import MedicationEntity
+from src_audio.domain.entities import MedicationEntity, MedicationAdministration
 
 @lru_cache(maxsize=1)
 def create_all_med_list(med_list=MEDICATIONS) -> list[str]:
@@ -86,45 +86,81 @@ def postprocess_entities(entities, sentence):
             ))
     entities.sort(key=lambda e: e.start_idx)
     return ensure_proper_medication_name(entities, sentence)
-        
-def fallback_dosage_or_route(sentence: str, med_start_idx: int, mode: str = "dosage") -> str | None:
+
+def fallback_dosage_or_route(sentence: str, med_record: MedicationAdministration, mode: str = "dosage") -> str | None:
     """
-    Extract medication dosage or route if NER missed it.
-    
+    Extract medication dosage or route if NER missed it. We do this by looking at a 
+    small window of words around the medication mentioned in the sentence and extracting 
+    dosage or route information from that local context using predefined lists and patterns. 
+
     Args:
         sentence (str): Input sentence.
-        med_start_idx (int): Start index of medication in sentence.
-        mode (str): "dosage" or "route" — what to extract.
-        
+        med_start_idx (int): Character start index of medication.
+        mode (str): "dosage" or "route".
+
     Returns:
         Optional[str]: Extracted dosage or route, or None if not found.
     """
+
     text = sentence.lower()
-    start = max(0, med_start_idx - 2)  # look back up to 2 words before medication
-    end = min(len(text), med_start_idx + 3)  # look ahead up to 2 words after medication
-    window = text[start:end]
+    medication = med_record.medication.lower()
+
+    # Tokenize sentence and medication
+    words = re.findall(r"\S+", text)
+    med_tokens = re.findall(r"\S+", medication)
+
+    if not med_tokens:
+        return None
+
+    # Find medication token sequence in sentence tokens
+    med_word_index = None
+
+    for i in range(len(words) - len(med_tokens) + 1):
+        if words[i:i + len(med_tokens)] == med_tokens:
+            med_word_index = i
+            break
+
+    if med_word_index is None:
+        return None  # Medication not found in sentence
+
+    # Build local word window (±5 words)
+    window_start = max(0, med_word_index - 5)
+    window_end = min(len(words), med_word_index + len(med_tokens) + 5)
+    window_words = words[window_start:window_end]
+    window_text = " ".join(window_words)
 
     if mode == "dosage":
-        # Tokenize: Grab numbers/fractions OR words
-        tokens = DOSAGE_TOKEN_PATTERN.findall(window)
-        
-        for i in range(len(tokens) - 1):
-            number_token, unit_token = tokens[i], tokens[i + 1]
-            
-        # Check if the second word is a valid unit
-        if unit_token in DOSAGES:
-            # Check if the first word is a numeric string
-            if NUMBER_PATTERN.fullmatch(number_token):
-                return f"{number_token} {unit_token}"
-            
-            # Check if the first word is a text-based number
-            if number_token in TEXT_NUMBERS:
-                return f"{TEXT_NUMBERS.get(number_token)} {unit_token}" 
+
+        tokens = DOSAGE_TOKEN_PATTERN.findall(window_text)
+
+        for i in range(len(tokens)):
+
+            token = tokens[i]
+
+            # Numeric dosage
+            if NUMBER_PATTERN.fullmatch(token):
+                number_value = token
+
+            # Text-based number
+            elif token in TEXT_NUMBERS:
+                number_value = str(TEXT_NUMBERS[token])
+
+            else:
+                continue
+
+            # Check next token for unit
+            if i + 1 < len(tokens) and tokens[i + 1] in DOSAGES:
+                return f"{number_value} {tokens[i + 1]}"
+
+        return None
+
     elif mode == "route":
-        # Look through whole sentence (that has been tokenized) for a possible route.
-        for token in re.findall(r"[a-z']+", text):
+
+        for token in re.findall(r"[a-z']+", window_text):
             if token in ROUTES:
                 return token
+
+        return None
 
     return None
 

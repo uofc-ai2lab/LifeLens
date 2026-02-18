@@ -5,7 +5,7 @@ from src_audio.utils.calculate_mean import mean
 from src_audio.domain.constants import ROUTES, LOW_CONFIDENCE_SCORE, HIGH_CONFIDENCE_SCORE, MED_COLUMNS
 from src_audio.domain.entities import MedicationEntity, MedicationAdministration
 from src_audio.services.medication_extraction_service.extractor import MedicationExtractor
-from src_audio.services.medication_extraction_service.postprocessing import postprocess_entities, fallback_dosage_or_route
+from src_audio.services.medication_extraction_service.postprocessing import postprocess_entities, fallback_dosage_or_route, get_default_dosage
 from config.logger import Logger
 
 log = Logger("[audio][medication]")
@@ -91,7 +91,7 @@ def extract_med_admins_with_confidence(segments: list[dict]) -> list[MedicationA
                 record, i = build_medication_record(ent, ents, segment, i)
 
                 if not record.dosage:
-                    dose = fallback_dosage_or_route(segment["original_text"], ent.start_idx, mode="dosage")
+                    dose = fallback_dosage_or_route(segment["original_text"], record, mode="dosage")
                     if dose:
                         record.dosage = dose
                         record.dosage_score = LOW_CONFIDENCE_SCORE
@@ -102,7 +102,7 @@ def extract_med_admins_with_confidence(segments: list[dict]) -> list[MedicationA
                             record.dosage_score = LOW_CONFIDENCE_SCORE
 
                 if not record.route:
-                    rte = fallback_dosage_or_route(segment["original_text"], ent.start_idx, mode="route")
+                    rte = fallback_dosage_or_route(segment["original_text"], record, mode="route")
                     if rte:
                         record.route = rte
                         record.route_score = LOW_CONFIDENCE_SCORE

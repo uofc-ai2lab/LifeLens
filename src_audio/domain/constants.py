@@ -267,7 +267,7 @@ DOSAGES = {d.lower() for d in {
     "puffs", "puff", "spray", "sprays", "inhaler",
     "capsule", "capsules", "pills", "pill",
     "inhalations", "mmol", "millimoles",
-    "micron", "iu", "iu's", "international units"
+    "micron", "iu", "iu's"
 }}
 
 TEXT_NUMBERS = {
@@ -288,7 +288,7 @@ TEXT_NUMBERS = {
 
 NUMBER_PATTERN = re.compile(r"(?:\d*\.\d+|\d+)(?:/\d+)?")
 DOSAGE_TOKEN_PATTERN = re.compile(r"(?:\d*\.\d+|\d+)(?:/\d+)?|[a-z']+")
-LOW_CONFIDENCE_SCORE = 0.5
+LOW_CONFIDENCE_SCORE = 0.4
 HIGH_CONFIDENCE_SCORE = 1.0
 
 MED_COLUMNS = [
