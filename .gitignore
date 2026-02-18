@@ -119,6 +119,8 @@ pyannote_models/
 #MedCat models
 nlpPipeline/data_p3.2
 
+# NVIDIA ResNet model
+resnet50_market1501_aicity156.onnx
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from queue import Queue, Empty
 from ultralytics import YOLO
-from boxmot import OCSORT
-
+from boxmot import OcSort
+import numpy as np
 
 from config.jetson_startup import run_jetson_startup_tasks
 from config.resource_usage import start_monitoring, stop_monitoring
@@ -32,6 +32,7 @@ from src_video.services.body_ranking.body_injury_ranking import body_ranking
 from src_video.services.classification_service.infer_injuries_on_crops import predict_injuries_on_detection_crops
 from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
+from src_video.services.person_reid_service import ResNet50ReIDExtractor
 
 def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")
@@ -210,14 +211,21 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
         args=(image_queue, settings),
         daemon=True,
     )
-    tracker = OCSORT(
+    tracker = OcSort(
         conf_thres=0.3,
         iou_thres=0.3,
         max_age=30
     )
 
+    # Initialize ReID extractor for person re-identification
+    reid_extractor = ResNet50ReIDExtractor(
+        model_path="resnet50_market1501_aicity156.onnx",
+        device="cpu"
+    )
+    track_features = {}  # Maps track_id -> feature vector for appearance-based matching
+
     patient_id = None
-    person_model = YOLO("yolov8n.pt")  
+    person_model = YOLO("yolov8n.pt")
 
     worker.start()
     window = "CSI Camera"
@@ -245,10 +253,20 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
                     x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
                     conf = box.conf[0].cpu().numpy()
                     detections.append([x1, y1, x2, y2, conf, 0])  
-            tracks = tracker.update(detections, frame)
+            
+            detections_np = np.array(detections, dtype=np.float32) if detections else np.array([])
+            tracks = tracker.update(detections_np, frame)
+            
+            # Extract ReID features for improved person re-identification
+            if len(tracks) > 0 and len(detections) > 0:
+                person_features = reid_extractor.extract_features(frame, detections)
+                for i, track in enumerate(tracks):
+                    track_id = int(track[4])
+                    if i < len(person_features) and len(person_features[i]) > 0:
+                        track_features[track_id] = person_features[i]
 
 
-            detections = np.array(detections)
+            # detections = np.array(detections)
 
             if not ok or frame is None:
                 log.error("Camera read failed")
