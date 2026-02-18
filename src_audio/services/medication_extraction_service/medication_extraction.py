@@ -81,28 +81,33 @@ def extract_med_admins_with_confidence(segments: list[dict]) -> list[MedicationA
         list[MedicationAdministration]: List of finalized administrations with confidence scores.
     """
     administrations = []
+    accepted_entity_type = {"B-Medication", "MEDICATION"}
+
     for segment in segments:
         ents = segment["entities"]
+        original_text = segment["original_text"]
+        entities_length = len(ents)
         i = 0
-        while i < len(ents):
+
+        while i < entities_length:
             ent = ents[i]
 
-            if ent.entity in {"B-Medication", "MEDICATION"}:
+            if ent.entity in accepted_entity_type:
                 record, i = build_medication_record(ent, ents, segment, i)
 
+                # ---- DOSAGE ----
                 if not record.dosage:
-                    dose = fallback_dosage_or_route(segment["original_text"], record, mode="dosage")
+                    dose = fallback_dosage_or_route(original_text, record, mode="dosage")
+                    if not dose:
+                        dose = get_default_dosage(record.medication)
+
                     if dose:
                         record.dosage = dose
                         record.dosage_score = LOW_CONFIDENCE_SCORE
-                    else:
-                        default_dosage = get_default_dosage(record.medication)
-                        if default_dosage:
-                            record.dosage = default_dosage
-                            record.dosage_score = LOW_CONFIDENCE_SCORE
 
+                # ---- ROUTE ----
                 if not record.route:
-                    rte = fallback_dosage_or_route(segment["original_text"], record, mode="route")
+                    rte = fallback_dosage_or_route(original_text, record, mode="route")
                     if rte:
                         record.route = rte
                         record.route_score = LOW_CONFIDENCE_SCORE

@@ -1,6 +1,5 @@
 import os
 import re
-import threading
 
 ### ------------------------------- AUDIO RECORDING SERVICE ------------------------------- ###
 AUDIO_EXTS = {".wav", ".mp3", ".m4a", ".flac"}

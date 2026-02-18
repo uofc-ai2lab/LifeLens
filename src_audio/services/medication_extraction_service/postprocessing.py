@@ -4,18 +4,20 @@ from src_audio.domain.constants import ROUTES, DOSAGES, TEXT_NUMBERS, NUMBER_PAT
 from src_audio.domain.entities import MedicationEntity, MedicationAdministration
 
 @lru_cache(maxsize=1)
-def create_all_med_list(med_list=MEDICATIONS) -> list[str]:
+def create_all_med_list() -> list[str]:
+    """Build one master list of all medication names including aliases. 
+    Cached to avoid recomputation for every sentence. 
+
+    Args:
+        None
+    Returns:
+        list[str]: List of all medication terms to check for in text.
     """
-    Build one master list of all medication names including aliases.
-    Cached to avoid recomputation for every sentence.
-    """
-    all_med_terms = set()
-    for med, med_info in med_list.items():
-        all_med_terms.add(med.lower())
-        aliases = med_info.get("aliases", [])
-        for alias in aliases:
-            all_med_terms.add(alias.lower())
-            
+
+    all_med_terms = {name.lower() for name in MEDICATIONS.keys()}
+    for info in MEDICATIONS.values():
+        all_med_terms.update(a.lower() for a in info.get("aliases", []))
+
     return sorted(all_med_terms, key=len, reverse=True)
 
 def missed_medication_info(text, med_list):
@@ -52,16 +54,16 @@ def ensure_proper_medication_name(entities, sentence):
     Returns:
         list[MedicationEntity]: Entities with corrected medication names.
     """
+    tokens_set = set(re.findall(r"[\w'-]+", sentence))
     for ent in entities:
         found_med = ent.word
-        tokens = re.findall(r"[\w'-]+", sentence)
-        if found_med not in tokens:
-            start_idx = ent.start_idx
-            end_idx = start_idx
-            while end_idx < len(sentence) and not sentence[end_idx].isspace():
-                end_idx += 1
-            ent.word = sentence[start_idx:end_idx]
-            
+        if found_med in tokens_set:
+            continue
+        start_idx = ent.start_idx
+        m = re.match(r"\S+", sentence[start_idx:])
+        if m:
+            ent.word = m.group(0)
+
     return entities
 
 def postprocess_entities(entities, sentence):
@@ -130,34 +132,30 @@ def fallback_dosage_or_route(sentence: str, med_record: MedicationAdministration
     window_text = " ".join(window_words)
 
     if mode == "dosage":
+        # use locals to avoid repeated global lookups
+        token_pattern = DOSAGE_TOKEN_PATTERN
+        number_re = NUMBER_PATTERN
+        text_numbers = TEXT_NUMBERS
+        dosages = DOSAGES
 
-        tokens = DOSAGE_TOKEN_PATTERN.findall(window_text)
-
-        for i in range(len(tokens)):
-
-            token = tokens[i]
-
-            # Numeric dosage
-            if NUMBER_PATTERN.fullmatch(token):
+        tokens = [t.lower() for t in token_pattern.findall(window_text)]
+        for i, token in enumerate(tokens):
+            if number_re.fullmatch(token):
                 number_value = token
-
-            # Text-based number
-            elif token in TEXT_NUMBERS:
-                number_value = str(TEXT_NUMBERS[token])
-
+            elif token in text_numbers:
+                number_value = str(text_numbers[token])
             else:
                 continue
 
-            # Check next token for unit
-            if i + 1 < len(tokens) and tokens[i + 1] in DOSAGES:
+            if i + 1 < len(tokens) and tokens[i + 1] in dosages:
                 return f"{number_value} {tokens[i + 1]}"
 
         return None
 
     elif mode == "route":
-
+        routes = ROUTES
         for token in re.findall(r"[a-z']+", window_text):
-            if token in ROUTES:
+            if token in routes:
                 return token
 
         return None
@@ -169,6 +167,7 @@ def get_default_dosage(medication_name: str) -> str | None:
     for med_name, info in MEDICATIONS.items():
         if med_name.lower() == med_lower:
             return info.get("default_dosage")
-        if med_lower in [a.lower() for a in info.get("aliases", [])]:
-            return info.get("default_dosage")
+        for a in info.get("aliases", []):
+            if med_lower == a.lower():
+                return info.get("default_dosage")
     return None
