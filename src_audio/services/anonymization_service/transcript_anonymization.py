@@ -1,10 +1,12 @@
 from src_audio.utils.load_csv_file import load_csv_file 
 from src_audio.utils.export_to_csv import export_to_csv
 from src_audio.services.anonymization_service.anonymizer import TranscriptAnonymizer
-from config.audio_settings import TRANSCRIPT_FILES_LIST
+from config.logger import Logger
 from pathlib import Path
 
-def run_anonymization(transcript_path: str, anonymizer: TranscriptAnonymizer) -> None:
+log = Logger("[audio][anonymization]")
+
+def run_anonymization(chunk_path: str, transcript_path: str) -> None:
     """
     Run the full transcript anonymization pipeline:
     - Load transcript CSV
@@ -17,7 +19,11 @@ def run_anonymization(transcript_path: str, anonymizer: TranscriptAnonymizer) ->
     Returns:
         None
     """
+    log.header("Starting Anonymization...")
+    anonymizer = TranscriptAnonymizer()
     df = load_csv_file(transcript_path)
+    log.info(f"Processing {len(df)} segments")
+    
     anonymized_texts = []
     for _, row in df.iterrows():
         anonymized_text = anonymizer.anonymize(row["text"])
@@ -29,26 +35,12 @@ def run_anonymization(transcript_path: str, anonymizer: TranscriptAnonymizer) ->
         })
 
     # Export anonymized transcript to CSV
-    export_to_csv(
+    anon_path = export_to_csv(
         data=anonymized_texts,
-        output_path=Path(transcript_path).parent,
-        input_file_path=Path(transcript_path),
+        audio_chunk_path=Path(chunk_path),
         service="anonymization",
         columns=["start_time", "end_time", "text", "speaker"],
         empty_ok=True,
     )
-
-async def run_anonymization_service():
-    """
-    Async wrapper to run the transcript anonymization script
-    
-    Args: 
-        None
-    
-    Returns: 
-        None
-    """
-    anonymizer = TranscriptAnonymizer()
-    for transcript in TRANSCRIPT_FILES_LIST:
-        run_anonymization(transcript, anonymizer)
-    
+    log.info(f"Saved anonymization file to {anon_path.name if anon_path else 'file'}")
+    log.success("Anonymization completed successfully!")

@@ -8,7 +8,6 @@ import sys
 # driven by python.envFile.
 load_dotenv()
 
-
 # -------------------------
 # Base paths (video)
 # -------------------------
@@ -26,8 +25,6 @@ SNAPSHOT_INTERVAL = int(os.getenv('SNAPSHOT_INTERVAL', '2'))  # seconds between 
 
 IMAGE_SAVE_DIR = VIDEO_DIR / "saved_imgs"
 os.makedirs(IMAGE_SAVE_DIR, exist_ok=True)
-
-# april tag detection
 
 # Tag Detection Settings
 TAG_SIZE = float(os.getenv('TAG_SIZE', '0.025'))  # Tag size in meters

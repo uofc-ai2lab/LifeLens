@@ -5,8 +5,11 @@
 
 import cv2
 import numpy as np
+import sys
+import os
 from pupil_apriltags import Detector
 from src_video.domain.entities import AprilTagDetection
+from config.logger import Logger
 from config.video_settings import (
     # tag settings
     TAG_FAMILY,
@@ -29,20 +32,36 @@ from src_video.domain.constants import (
 )
 MIN_DECISION_MARGIN = 20  # Adjust based on environment
 
+log = Logger("[video][apriltag]")
+
 # ==================== APRILTAG DETECTOR ====================
 
-# Initialize AprilTag detector
-print(f"Initializing AprilTag detector for {TAG_FAMILY}...")
-at_detector = Detector(
-    families=TAG_FAMILY,
-    nthreads=NTHREADS,
-    quad_decimate=QUAD_DECIMATE,
-    quad_sigma=0.0,
-    refine_edges=1,
-    decode_sharpening=0.25,
-    debug=0
-)
-print("AprilTag detector initialized successfully!")
+# Suppress verbose apriltag warnings by redirecting stderr temporarily
+log.info(f"Initializing AprilTag detector for {TAG_FAMILY}...")
+
+# Redirect stderr to suppress C++ library warnings
+stderr_fd = sys.stderr.fileno()
+old_stderr = os.dup(stderr_fd)
+devnull = os.open(os.devnull, os.O_WRONLY)
+os.dup2(devnull, stderr_fd)
+
+try:
+    at_detector = Detector(
+        families=TAG_FAMILY,
+        nthreads=NTHREADS,
+        quad_decimate=QUAD_DECIMATE,
+        quad_sigma=0.0,
+        refine_edges=1,
+        decode_sharpening=0.25,
+        debug=0
+    )
+finally:
+    # Restore stderr
+    os.dup2(old_stderr, stderr_fd)
+    os.close(old_stderr)
+    os.close(devnull)
+
+log.success("AprilTag detector initialized successfully")
 
 # ==================== DETECTION FUNCTIONS ====================
 
@@ -62,23 +81,33 @@ def detect_apriltags(source, show_visualization=True, print_info=True):
     if hasattr(source, "read"):
         ret_val, frame = source.read()
         if not ret_val:
-            print("ERROR: Failed to grab frame for AprilTag detection")
+            log.error("Failed to grab frame for AprilTag detection")
             return []
     else:
         frame = source
         if frame is None:
-            print("ERROR: No frame provided for AprilTag detection")
+            log.error("No frame provided for AprilTag detection")
             return []
     # Convert to grayscale
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     
-    # Detect tags
-    tags = at_detector.detect(
-        gray,
-        estimate_tag_pose=True,
-        camera_params=CAMERA_PARAMS,
-        tag_size=TAG_SIZE
-    )
+    # Detect tags - suppress stderr warnings from C++ library
+    stderr_fd = sys.stderr.fileno()
+    old_stderr = os.dup(stderr_fd)
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    os.dup2(devnull, stderr_fd)
+    
+    try:
+        tags = at_detector.detect(
+            gray,
+            estimate_tag_pose=True,
+            camera_params=CAMERA_PARAMS,
+            tag_size=TAG_SIZE
+        )
+    finally:
+        os.dup2(old_stderr, stderr_fd)
+        os.close(old_stderr)
+        os.close(devnull)
 
     tags = [tag for tag in tags if tag.decision_margin > MIN_DECISION_MARGIN]
     
@@ -144,25 +173,25 @@ def print_tag_info(tags):
     if not tags:
         return
 
-    print("\n" + "=" * 50)
+    log.info("==================================================")
     for tag in tags:
-        print(f"[DETECTED] Tag ID: {tag.tag_id}")
-        print(f"  Center: ({tag.center[0]:.1f}, {tag.center[1]:.1f})")
-        print(f"  Corners:")
+        log.info(f"[DETECTED] Tag ID: {tag.tag_id}")
+        log.info(f"  Center: ({tag.center[0]:.1f}, {tag.center[1]:.1f})")
+        log.info("  Corners:")
         for i, corner in enumerate(tag.corners):
-            print(f"    Corner {i}: ({corner[0]:.1f}, {corner[1]:.1f})")
+            log.info(f"    Corner {i}: ({corner[0]:.1f}, {corner[1]:.1f})")
 
         if tag.pose_t is not None:
             distance = np.linalg.norm(tag.pose_t) * 100
-            print(f"  Distance: {distance:.1f} cm")
-            print(f"  Translation (x, y, z): ({tag.pose_t[0][0]:.3f}, {tag.pose_t[1][0]:.3f}, {tag.pose_t[2][0]:.3f})")
+            log.info(f"  Distance: {distance:.1f} cm")
+            log.info(f"  Translation (x, y, z): ({tag.pose_t[0][0]:.3f}, {tag.pose_t[1][0]:.3f}, {tag.pose_t[2][0]:.3f})")
 
         if tag.pose_R is not None:
-            print(f"  Rotation matrix available: Yes")
+            log.info("  Rotation matrix available: Yes")
 
-        print(f"  Decision margin: {tag.decision_margin:.2f}")
-        print(f"  Hamming distance: {tag.hamming}")
-        print("-" * 50)
+        log.info(f"  Decision margin: {tag.decision_margin:.2f}")
+        log.info(f"  Hamming distance: {tag.hamming}")
+        log.info("--------------------------------------------------")
 
 
 

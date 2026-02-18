@@ -14,6 +14,9 @@ import cv2
 
 from deface import __version__
 from deface.centerface import CenterFace
+from config.logger import Logger
+
+log = Logger("[video][blurring]")
 
 def scale_bb(x1, y1, x2, y2, mask_scale=1.0):
     s = mask_scale - 1.0
@@ -127,9 +130,9 @@ def video_detect(
         _ = meta['size']
     except(IOError, KeyError, ValueError) as e:
         if cam:
-            print(f'Could not find video device {ipath}. Please set a valid input.')
+            log.error(f"Could not find video device {ipath}. Please set a valid input.")
         else:
-            print(f'Could not open file {ipath} as a video file with imageio. Skipping file...')
+            log.error(f"Could not open file {ipath} as a video file with imageio. Skipping file...")
         return
 
     if cam:
@@ -246,7 +249,8 @@ def get_anonymized_image(frame,
                          mask_scale: float,
                          ellipse: bool,
                          draw_scores: bool,
-                         replaceimg = None
+                         replaceimg = None,
+                         mosaicsize: int = 20
                          ) -> None:
     """
     Method for getting an anonymized image without CLI
@@ -259,7 +263,7 @@ def get_anonymized_image(frame,
     anonymize_frame(
         dets, frame, mask_scale=mask_scale,
         replacewith=replacewith, ellipse=ellipse, draw_scores=draw_scores,
-        replaceimg=replaceimg
+        replaceimg=replaceimg, mosaicsize=mosaicsize
     )
 
     return frame
@@ -337,7 +341,7 @@ def parse_cli_args():
 
     if len(args.input) == 0:
         parser.print_help()
-        print('\nPlease supply at least one input path.')
+        log.error("Please supply at least one input path.")
         exit(1)
 
     if args.input == ['cam']:  # Shortcut for webcam demo with live preview
@@ -426,13 +430,14 @@ def process_input(
     try:
         opath = compute_output_path(ipath, base_opath, outdir)
     except RuntimeError as e:
-        print(str(e))
+        log.error(str(e))
         return
 
-    print(f'Input:  {ipath}\nOutput: {opath}')
+    log.info(f"Input: {ipath}")
+    log.info(f"Output: {opath}")
 
     if opath is None and not enable_preview:
-        print('No output file is specified and the preview GUI is disabled. No output will be produced.')
+        log.warning("No output file is specified and the preview GUI is disabled. No output will be produced.")
 
     if filetype == 'video' or is_cam:
         video_detect(
@@ -471,9 +476,9 @@ def process_input(
         )
 
     elif filetype == 'notfound':
-        print(f'File {ipath} not found. Skipping...')
+        log.warning(f"File {ipath} not found. Skipping...")
     else:
-        print(f'File {ipath} has an unknown type {filetype}. Skipping...')
+        log.warning(f"File {ipath} has an unknown type {filetype}. Skipping...")
 
 
 def main() -> None:
@@ -484,16 +489,16 @@ def main() -> None:
     # Dry-run mode: list files that would be processed and exit (avoid heavy init)
     if args.dry_run:
         if len(ipaths) == 0:
-            print('Dry run: no files found to process.')
+            log.warning("Dry run: no files found to process.")
         else:
-            print('Dry run: the following files would be processed:')
+            log.info("Dry run: the following files would be processed:")
             for p in ipaths:
                 try:
                     outp = compute_output_path(p, args.output, args.outdir)
                 except RuntimeError as e:
                     outp = f'ERROR: {e}'
-                print(f' - {p} -> {outp if outp is not None else "<preview/none>"}')
-            print(f'Total: {len(ipaths)} files')
+                log.info(f" - {p} -> {outp if outp is not None else '<preview/none>'}")
+            log.info(f"Total: {len(ipaths)} files")
         return
 
     in_shape = None
@@ -504,7 +509,7 @@ def main() -> None:
     replaceimg = None
     if args.replacewith == "img":
         replaceimg = imageio.imread(args.replaceimg)
-        print(f'After opening {args.replaceimg} shape: {replaceimg.shape}')
+        log.info(f"After opening {args.replaceimg} shape: {replaceimg.shape}")
 
     centerface = CenterFace(
         in_shape=in_shape,

@@ -5,8 +5,11 @@ import spacy
 import re
 from src_audio.utils.export_to_csv import export_to_csv
 from src_audio.utils.load_csv_file import load_csv_file 
-from config.audio_settings import TRANSCRIPT_FILES_LIST, MODEL_PACK
+from config.audio_settings import MODEL_PACK
 from src_audio.domain.constants import INTERVENTIONS, REPLACEMENTS, INTER_COLUMNS
+from config.logger import Logger
+
+log = Logger("[audio][intervention]")
 
 def normalize_text(text):
     """Normalize text for better matching"""
@@ -43,12 +46,16 @@ def has_intervention_keyword(text_norm):
     return False
 
 
-def intervention_extraction_pipeline(transcript_path: str):
+def run_intervention_extraction(chunk_path: str, transcript_path: str):
     """Main extraction pipeline for interventions only"""
+    log.header("Starting Intervention Extraction...")
+
     df = load_csv_file(transcript_path)
     if MODEL_PACK is None:
-        print("ERROR2: MedCAT not installed or environment broken.")
+        log.error("MedCAT not installed or environment broken")
         sys.exit(1)
+    
+    log.info(f"Processing {len(df)} segments")
     
     #  dict to group by start_time only (one row per start time)
     interventions_dict = {}
@@ -111,17 +118,12 @@ def intervention_extraction_pipeline(transcript_path: str):
             "full_text": intervention_data["full_text"]
         })
     
-    export_to_csv(
+    inter_path = export_to_csv(
         data=extracted_interventions,
-        output_path=Path(transcript_path).parent,
-        input_file_path=Path(transcript_path),
+        audio_chunk_path=Path(chunk_path),
         service="intervention",
         columns=INTER_COLUMNS, 
         empty_ok=True,
     )
-
-async def run_intervention_extraction():
-    """Async wrapper to run the intervention extraction pipeline."""
-    for transcript in TRANSCRIPT_FILES_LIST:
-        intervention_extraction_pipeline(transcript)
-        
+    log.info(f"{len(extracted_interventions)} interventions found")
+    log.success("Intervention extraction completed successfully!")

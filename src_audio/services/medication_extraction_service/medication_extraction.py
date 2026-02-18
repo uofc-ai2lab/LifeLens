@@ -1,5 +1,4 @@
 from pathlib import Path
-from config.audio_settings import TRANSCRIPT_FILES_LIST
 from src_audio.utils.export_to_csv import export_to_csv
 from src_audio.utils.load_csv_file import load_csv_file 
 from src_audio.utils.calculate_mean import mean
@@ -7,6 +6,9 @@ from src_audio.domain.constants import ROUTES, LOW_CONFIDENCE_SCORE, HIGH_CONFID
 from src_audio.domain.entities import MedicationEntity, MedicationAdministration
 from src_audio.services.medication_extraction_service.extractor import MedicationExtractor
 from src_audio.services.medication_extraction_service.postprocessing import postprocess_entities, fallback_dosage_or_route
+from config.logger import Logger
+
+log = Logger("[audio][medication]")
 
 def build_medication_record(
     ent: MedicationEntity, 
@@ -130,7 +132,7 @@ def prepare_medication_rows(administrations: list[MedicationAdministration]) -> 
         "full_text": ""
     } for a in administrations]
 
-def medication_extraction_pipeline(transcript_path: str, extractor: MedicationExtractor) -> None:
+def run_medication_extraction(chunk_path: str, transcript_path: str) -> None:
     """
     Run the full medication extraction pipeline:
     - Load transcript CSV
@@ -146,8 +148,12 @@ def medication_extraction_pipeline(transcript_path: str, extractor: MedicationEx
     Returns:
         None
     """
+    log.header("Starting Medication Extraction...")
+    extractor = MedicationExtractor()
     transcript_data = []
     df = load_csv_file(transcript_path)
+    log.info(f"Processing {len(df)} segments")
+    
     for _, row in df.iterrows():
         extracted_entities = extractor.extract_medication_info_from_ner(row["text"])
         extracted_entities = postprocess_entities(extracted_entities, row["text"])
@@ -163,17 +169,12 @@ def medication_extraction_pipeline(transcript_path: str, extractor: MedicationEx
 
     rows = prepare_medication_rows(full_medication_info)
 
-    export_to_csv(
+    med_path = export_to_csv(
         data=rows,
-        output_path=Path(transcript_path).parent,
-        input_file_path=Path(transcript_path),
+        audio_chunk_path=Path(chunk_path),
         service="medX",
         columns=MED_COLUMNS,
         empty_ok=True,
     )
-
-async def run_medication_extraction():
-    """Async wrapper to run the medication extraction pipeline."""
-    extractor = MedicationExtractor()
-    for transcript in TRANSCRIPT_FILES_LIST:
-        medication_extraction_pipeline(transcript, extractor)
+    log.info(f"{len(rows)} medications found")
+    log.success("Medication extraction completed successfully!")

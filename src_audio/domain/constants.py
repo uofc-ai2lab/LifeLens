@@ -1,17 +1,20 @@
 import os
 import re
+import threading
 
-class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKCYAN = '\033[96m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-    
+### ------------------------------- AUDIO RECORDING SERVICE ------------------------------- ###
+AUDIO_EXTS = {".wav", ".mp3", ".m4a", ".flac"}
+
+MAX_RECORD_SECONDS = 300  # 5 minutes
+RECORDING_DIR = "/home/capstone/recordings"
+SIGNAL_FILE = os.path.join(RECORDING_DIR, "recording_done.flag")
+
+# GStreamer Audio Pipeline Configuration
+ARECORD_DEVICE = "hw:CARD=ArrayUAC10,DEV=0"
+AUDIO_SAMPLE_RATE = 16000
+AUDIO_CHANNELS = 6
+AUDIO_FORMAT = "S16LE"
+CHUNK_SECONDS=20
 
 ### ------------------------------- INTERVENTION SERVICE ------------------------------- ###
 INTERVENTIONS = {
@@ -150,9 +153,3 @@ MED_COLUMNS = [
     "route (confidence score)",
     "full_text"
 ]
-
-### ------------------------------- AUDIO RECORDING SERVICE ------------------------------- ###
-MAX_RECORD_SECONDS = 300  # 5 minutes
-RECORDING_DIR = "/home/capstone/recordings"
-SIGNAL_FILE = os.path.join(RECORDING_DIR, "recording_done.flag")
-ARECORD_DEVICE = "hw:CARD=ArrayUAC10,DEV=0"
