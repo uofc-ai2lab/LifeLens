@@ -5,7 +5,7 @@ Provides GStreamer-based video capture from CSI camera using NVIDIA Jetson hardw
 Handles pipeline initialization, frame capture, and state management.
 """
 
-import cv2, os
+import cv2, os, time
 from config.logger import Logger
 from src_video.domain.constants import (
     CAPTURE_WIDTH,
@@ -32,6 +32,8 @@ if IS_JETSON:
     import gi
     gi.require_version("Gst", "1.0")
     from gi.repository import Gst
+else:
+    Gst = None
 
 def get_gstreamer_video_pipeline(
     sensor_id: int = 0,
@@ -61,21 +63,12 @@ def get_gstreamer_video_pipeline(
         GStreamer pipeline string for video capture via appsink
     """
     return (
-        "nvarguscamerasrc sensor-id=%d ! "
-        "video/x-raw(memory:NVMM), width=(int)%d, height=(int)%d, framerate=(fraction)%d/1 ! "
-        "nvvidconv flip-method=%d ! "
-        "video/x-raw, width=(int)%d, height=(int)%d, format=(string)BGRx ! "
-        "videoconvert ! "
-        "video/x-raw, format=(string)BGR ! appsink drop=true max-buffers=1 sync=false"
-        % (
-            sensor_id,
-            capture_width,
-            capture_height,
-            framerate,
-            flip_method,
-            display_width,
-            display_height,
-        )
+        f"nvarguscamerasrc sensor-id={sensor_id} ! "
+        f"video/x-raw(memory:NVMM), width=(int){capture_width}, height=(int){capture_height}, framerate=(fraction){framerate}/1 ! "
+        f"nvvidconv flip-method={flip_method} ! "
+        f"video/x-raw, width=(int){display_width}, height=(int){display_height}, format=(string)BGRx ! "
+        f"videoconvert ! video/x-raw, format=(string)BGR ! "
+        f"appsink drop=true max-buffers=1 sync=false"
     )
 
 def capture_frame_from_pipeline(frame, image_save_dir: str) -> bool:
@@ -154,12 +147,41 @@ class GStreamerVideoPipeline:
         Args:
             flip_method: Image flip method (0=none, 2=rotate-180, etc.)
         """
-        if not Gst.is_initialized():
-            Gst.init(None)
+        try:
+            if not Gst.is_initialized():
+                Gst.init(None)
+        except Exception as e:
+                raise RuntimeError(f"Failed to initialize GStreamer (Gst.init): {e}") from e
         
         self.flip_method = flip_method
         self.video_capture = None
         self.is_initialized = False
+
+    def _warmup_capture(self, seconds: float = 3.0, min_good: int = 5) -> bool:
+        """Warm up the capture by requiring a streak of good frames within a time budget.
+
+        This is more robust than "first frame must be ok" and tolerates
+        transient Argus / nvarguscamerasrc hiccups.
+        """
+        if self.video_capture is None or not self.video_capture.isOpened():
+            return False
+
+        deadline = time.time() + seconds
+        good = 0
+
+        while time.time() < deadline:
+            ok, frame = self.video_capture.read()
+
+            if ok and frame is not None and getattr(frame, "size", 0) != 0:
+                good += 1
+                if good >= min_good:
+                    return True
+            else:
+                good = 0 # reset streak if we see a bad / empty frame
+
+            time.sleep(0.01)
+
+        return False
     
     def start(self) -> bool:
         """
@@ -185,34 +207,29 @@ class GStreamerVideoPipeline:
                 if not self.video_capture.isOpened():
                     log.error(f"Pipeline failed to open (attempt {attempt + 1}/{max_retries})")
                     if attempt < max_retries - 1:
-                        import time
                         time.sleep(1)
                     continue
 
                 log.info(f"Pipeline created, warming up (attempt {attempt + 1}/{max_retries})...")
-                
-                # Extended warmup sequence with more patience
-                warmup_attempts = 30
-                for i in range(warmup_attempts):
-                    ok, frame = self.video_capture.read()
-                    if ok and frame is not None:
-                        log.success(f"Warmup complete on frame {i+1} - camera ready")
-                        self.is_initialized = True
-                        return True
-                    import time
-                    time.sleep(0.1)
 
-                log.warning(f"Warmup failed after {warmup_attempts} frames (attempt {attempt + 1}/{max_retries})")
+                # Time-based warmup with streak of valid frames to avoid false negatives
+                if self._warmup_capture(seconds=3.0, min_good=5):
+                    log.success("Warmup complete - camera ready")
+                    self.is_initialized = True
+                    return True
+
+                log.warning(
+                    f"Warmup failed within time budget (attempt {attempt + 1}/{max_retries}); "
+                    "releasing and retrying pipeline if retries remain."
+                )
                 self.video_capture.release()
-                
+
                 if attempt < max_retries - 1:
-                    import time
                     time.sleep(2)
                     
             except Exception as e:
                 log.error(f"Exception during startup (attempt {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
-                    import time
                     time.sleep(1)
 
         # All retries exhausted
