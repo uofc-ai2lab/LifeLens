@@ -6,6 +6,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 from queue import Queue, Empty
+import signal
 
 from config.audio_settings import AUDIO_CHUNKS_DIR, PROCESSED_AUDIO_DIR
 from src_audio.services.transcription_service.transcription_whispertrt import run_transcription
@@ -126,17 +127,27 @@ def main() -> int:
 
     stop_event = threading.Event()
 
-    def wait_for_enter():
-        input("\nPress ENTER to stop recording...\n")
+    def _handle_stop(signum, frame):
+        log.info(f"Stop signal received ({signum})")
         stop_event.set()
-        log.info("Stop requested")
 
-    threading.Thread(target=wait_for_enter, daemon=True).start()
+    signal.signal(signal.SIGTERM, _handle_stop)
+    signal.signal(signal.SIGINT, _handle_stop)
+
+    # def wait_for_enter():
+    #     input("\nPress ENTER to stop recording...\n")
+    #     stop_event.set()
+    #     log.info("Stop requested")
+
+    # threading.Thread(target=wait_for_enter, daemon=True).start()
 
     log.header("Audio Pipeline Started")
 
     try:
         while True:
+            if stop_event.is_set():
+                break
+
             chunk_written = record_one_chunk(
                 output_dir=AUDIO_CHUNKS_DIR,
                 stop_event=stop_event,
@@ -151,6 +162,7 @@ def main() -> int:
 
     except KeyboardInterrupt:
         log.info("Interrupted")
+        stop_event.set()
 
     finally:
         log.info("Recording stopped, waiting for processing...")

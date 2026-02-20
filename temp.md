@@ -5,14 +5,8 @@ You can. The “power button” is just a **KEY_POWER** event. Ubuntu (systemd-l
 Edit logind config:
 
 ```bash
-sudo nano /etc/systemd/logind.conf
-```
-
-Find/uncomment (or add) these lines:
-
-```ini
-HandlePowerKey=ignore
-HandlePowerKeyLongPress=poweroff
+sudo sed -i 's/#HandlePowerKey=poweroff/HandlePowerKey=ignore/' /etc/systemd/logind.conf
+sudo vi /etc/systemd/logind.conf
 ```
 
 Apply:
@@ -24,6 +18,12 @@ sudo systemctl restart systemd-logind
 (Short press won’t pop the shutdown dialog anymore. Long press can still force poweroff.)
 
 ---
+
+changes pwoer button at system level:
+`gsettings set org.gnome.settings-daemon.plugins.power power-button-action 'nothing'`
+
+making it back to old power:
+`gsettings set org.gnome.settings-daemon.plugins.power power-button-action 'interactive'`
 
 ## 2) Find which input device is the power key
 
