@@ -25,6 +25,8 @@ if IS_JETSON:
     import gi
     gi.require_version("Gst", "1.0")
     from gi.repository import Gst
+else:
+    Gst = None
 
 def get_gstreamer_video_pipeline(
     sensor_id: int = 0,
@@ -54,22 +56,12 @@ def get_gstreamer_video_pipeline(
         GStreamer pipeline string for video capture via appsink
     """
     return (
-        "nvarguscamerasrc sensor-id=%d bufapi-version=1 ! "
-        "video/x-raw(memory:NVMM), width=(int)%d, height=(int)%d, framerate=(fraction)%d/1 ! "
-        "nvvidconv flip-method=%d ! "
-        "video/x-raw, width=(int)%d, height=(int)%d, format=(string)BGRx ! "
-        "videoconvert ! "
-        "video/x-raw, format=(string)BGR ! "
-        "appsink max-buffers=2 drop=true"
-        % (
-            sensor_id,
-            capture_width,
-            capture_height,
-            framerate,
-            flip_method,
-            display_width,
-            display_height,
-        )
+        f"nvarguscamerasrc sensor-id={sensor_id} ! "
+        f"video/x-raw(memory:NVMM), width=(int){capture_width}, height=(int){capture_height}, framerate=(fraction){framerate}/1 ! "
+        f"nvvidconv flip-method={flip_method} ! "
+        f"video/x-raw, width=(int){display_width}, height=(int){display_height}, format=(string)BGRx ! "
+        f"videoconvert ! video/x-raw, format=(string)BGR ! "
+        f"appsink max-buffers=2 drop=true"
     )
 
 def capture_frame_from_pipeline(frame, image_save_dir: str) -> bool:
@@ -148,9 +140,11 @@ class GStreamerVideoPipeline:
         Args:
             flip_method: Image flip method (0=none, 2=rotate-180, etc.)
         """
-        if not Gst.is_initialized():
-            Gst.init(None)
-        
+        try:
+            if not Gst.is_initialized():
+                Gst.init(None)
+        except Exception as e:
+                raise RuntimeError(f"Failed to initialize GStreamer (Gst.init): {e}") from e
         self.flip_method = flip_method
         self.video_capture = None
         self.is_initialized = False
