@@ -88,7 +88,7 @@ def capture_frame_from_pipeline(frame, image_save_dir: str) -> bool:
     log.info(f"Frame saved to {filename}")
     return True
 
-def draw_overlay(frame, fps: float, processing: bool, tracks: None):
+def draw_overlay(frame, fps: float, processing: bool):
     cv2.putText(
         frame,
         f"FPS: {fps:.1f}",
@@ -109,24 +109,6 @@ def draw_overlay(frame, fps: float, processing: bool, tracks: None):
             (0, 165, 255),
             2,
         )
-
-        if tracks is not None:
-            for track in tracks:
-                x1, y1, x2, y2, track_id = track[:5]
-
-                x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
-
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-
-                cv2.putText(
-                    frame,
-                    f"ID {int(track_id)}",
-                    (x1, y1 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    (0, 255, 0),
-                    2,
-                )
 
 class GStreamerVideoPipeline:
     """
@@ -156,6 +138,18 @@ class GStreamerVideoPipeline:
         self.flip_method = flip_method
         self.video_capture = None
         self.is_initialized = False
+
+    def _release_capture(self, settle_s: float = 0.25) -> None:
+        if self.video_capture is not None:
+            try:
+                self.video_capture.release()
+            except Exception:
+                pass
+            finally:
+                self.video_capture = None
+        self.is_initialized = False
+        if settle_s > 0:
+            time.sleep(settle_s)
 
     def _warmup_capture(self, seconds: float = 3.0, min_good: int = 5) -> bool:
         """Warm up the capture by requiring a streak of good frames within a time budget.
@@ -196,7 +190,9 @@ class GStreamerVideoPipeline:
         max_retries = 3
         for attempt in range(max_retries):
             try:
+                self._release_capture(settle_s=0)
                 pipeline = get_gstreamer_video_pipeline(flip_method=self.flip_method)
+                backoff_s = 2 ** attempt
                 
                 debug = os.getenv("VIDEO_CAMERA_DEBUG", "0").strip().lower() in {"1", "true", "yes", "on"}
                 if debug:
@@ -206,14 +202,16 @@ class GStreamerVideoPipeline:
                 self.video_capture = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
                 if not self.video_capture.isOpened():
                     log.error(f"Pipeline failed to open (attempt {attempt + 1}/{max_retries})")
+                    self._release_capture(settle_s=0.5)
                     if attempt < max_retries - 1:
-                        time.sleep(1)
+                        log.warning(f"Retrying camera open in {backoff_s}s")
+                        time.sleep(backoff_s)
                     continue
 
                 log.info(f"Pipeline created, warming up (attempt {attempt + 1}/{max_retries})...")
 
                 # Time-based warmup with streak of valid frames to avoid false negatives
-                if self._warmup_capture(seconds=3.0, min_good=5):
+                if self._warmup_capture(seconds=4.0, min_good=5):
                     log.success("Warmup complete - camera ready")
                     self.is_initialized = True
                     return True
@@ -222,15 +220,18 @@ class GStreamerVideoPipeline:
                     f"Warmup failed within time budget (attempt {attempt + 1}/{max_retries}); "
                     "releasing and retrying pipeline if retries remain."
                 )
-                self.video_capture.release()
+                self._release_capture(settle_s=0.5)
 
                 if attempt < max_retries - 1:
-                    time.sleep(2)
+                    log.warning(f"Retrying camera warmup in {backoff_s}s")
+                    time.sleep(backoff_s)
                     
             except Exception as e:
                 log.error(f"Exception during startup (attempt {attempt + 1}/{max_retries}): {e}")
+                self._release_capture(settle_s=0.5)
                 if attempt < max_retries - 1:
-                    time.sleep(1)
+                    log.warning(f"Retrying camera startup in {backoff_s}s")
+                    time.sleep(backoff_s)
 
         # All retries exhausted
         raise RuntimeError(
@@ -269,8 +270,7 @@ class GStreamerVideoPipeline:
         """
         try:
             if self.video_capture is not None:
-                self.video_capture.release()
-                self.is_initialized = False
+                self._release_capture(settle_s=0)
                 print("[video][camera] Pipeline stopped")
                 return True
             return False

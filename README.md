@@ -190,6 +190,13 @@ Dataset Assets (Priv_personpart):
    - `PIPELINE_DETECTION_OUTPUT` (defaults to `data/video/output_files/DetectionOutput`)
    - `PIPELINE_INJURY_CHECKPOINT` (checkpoint used for injury inference)
 
+   For Jetson memory stability, you can also tune camera load:
+
+   - `VIDEO_CAPTURE_WIDTH` / `VIDEO_CAPTURE_HEIGHT` (defaults: `1280x720`)
+   - `VIDEO_DISPLAY_WIDTH` / `VIDEO_DISPLAY_HEIGHT` (defaults: `640x360`)
+   - `VIDEO_FRAME_RATE` (default: `20`)
+   - `VIDEO_FLIP_METHOD` (default: `0`)
+
 **Keep env.template updated with any new variables your services require.**
 
 # Audio Processing Pipeline
