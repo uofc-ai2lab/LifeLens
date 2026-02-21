@@ -172,6 +172,16 @@ def processing_worker(queue: Queue, settings: Dict[str, Any]):
 
     log.info("Processing worker stopped")
 
+def find_patient_track_id(tag_detections, tracks) -> Optional[int]:
+    for tag in tag_detections:
+        tag_x = float(tag.center_x)
+        tag_y = float(tag.center_y)
+        for trk in tracks:
+            x1, y1, x2, y2 = trk[0], trk[1], trk[2], trk[3]
+            if x1 <= tag_x <= x2 and y1 <= tag_y <= y2:
+                return int(trk[4])
+    return None    
+
 
 def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
     """
@@ -201,7 +211,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
 
     log.header("Video Pipeline Starting")
     log.info("Running startup tasks...")
-    run_jetson_startup_tasks()
+    #run_jetson_startup_tasks()
     start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
 
     image_queue = Queue(maxsize=3)
@@ -213,8 +223,8 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
     )
     tracker = OcSort(
         conf_thres=0.3,
-        iou_thres=0.1,  # Lower for better re-identification
-        max_age=300  # 10 seconds at 30fps (was 30 = 1 second)
+        iou_thres=0.3,  # Lower for better re-identification
+        max_age=30  # 10 seconds at 30fps (was 30 = 1 second)
     )
 
     # Initialize ReID extractor for person re-identification

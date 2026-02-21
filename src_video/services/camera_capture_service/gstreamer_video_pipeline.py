@@ -189,9 +189,11 @@ class GStreamerVideoPipeline:
                         return True
                     import time
                     time.sleep(0.1)
+                    log.warning(f"Warmup failed after {warmup_attempts} frames (attempt {attempt + 1}/{max_retries})")
+                    self.video_capture.release()
 
-                log.warning(f"Warmup failed after {warmup_attempts} frames (attempt {attempt + 1}/{max_retries})")
-                self.video_capture.release()
+                # log.warning(f"Warmup failed after {warmup_attempts} frames (attempt {attempt + 1}/{max_retries})")
+                # self.video_capture.release()
                 
                 if attempt < max_retries - 1:
                     import time

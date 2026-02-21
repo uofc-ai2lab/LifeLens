@@ -93,7 +93,7 @@ def main():
 
     log.header("LifeLens Dual Pipeline System Starting")
     log.info("Running startup tasks...")
-    run_jetson_startup_tasks()
+    #run_jetson_startup_tasks()
     start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
     
     start_time = time.time()

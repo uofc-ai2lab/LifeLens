@@ -118,15 +118,13 @@ def detect_apriltags(source, show_visualization=True, print_info=True):
     if TARGET_TAG_IDS is not None:
         tags = [tag for tag in tags if tag.tag_id in TARGET_TAG_IDS]
 
-    DETECTED_TAG = detect_tags(tags)
+    detections = detect_tags(tags)
 
     # Print detection information
     if tags and print_info:
-        # if we are here then we have detected tag!
-        DETECTED_TAG = True
         print_tag_info(tags)
     
-    return DETECTED_TAG
+    return detections
 
 def draw_detections(frame, tags):
     """Draw detection visualizations on frame"""
@@ -197,22 +195,24 @@ def print_tag_info(tags):
 
 def detect_tags(tags):
     # take photos, pause detection, call next service
-        detect_tags: list[AprilTagDetection] = []
-        for tag in tags:
-            detect_tags.append(
-                AprilTagDetection(
-                    tag_id=tag.tag_id,
-                    center_x=tag.center[0],
-                    center_y=tag.center[1],
-                    corners=[(corner[0], corner[1]) for corner in tag.corners],
-                    distance=(
-                        np.linalg.norm(tag.pose_t)
-                        if tag.pose_t is not None
-                        else -1
-                    ),
-                    decision_margin=tag.decision_margin,
-                )
+    detections: list[AprilTagDetection] = []
+    for tag in tags:
+        detections.append(
+            AprilTagDetection(
+                tag_id=tag.tag_id,
+                center_x=tag.center[0],
+                center_y=tag.center[1],
+                corners=[(corner[0], corner[1]) for corner in tag.corners],
+                distance=(
+                    np.linalg.norm(tag.pose_t)
+                    if tag.pose_t is not None
+                    else -1
+                ),
+                decision_margin=tag.decision_margin,
             )
+        )
 
-        for dt in detect_tags:
-            dt.print_info()
+    for dt in detections:
+        dt.print_info()
+
+    return detections

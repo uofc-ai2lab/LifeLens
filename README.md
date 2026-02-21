@@ -123,6 +123,7 @@ If operating on a jetson-nano, also install jetson-specific dependencies:
 pip install -r requirements-jetson.txt
 sudo pip install ultralytics --no-deps 
 sudo pip install deface --no-deps
+sudo pip install boxmot --no-deps
 sudo apt update
 sudo apt install -y python3-gi gir1.2-gstreamer-1.0 gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good
 
