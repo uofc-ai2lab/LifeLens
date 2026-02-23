@@ -8,6 +8,7 @@ import argparse
 from pathlib import Path
 from typing import Dict, Any, Optional
 from queue import Queue, Empty
+import numpy as np
 
 from config.jetson_startup import run_jetson_startup_tasks
 from config.resource_usage import start_monitoring, stop_monitoring
@@ -31,7 +32,6 @@ from src_video.services.deidentification_service.deidentify import run_deidentif
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
 
 from ultralytics import YOLO
-from boxmot import OCSORT
 
 def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")
@@ -208,12 +208,6 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
         daemon=True,
     )
 
-    tracker = OCSORT(
-        conf_thres=0.3,
-        iou_thres=0.3,
-        max_age=30
-    )
-
     patient_id = None
     person_model = YOLO("yolov8n.pt")  
 
@@ -247,7 +241,6 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
                     x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
                     conf = box.conf[0].cpu().numpy()
                     detections.append([x1, y1, x2, y2, conf, 0])  
-            tracks = tracker.update(detections, frame)
 
 
             detections = np.array(detections)
@@ -287,7 +280,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
                     log.success("Job queued")
 
 
-            draw_overlay(frame, fps, processing, tracks)
+            draw_overlay(frame, fps, processing)
             cv2.imshow(window, frame)
             
             # Single waitKey with proper ESC and 'q' handling
