@@ -120,7 +120,6 @@ def load_video_pipeline_settings() -> dict:
         ),
         "DEVICE": os.getenv("PIPELINE_DEVICE", None),
         "DEBUG": _env_bool("PIPELINE_DEBUG", False),
-        "SIDE_LABELS": _env_bool("PIPELINE_SIDE_LABELS", True),
         "INJURY_CHECKPOINT_PATH": os.getenv(
             "PIPELINE_INJURY_CHECKPOINT",
             "checkpoints/classificationModel/injury/best_swin_tiny_patch4_window7_224.pt",

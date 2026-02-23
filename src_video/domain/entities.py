@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from src_video.domain.constants import DETECTION_PART_DEFAULT, SIDEABLE_PARTS
+
 @dataclass(frozen=True)
 class CropPrediction:
     crop_path: str
@@ -29,15 +31,26 @@ class AprilTagDetection:
 
 #basic body parts that will be updated with real patient info
 def create_body_parts():
-    return {
-        "head": {"injuries": {}},
-        "face": {"injuries": {}},
-        "neck": {"injuries": {}},
-        "arm": {"injuries": {}},
-        "hand": {"injuries": {}},
-        "chest": {"injuries": {}},
-        "abdomen": {"injuries": {}},
-        "back": {"injuries": {}},
-        "leg": {"injuries": {}},
-        "foot": {"injuries": {}},
-    }
+    parts: dict[str, dict] = {}
+
+    # Base detection parts (non-sided)
+    for part in DETECTION_PART_DEFAULT:
+        if part in SIDEABLE_PARTS:
+            continue
+        parts[part] = {"injuries": {}}
+
+    # Side-disambiguated limb parts (camera/image heuristic)
+    for part in sorted(SIDEABLE_PARTS):
+        parts[f"{part}1"] = {"injuries": {}}
+        parts[f"{part}2"] = {"injuries": {}}
+
+    # Additional placeholders used by downstream consumers
+    parts.setdefault("chest", {"injuries": {}})
+    parts.setdefault("abdomen", {"injuries": {}})
+    parts.setdefault("back", {"injuries": {}})
+
+    # Backwards-compat keys (older runs may still emit unsuffixed parts)
+    for part in sorted(SIDEABLE_PARTS):
+        parts.setdefault(part, {"injuries": {}})
+
+    return parts

@@ -6,6 +6,20 @@ FILENAME_DELIMITER = "_"
 # Common image extensions used across the video pipeline.
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
 
+# -------------------------
+# Detection / body-part labeling
+# -------------------------
+
+# Default parts we attempt to crop from the segmentation model.
+DETECTION_PART_DEFAULT = ["face", "arm", "hand", "leg", "foot", "neck", "torso", "head"]
+
+# Parts that can occur twice and benefit from side-like disambiguation.
+# NOTE: This is a *camera/image* heuristic, not anatomical left/right.
+SIDEABLE_PARTS = {"arm", "hand", "leg", "foot"}
+
+# Parts used to estimate the body's approximate midline.
+MIDLINE_PARTS = {"torso", "head", "face", "neck"}
+
 # Color settings for annotations
 COLOR_OUTLINE = (0, 255, 0)
 COLOR_CORNERS = (255, 0, 0)

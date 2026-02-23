@@ -277,20 +277,6 @@ Place your video/image test data under:
       - `injury_predictions.json` - Per-crop predictions + summary
       - `injury_predictions_summary.csv` - Per-image/per-body-part summary
 
-## Video .ENV Variables
-
-Video pipeline configuration lives in the **VIDEO PIPELINE ENVIRONMENT VARIABLES** section of `config/.env.template`.
-Create your local `.env` in the repo root (as described above) and set at minimum:
-
-- `PIPELINE_DETECTION_SOURCE` (defaults to `data/video/source_files`)
-- `PIPELINE_ROOT` (defaults to `data/video/output_files`)
-- `PIPELINE_DETECTION_OUTPUT` (defaults to `data/video/output_files/DetectionOutput`)
-- `PIPELINE_INJURY_CHECKPOINT` (checkpoint used for injury inference)
-- `PIPELINE_SIDE_LABELS` (defaults to `true`; set to `false` to disable `left-*` / `right-*` limb labels)
-
-When `PIPELINE_SIDE_LABELS=true` (default), limb crops are named `left-arm` / `right-arm` (same for hand/leg/foot).
-This is currently a heuristic based on the detected torso/head midline in the image (camera POV).
-
 ## Running the Video Pipeline
 
 ### Dev Mode (Image Processing Only)

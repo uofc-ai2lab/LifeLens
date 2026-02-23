@@ -4,6 +4,7 @@ import time
 import threading, asyncio
 import shutil
 import cv2
+import numpy as np
 import argparse
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -63,7 +64,6 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
             alpha_png=bool(settings["ALPHA_PNG"]),
             max_images=int(settings["MAX_IMAGES"]),
             classification_export_dir=None,
-            side_labels=bool(settings.get("SIDE_LABELS", True)),
         )
 
         log.success("Detection done")
