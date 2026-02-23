@@ -54,15 +54,15 @@ def ensure_proper_medication_name(entities, sentence):
     Returns:
         list[MedicationEntity]: Entities with corrected medication names.
     """
-    tokens_set = set(re.findall(r"[\w'-]+", sentence))
+    tokens = set(re.findall(r"[\w'-]+", sentence))
+
     for ent in entities:
-        found_med = ent.word
-        if found_med in tokens_set:
+        if ent.word in tokens:
             continue
-        start_idx = ent.start_idx
-        m = re.match(r"\S+", sentence[start_idx:])
-        if m:
-            ent.word = m.group(0)
+
+        match = re.match(r"[\w'-]+", sentence[ent.start_idx:])
+        if match:
+            ent.word = match.group(0)
 
     return entities
 
@@ -76,18 +76,19 @@ def postprocess_entities(entities, sentence):
         list[MedicationEntity]: Fully post-processed entities.
     """
     med_list = create_all_med_list()
-    already_found = {e.word.lower() for e in entities if e.entity.startswith("B-Medication")}
+    corrected_entities = ensure_proper_medication_name(entities, sentence)
+    already_found = {e.word.lower() for e in corrected_entities if e.entity.startswith("B-Medication")}
     missed = missed_medication_info(sentence.lower(), med_list)
     for m in missed:
         if m["medication"].lower() not in already_found:
-            entities.append(MedicationEntity(
+            corrected_entities.append(MedicationEntity(
                 entity="MEDICATION",
                 word=m["medication"],
                 start_idx=m["start_idx"],
                 score=HIGH_CONFIDENCE_SCORE
             ))
-    entities.sort(key=lambda e: e.start_idx)
-    return ensure_proper_medication_name(entities, sentence)
+    corrected_entities.sort(key=lambda e: e.start_idx)
+    return corrected_entities
 
 def fallback_dosage_or_route(sentence: str, med_record: MedicationAdministration, mode: str = "dosage") -> str | None:
     """
