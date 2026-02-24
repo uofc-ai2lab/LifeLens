@@ -177,8 +177,12 @@ def find_patient_track_id(tag_detections, tracks) -> Optional[int]:
         for trk in tracks:
             x1, y1, x2, y2 = trk[0], trk[1], trk[2], trk[3]
             if x1 <= tag_x <= x2 and y1 <= tag_y <= y2:
-                return int(trk[4])
-    return None
+                patient_id = int(trk[4])
+                log.success(f"Patient assigned to track ID {patient_id}")
+                break
+        if patient_id is not None:
+            break
+    return patient_id
 
 
 def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
@@ -283,9 +287,8 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
 
             # Assign patient_id when a tag is inside a tracked person box
             if patient_id is None and tag_detections and tracks is not None and len(tracks) > 0:
-                found_patient_id = find_patient_track_id(tag_detections, tracks)
-                if found_patient_id is not None:
-                    log.success(f"Patient assigned to track ID {found_patient_id}")
+                patient_id = find_patient_track_id(tag_detections, tracks)
+
 
             # Capture when the assigned patient is in view (no tag needed after assignment)
             patient_in_view = False
