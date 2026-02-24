@@ -1,6 +1,10 @@
 import os
 from pathlib import Path
 from datetime import datetime
+import tempfile
+import numpy as np
+
+import librosa
 from src_audio.utils.export_to_csv import export_to_csv
 from config.logger import Logger
 from config.audio_settings import (
@@ -12,24 +16,88 @@ from config.audio_settings import (
 import soundfile as sf
 
 
-def verify_audio_properties(file_path):
-    info = sf.info(file_path)
-    print(f"Sample Rate: {info.samplerate} Hz")
-    print(f"Channels: {info.channels}")
-
-    is_valid = info.samplerate == 16000 and info.channels == 1
-
-    if is_valid:
-        print("✅ Success: Audio is 16kHz Mono.")
-    else:
-        print("❌ Error: Audio does not meet requirements.")
-    return is_valid
-
-
-# Usage
-verify_audio_properties("your_audio.wav")
 
 log = Logger("[audio][transcription]")
+
+
+def prepare_parakeet_audio(audio_file: str) -> str:
+    """
+    Ensure audio is 16kHz mono WAV for Parakeet.
+    Creates a temporary normalized file and returns its path.
+    """
+
+    original_path = Path(audio_file)
+
+    fd, temp_path = tempfile.mkstemp(
+        suffix=".wav",
+        prefix=f"parakeet_temp_{original_path.stem}_",
+        dir=original_path.parent
+    )
+    os.close(fd)
+
+    log.info(f"[Parakeet] Preparing audio: {original_path.name}")
+    log.info(f"[Parakeet] Temp file created: {temp_path}")
+
+    try:
+        # Load WITHOUT forcing mono so we can inspect channels
+        y, sr = librosa.load(audio_file, sr=16000, mono=False)
+
+        log.info(f"[Parakeet] Loaded audio shape: {y.shape}")
+        log.info(f"[Parakeet] Loaded sample rate: {sr}")
+
+        if sr != 16000:
+            log.error(f"[Parakeet] Unexpected sample rate after resample: {sr}")
+
+        # If multi-channel, collapse manually
+        if y.ndim > 1:
+            log.info(f"[Parakeet] Multi-channel detected ({y.shape}). Converting to mono.")
+            y = np.mean(y, axis=0)
+            log.info(f"[Parakeet] After mono conversion shape: {y.shape}")
+
+        # Ensure strictly 1D
+        y = np.squeeze(y)
+
+        if y.ndim != 1:
+            log.error(f"[Parakeet] Audio is NOT 1D after processing. Shape: {y.shape}")
+            raise ValueError(f"Audio must be 1D. Found shape {y.shape}")
+
+        log.info(f"[Parakeet] Final waveform shape before write: {y.shape}")
+        log.info(f"[Parakeet] Waveform dtype before write: {y.dtype}")
+
+        # Write explicitly as PCM 16-bit mono
+        sf.write(
+            temp_path,
+            y.astype(np.float32),
+            16000,
+            subtype="PCM_16"
+        )
+
+        # Verify written file
+        data, sr_check = sf.read(temp_path)
+
+        log.info(f"[Parakeet] Written file shape: {data.shape}")
+        log.info(f"[Parakeet] Written file sample rate: {sr_check}")
+
+        if data.ndim != 1:
+            log.error(f"[Parakeet] Written file is NOT mono. Shape: {data.shape}")
+            raise ValueError(f"Written file must be mono. Found shape {data.shape}")
+
+        if sr_check != 16000:
+            log.error(f"[Parakeet] Written file sample rate incorrect: {sr_check}")
+            raise ValueError(f"Written file must be 16kHz. Found {sr_check}")
+
+        log.info("[Parakeet] Audio successfully prepared for Parakeet.")
+
+        return temp_path
+
+    except Exception as e:
+        log.error(f"[Parakeet] Error preparing audio: {e}")
+
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+            log.info(f"[Parakeet] Deleted temp file due to failure: {temp_path}")
+
+        raise
 
 def load_parakeet_model():
     """Load NVIDIA NeMo Parakeet ASR model for transcription (alternative to Whisper)"""
@@ -230,8 +298,9 @@ def run_transcription(audio_chunk_file):
     if verify_audio_file_exists(audio_chunk_file) is False:
         log.error(f"File does not exist. Stopping transcription")
         return
-
-    verify_audio_properties(audio_chunk_file)
+    
+    if modelType == "parakeet":
+        audio_chunk_file = prepare_parakeet_audio(audio_chunk_file)
 
     # Track total time
     total_start = datetime.now()
@@ -268,6 +337,15 @@ def run_transcription(audio_chunk_file):
         service="transcript",
         columns=columns,
     )
+
+    # delete temp file if it exists
+    temp_files = list(Path(audio_chunk_file).parent.glob(f"parakeet_temp_{Path(audio_chunk_file).stem}_*.wav"))
+    for temp_file in temp_files:
+        try:
+            os.remove(temp_file)
+            log.debug(f"Deleted temp file: {temp_file.name}")
+        except Exception as e:
+            log.warning(f"Could not delete temp file {temp_file.name}: {e}")
 
     export_end = datetime.now()
 
