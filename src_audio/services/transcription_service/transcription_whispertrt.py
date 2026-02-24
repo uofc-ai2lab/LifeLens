@@ -15,6 +15,7 @@ from config.audio_settings import (
 
 import soundfile as sf
 
+# https://uofc-my.sharepoint.com/:u:/g/personal/aryan_karadia_ucalgary_ca/IQD7uvrZXqe0RZbAgrqjmynVAXgqUb17MkHi7KRPsbVsvRk?e=Yio2iB&nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJTdHJlYW1XZWJBcHAiLCJyZWZlcnJhbFZpZXciOiJTaGFyZURpYWxvZy1MaW5rIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXcifX0%3D
 
 
 log = Logger("[audio][transcription]")
