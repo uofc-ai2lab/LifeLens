@@ -10,12 +10,17 @@ librosa>=0.10.0
 soundfile>=0.12.0
 ffmpeg-python>=0.2.0
 openai-whisper>=20230314
+# parakeet
+nemo_toolkit[asr]>=2.0.0
+Cython
+packaging
+
 
 # AI/ML
 torch>=2.8.0
 torchvision>=0.23.0
 torchaudio>=2.8.0
-transformers>=4.30.0
+transformers>=4.40.0
 sentencepiece>=0.1.99
 huggingface-hub>=0.16.0
 
