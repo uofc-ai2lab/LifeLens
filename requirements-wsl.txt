@@ -1,0 +1,11 @@
+# WSL2 Hardware Training Stack
+torch>=2.4.0
+torchvision
+torchaudio
+nemo_toolkit[asr]>=2.0.0
+Cython
+packaging
+transformers>=4.40.0
+librosa
+pandas
+pytorch-lightning>=2.0.0
