@@ -11,6 +11,21 @@ from config.audio_settings import (
 
 log = Logger("[audio][transcription]")
 
+def load_parakeet_model():
+    """Load NVIDIA NeMo Parakeet ASR model for transcription (alternative to Whisper)"""
+    log.info("Loading Parakeet ASR model")
+    try:
+        from nemo.collections.asr.models import ASRModel
+        model = ASRModel.from_pretrained(model_name="nvidia/parakeet-tdt-0.6b-v3")
+        log.success("Parakeet model loaded successfully")
+        return model
+    except ImportError:
+        log.error("NeMo toolkit not installed. Please install with 'pip install nemo_toolkit[asr]'")
+        raise
+    except Exception as e:
+        log.error(f"Error loading Parakeet model: {e}")
+        raise
+
 def load_whisper_model(model_size: str, model_cache_path: str = None):
     """Transcribe audio using WhisperTRT or fallback to original Whisper"""
     log.info(f"Loading {model_size.upper()} model")
@@ -116,11 +131,20 @@ def normalize_whisper_segments(segments):
         })
     return normalized
            
-def transcribe_audio(audio_file: str, model):
+def transcribe_audio(audio_file: str, model, modelType: str):
     log.info("Running transcription")
     transcribe_start = datetime.now()
     try:
-        result = model.transcribe(str(audio_file))
+        # if parakeet model, use its transcribe method and format input correctly. Also set imtestamps to true
+        if modelType == "parakeet":
+            log.info("Using Parakeet ASR model for transcription")
+            result = model.transcribe([audio_file], timestamps=True)
+        elif modelType == "whispertrt":
+            log.info("Using WhisperTRT model for transcription")
+            result = model.transcribe(str(audio_file))
+        else:
+            log.info("Using original Whisper model for transcription")
+            result = model.transcribe(str(audio_file))
         transcribe_end = datetime.now()
         log.success(f"Transcription completed in {transcribe_end - transcribe_start}")
         return result
@@ -135,7 +159,10 @@ def run_transcription(audio_chunk_file):
     
     """Main runner function for WhisperTRT (or Whisper) transcription """
     # ==================== STEP 1: LOAD MODEL ====================
-    model = load_whisper_model(MODEL_SIZE, MODEL_CACHE_PATH)
+    # model = load_whisper_model(MODEL_SIZE, MODEL_CACHE_PATH)
+    # modelType = "whispertrt" if IS_JETSON and MODEL_SIZE in ["tiny.en", "base.en"] else "whisper"
+    model = load_parakeet_model()
+    modelType = "parakeet"
 
     log.info(f"Current audio file: {Path(audio_chunk_file).name}")
     
@@ -149,7 +176,7 @@ def run_transcription(audio_chunk_file):
 
     # ==================== STEP 3: TRANSCRIBE ====================
     transcribe_start = datetime.now()
-    result = transcribe_audio(audio_chunk_file, model)
+    result = transcribe_audio(audio_chunk_file, model, modelType)
 
     # ==================== STEP 3.1: Diarize ====================
     # print_formatting("heading","STEP 3.1: Diarizing with pyannote...")
