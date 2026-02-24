@@ -212,7 +212,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
         return 0
     
     from ultralytics import YOLO
-    from boxmot import OcSort
+    from boxmot import DeepOcSort
 
     log.header("Video Pipeline Starting")
 
@@ -223,10 +223,13 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
         args=(image_queue, settings),
         daemon=True,
     )
-    tracker = OcSort(
+    tracker = DeepOcSort(
+        reid_weights="osnet_x0_25_msmt17.pt",
+        device="cuda",
+        half=True,
         conf_thres=0.3,
         iou_thres=0.3,
-        max_age=30
+        max_age=30,
     )
 
     patient_id = None
