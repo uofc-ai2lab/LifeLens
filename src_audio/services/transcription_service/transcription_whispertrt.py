@@ -3,6 +3,9 @@ from pathlib import Path
 from datetime import datetime
 import tempfile
 import numpy as np
+import torch
+import gc
+import psutil
 
 import librosa
 from src_audio.utils.export_to_csv import export_to_csv
@@ -40,57 +43,19 @@ def prepare_parakeet_audio(audio_file: str) -> str:
     log.info(f"[Parakeet] Temp file created: {temp_path}")
 
     try:
-        # Load WITHOUT forcing mono so we can inspect channels
         y, sr = librosa.load(audio_file, sr=16000, mono=False)
 
-        log.info(f"[Parakeet] Loaded audio shape: {y.shape}")
-        log.info(f"[Parakeet] Loaded sample rate: {sr}")
-
-        if sr != 16000:
-            log.error(f"[Parakeet] Unexpected sample rate after resample: {sr}")
-
-        # If multi-channel, collapse manually
+        # Manual mono conversion if stereo
         if y.ndim > 1:
-            log.info(f"[Parakeet] Multi-channel detected ({y.shape}). Converting to mono.")
+            log.info("Multi-channel detected. Converting to mono.")
             y = np.mean(y, axis=0)
-            log.info(f"[Parakeet] After mono conversion shape: {y.shape}")
 
-        # Ensure strictly 1D
+        # Squeeze ensures the shape is (N,) and not (N, 1) or (1, N)
         y = np.squeeze(y)
 
-        if y.ndim != 1:
-            log.error(f"[Parakeet] Audio is NOT 1D after processing. Shape: {y.shape}")
-            raise ValueError(f"Audio must be 1D. Found shape {y.shape}")
-
-        log.info(f"[Parakeet] Final waveform shape before write: {y.shape}")
-        log.info(f"[Parakeet] Waveform dtype before write: {y.dtype}")
-
-        # Write explicitly as PCM 16-bit mono
-        sf.write(
-            temp_path,
-            y.astype(np.float32),
-            16000,
-            subtype="PCM_16"
-        )
-
-        # Verify written file
-        data, sr_check = sf.read(temp_path)
-
-        log.info(f"[Parakeet] Written file shape: {data.shape}")
-        log.info(f"[Parakeet] Written file sample rate: {sr_check}")
-
-        if data.ndim != 1:
-            log.error(f"[Parakeet] Written file is NOT mono. Shape: {data.shape}")
-            raise ValueError(f"Written file must be mono. Found shape {data.shape}")
-
-        if sr_check != 16000:
-            log.error(f"[Parakeet] Written file sample rate incorrect: {sr_check}")
-            raise ValueError(f"Written file must be 16kHz. Found {sr_check}")
-
-        log.info("[Parakeet] Audio successfully prepared for Parakeet.")
-
+        # Write as standard 16-bit PCM for compatibility
+        sf.write(temp_path, y.astype(np.float32), 16000, subtype="PCM_16")
         return temp_path
-
     except Exception as e:
         log.error(f"[Parakeet] Error preparing audio: {e}")
 
@@ -100,17 +65,26 @@ def prepare_parakeet_audio(audio_file: str) -> str:
 
         raise
 
+_PARAKEET_MODEL = None  # Persistent global storage
+
 def load_parakeet_model():
-    """Load NVIDIA NeMo Parakeet ASR model for transcription (alternative to Whisper)"""
-    log.info("Loading Parakeet ASR model")
+    global _PARAKEET_MODEL
+    # Only load if the cache is empty
+    if _PARAKEET_MODEL is not None:
+        return _PARAKEET_MODEL
+
+    log.info("Loading Parakeet ASR model (FP16 optimized)")
     try:
-        from nemo.collections.asr.models import ASRModel
         model = ASRModel.from_pretrained(model_name="nvidia/parakeet-tdt-0.6b-v3")
-        log.success("Parakeet model loaded successfully")
-        return model
-    except ImportError:
-        log.error("NeMo toolkit not installed. Please install with 'pip install nemo_toolkit[asr]'")
-        raise
+        model = model.to("cuda")
+
+        # Converts 32-bit floats to 16-bit. Essential for 8GB RAM devices.
+        model.half()
+        model.eval()
+
+        _PARAKEET_MODEL = model
+        log.info("Parakeet model loaded successfully in FP16 mode")
+        return _PARAKEET_MODEL
     except Exception as e:
         log.error(f"Error loading Parakeet model: {e}")
         raise
@@ -201,6 +175,29 @@ def load_whisper_model(model_size: str, model_cache_path: str = None):
 
     return model
 
+_WHISPER_FALLBACK = None
+
+def load_whisper_fallback(model_size: str, model_cache_path: str = None):
+    """Lazy-loads Whisper Tiny only if needed to save initial RAM."""
+    global _WHISPER_FALLBACK
+    if _WHISPER_FALLBACK is not None:
+        return _WHISPER_FALLBACK
+
+    log.info("Loading Whisper Tiny as fallback model")
+    try:
+        import whisper
+        # Use download_root parameter if cache path is specified
+            if model_cache_path:
+                _WHISPER_FALLBACK = whisper.load_model(model_size, download_root=model_cache_path)
+            else:
+                _WHISPER_FALLBACK = whisper.load_model(model_size)
+
+            log.success(f"Model loaded successfully (type: {type(_WHISPER_FALLBACK).__name__})")
+        return _WHISPER_FALLBACK
+    except Exception as e:
+        log.error(f"Failed to load fallback model: {e}")
+        return None
+
 def verify_audio_file_exists(audio_file: str) -> bool:
     log.info(f"Verifying input file: {Path(audio_file).name}")
     
@@ -253,85 +250,87 @@ def normalize_whisper_segments(segments):
         })
     return normalized
 
-def transcribe_audio(audio_file: str, model, modelType: str):
-    log.info("Running transcription")
-    transcribe_start = datetime.now()
+
+def transcribe_audio(audio_file: str, model, model_type: str):
+    log.info(f"Starting {model_type} transcription pass")
     try:
-        if modelType == "parakeet":
-            log.info("Using Parakeet ASR model for transcription")
+        with torch.no_grad():  # Saves massive memory by not tracking gradients
+            if model_type == "parakeet":
+                raw_output = model.transcribe([audio_file], timestamps=True)
+                result = map_parakeet_to_whisper(raw_output)
+            else:
+                result = model.transcribe(str(audio_file))
 
-            # 1. Standardize audio: NeMo Parakeet requires 16kHz Mono
-            # Ensure your audio_file meets these requirements to avoid TypeError
-
-            # 2. Transcribe using NeMo's native call
-            # Parakeet-TDT provides native accurate word-level timestamps
-            raw_output = model.transcribe([audio_file], timestamps=True)
-
-            # 3. Apply the mapping function to "Whisper-ify" the output
-            result = map_parakeet_to_whisper(raw_output)
-
-        elif modelType == "whispertrt":
-            log.info("Using WhisperTRT model")
-            result = model.transcribe(str(audio_file))
-        else:
-            log.info("Using original Whisper model")
-            result = model.transcribe(str(audio_file))
-
-        log.success(f"Transcription completed in {datetime.now() - transcribe_start}")
+        # IMPORTANT: Explicitly free VRAM after every successful chunk
+        torch.cuda.empty_cache()
+        gc.collect()
         return result
 
-    except Exception as e:
-        log.error(f"Error during transcription: {e}")
-        raise
-def run_transcription(audio_chunk_file):
-    log.header("Starting Transcription...")
+    except RuntimeError as e:
+        # Catch the "Out of Memory" error specifically
+        if "out of memory" in str(e).lower():
+            log.error("CUDA Out of Memory. Clearing VRAM and falling back to Whisper.")
+            torch.cuda.empty_cache()
+            gc.collect()
 
-    """Main runner function for WhisperTRT (or Whisper) transcription """
-    # ==================== STEP 1: LOAD MODEL ====================
-    # model = load_whisper_model(MODEL_SIZE, MODEL_CACHE_PATH)
-    # modelType = "whispertrt" if IS_JETSON and MODEL_SIZE in ["tiny.en", "base.en"] else "whisper"
+            if model_type == "parakeet":
+                fallback = load_whisper_fallback()
+                return transcribe_audio(audio_file, fallback, "whisper_fallback")
+        raise e
+
+
+def run_transcription(audio_chunk_file):
+    log.info("Starting Transcription Pipeline")
+
+    available_gb = psutil.virtual_memory().available / (1024**3)
+    if available_gb < 1.5:
+        log.warning(f"Low memory detected ({available_gb:.2f}GB). Forcing cache flush.")
+        torch.cuda.empty_cache()
+        gc.collect()
+
+    # ==================== STEP 1: LOAD MODEL (Singleton) ====================
+    # Only loads once; stays in VRAM for performance
     model = load_parakeet_model()
-    modelType = "parakeet"
+    model_type = "parakeet"
 
     log.info(f"Current audio file: {Path(audio_chunk_file).name}")
 
-    # ==================== STEP 2: CHECK INPUT FILE ====================
+    # ==================== STEP 2: CHECK & PREPARE INPUT ====================
     if verify_audio_file_exists(audio_chunk_file) is False:
-        log.error(f"File does not exist. Stopping transcription")
-        return
-    
-    if modelType == "parakeet":
-        audio_chunk_file = prepare_parakeet_audio(audio_chunk_file)
+        log.error("File does not exist. Stopping transcription")
+        return None
+
+    # Standardize to 16kHz Mono for NeMo
+    prepared_audio = prepare_parakeet_audio(audio_chunk_file)
 
     # Track total time
     total_start = datetime.now()
 
     # ==================== STEP 3: TRANSCRIBE ====================
     transcribe_start = datetime.now()
-    result = transcribe_audio(audio_chunk_file, model, modelType)
-
-    # ==================== STEP 3.1: Diarize ====================
-    # print_formatting("heading","STEP 3.1: Diarizing with pyannote...")
-    # diarize_start = datetime.now()
-    # result = await assign_speakers(device, audio_file, result, use_offline_models, hugging_face_token)
-    # diarize_end = datetime.now()
+    # This now handles the Parakeet -> Whisper fallback internally
+    result = transcribe_audio(prepared_audio, model, model_type)
 
     # ==================== STEP 4: CHECK OUTPUT ====================
     verified_result = verify_transcription_output(result)
     transcribe_end = datetime.now()
 
-    # Check if transcription failed
     if verified_result is None:
         log.error("TRANSCRIPTION FAILED - STOPPING PIPELINE")
-        return
+        # Ensure cleanup even on failure
+        if os.path.exists(prepared_audio):
+            os.remove(prepared_audio)
+        return None
 
     normalized_result = normalize_whisper_segments(verified_result)
 
     # ==================== STEP 5: EXPORT ====================
     export_start = datetime.now()
-    columns=["start_time", "end_time", "text", "speaker"]
-    log.info("Exporting results")
+    columns = ["start_time", "end_time", "text", "speaker"]
+    log.info("Exporting results to CSV")
 
+    # Note: We pass the original filename to the exporter so the CSV
+    # doesn't get named "parakeet_temp_..."
     transcript_path = export_to_csv(
         data=normalized_result,
         audio_chunk_path=Path(audio_chunk_file),
@@ -339,18 +338,27 @@ def run_transcription(audio_chunk_file):
         columns=columns,
     )
 
-    # delete temp file if it exists
-    temp_files = list(Path(audio_chunk_file).parent.glob(f"parakeet_temp_{Path(audio_chunk_file).stem}_*.wav"))
-    for temp_file in temp_files:
+    # ==================== STEP 6: CLEANUP ====================
+    # Explicitly delete the prepared temp file
+    if os.path.exists(prepared_audio):
         try:
-            os.remove(temp_file)
-            log.debug(f"Deleted temp file: {temp_file.name}")
+            os.remove(prepared_audio)
+            log.info(f"Deleted temp file: {Path(prepared_audio).name}")
         except Exception as e:
-            log.warning(f"Could not delete temp file {temp_file.name}: {e}")
+            log.warning(f"Could not delete temp file: {e}")
+
+    # Fallback cleanup: remove any dangling parakeet temp files in the directory
+    temp_pattern = f"parakeet_temp_{Path(audio_chunk_file).stem}_*.wav"
+    dangling_files = list(Path(audio_chunk_file).parent.glob(temp_pattern))
+    for df in dangling_files:
+        try:
+            os.remove(df)
+        except:
+            pass
 
     export_end = datetime.now()
 
-    # Print timing summary
+    # Timing Summary
     time_for_transcription = transcribe_end - transcribe_start
     time_for_export = export_end - export_start
     time_total = export_end - total_start
@@ -358,6 +366,6 @@ def run_transcription(audio_chunk_file):
     log.info(f"Total time: {time_total.seconds // 60}m {time_total.seconds % 60}s")
     log.debug(f"  Transcription: {time_for_transcription.seconds // 60}m {time_for_transcription.seconds % 60}s")
     log.debug(f"  Export: {time_for_export.seconds // 60}m {time_for_export.seconds % 60}s")
-    log.success("Transcription completed successfully!")
+    log.success("Transcription completed successfully")
 
     return transcript_path
