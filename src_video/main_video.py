@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from queue import Queue, Empty
 import numpy as np
+import torch
 
 from config.jetson_startup import run_jetson_startup_tasks
 from config.resource_usage import start_monitoring, stop_monitoring
@@ -225,16 +226,20 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
         daemon=True,
     )
     tracker = DeepOcSort(
-        reid_weights="osnet_x0_25_msmt17.pt",
-        device="cpu", #TODO: switch to GPU if availabl
+        reid_weights="osnet_ain_x1_0.pt",
+        device="cuda:0",
         half=True,
+        det_thres=0.5,
+        asso_thresh=0.5,
+        nn_budget=150,
+        ama_alpha=0.9,
         conf_thres=0.3,
         iou_thres=0.3,
         max_age=300,
     )
 
     patient_id = None
-    person_model = YOLO("yolov8n.pt")  
+    person_model = YOLO("yolov8n.pt").to("cuda:0" if torch.cuda.is_available() else "cpu")
 
     worker.start()
     window = "CSI Camera"
