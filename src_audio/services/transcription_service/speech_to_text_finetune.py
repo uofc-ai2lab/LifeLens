@@ -52,6 +52,18 @@ python <NEMO_ROOT>/examples/asr/speech_to_text_finetune.py \
 
 For documentation on fine-tuning this model, please visit:
 https://docs.nvidia.com/deeplearning/nemo/user-guide/docs/en/main/asr/configs.html#fine-tuning-configurations
+
+python speech_to_text_finetune.py \
+    init_from_pretrained_model="nvidia/parakeet-tdt-0.6b-v3" \
+    model.train_ds.manifest_filepath="multimed_train_manifest.json" \
+    model.validation_ds.manifest_filepath="multimed_test_manifest.json" \
+    model.train_ds.batch_size=16 \
+    model.validation_ds.batch_size=16 \
+    trainer.devices=1 \
+    trainer.accelerator="gpu" \
+    trainer.precision="16-mixed" \
+    trainer.max_epochs=5 \
+    model.optim.lr=0.0001
 """
 import time
 from typing import Union
