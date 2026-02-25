@@ -171,6 +171,7 @@ def processing_worker(queue: Queue, settings: Dict[str, Any]):
     log.info("Processing worker stopped")
 
 def find_patient_track_id(tag_detections, tracks) -> Optional[int]:
+    patient_id = None
     for tag in tag_detections:
         tag_x = float(tag.center_x)
         tag_y = float(tag.center_y)
