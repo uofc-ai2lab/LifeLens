@@ -17,6 +17,55 @@ _WHISPER_PIPE = None  # Your fine-tuned model (HF Pipeline)
 _WHISPER_FALLBACK = None  # Original OpenAI Whisper
 
 
+def normalize_whisper_segments(segments, base_datetime: datetime = None):
+    """
+    Convert Whisper segments to real-time clock timestamps.
+    base_datetime: The actual wall-clock time when the audio recording STARTED.
+    """
+    if base_datetime is None:
+        # Fallback to 'now' if no start time is provided
+        base_datetime = datetime.now()
+        log.warning(
+            "No base_datetime provided. Timestamps will be relative to current execution time."
+        )
+
+    normalized = []
+    for seg in segments:
+        # 1. Get relative offsets from Whisper
+        rel_start = (
+            seg.get("start")
+            if seg.get("start") is not None
+            else seg.get("timestamp", [0, 0])[0]
+        )
+        rel_end = (
+            seg.get("end")
+            if seg.get("end") is not None
+            else seg.get("timestamp", [0, 0])[1]
+        )
+
+        # 2. Add relative seconds to the base datetime
+        # This handles the "Simple Math" you mentioned in a way that scales
+        import datetime as dt
+
+        real_start_dt = base_datetime + dt.timedelta(seconds=rel_start)
+        real_end_dt = base_datetime + dt.timedelta(seconds=rel_end)
+
+        # 3. Format as string (e.g., 14:30:05)
+        str_start = real_start_dt.strftime("%H:%M:%S")
+        str_end = real_end_dt.strftime("%H:%M:%S")
+
+        normalized.append(
+            {
+                "start_time": str_start,  # Now real-world time
+                "end_time": str_end,  # Now real-world time
+                "text": seg.get("text", "").strip(),
+                "speaker": "UNKNOWN",
+                "rel_start": rel_start,  # Keeping raw offset just in case
+            }
+        )
+    return normalized
+
+
 def load_fine_tuned_whisper(model_path: str):
     """Loads the fine-tuned Whisper model via HF Pipeline."""
     global _WHISPER_PIPE
@@ -178,6 +227,12 @@ def run_transcription(audio_chunk_file, model_path="./whisper-medical-final"):
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         gc.collect()
+
+    file_stat = os.stat(audio_chunk_file)
+    recording_start_time = datetime.fromtimestamp(file_stat.st_ctime)
+    log.info(
+        f"Recording anchored at: {recording_start_time.strftime('%Y-%m-%d %H:%M:%S')}"
+    )
 
     # ==================== STEP 1: LOAD MODEL ====================
     model = load_fine_tuned_whisper(model_path)
