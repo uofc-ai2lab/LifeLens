@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from datetime import datetime
+import re
 import torch
 import gc
 import psutil
@@ -29,6 +30,11 @@ def normalize_whisper_segments(segments, base_datetime: datetime = None):
             "No base_datetime provided. Timestamps will be relative to current execution time."
         )
 
+    # log debug: show first 3 raw segments for reference
+    log.debug(f"Normalizing {len(segments)} segments. Sample raw segment: {segments[0] if segments else 'N/A'}")
+
+
+
     normalized = []
     for seg in segments:
         # 1. Get relative offsets from Whisper
@@ -44,7 +50,6 @@ def normalize_whisper_segments(segments, base_datetime: datetime = None):
         )
 
         # 2. Add relative seconds to the base datetime
-        # This handles the "Simple Math" you mentioned in a way that scales
         import datetime as dt
 
         real_start_dt = base_datetime + dt.timedelta(seconds=rel_start)
@@ -64,6 +69,34 @@ def normalize_whisper_segments(segments, base_datetime: datetime = None):
             }
         )
     return normalized
+
+
+def get_chunk_start_datetime(audio_chunk_file: str) -> datetime:
+    """
+    Resolve chunk start wall-clock time from filename.
+    Expected filename format: recording_YYYYMMDD_HHMMSS.wav
+    Falls back to file ctime if parsing fails.
+    """
+    chunk_name = Path(audio_chunk_file).name
+    match = re.search(r"recording_(\d{8}_\d{6})", chunk_name)
+    if match:
+        try:
+            parsed_start = datetime.strptime(match.group(1), "%Y%m%d_%H%M%S")
+            log.info(
+                f"Chunk timestamp parsed from filename: {parsed_start.strftime('%Y-%m-%d %H:%M:%S')}"
+            )
+            return parsed_start
+        except ValueError:
+            log.warning(
+                f"Could not parse timestamp token in chunk filename: {chunk_name}"
+            )
+
+    file_stat = os.stat(audio_chunk_file)
+    fallback_start = datetime.fromtimestamp(file_stat.st_ctime)
+    log.warning(
+        "Falling back to filesystem ctime for chunk start anchoring; consider using recording_YYYYMMDD_HHMMSS.wav naming."
+    )
+    return fallback_start
 
 
 def load_fine_tuned_whisper(model_path: str):
@@ -148,32 +181,6 @@ def verify_transcription_output(result: dict):
         log.warning("No segments found")
         return []
 
-def normalize_whisper_segments(segments):
-    """Convert keys to pipeline-standard keys for CSV export."""
-    normalized = []
-    for seg in segments:
-        # Compatibility check for HF 'timestamp' vs OpenAI 'start'/'end'
-        start = (
-            seg.get("start")
-            if seg.get("start") is not None
-            else seg.get("timestamp", [0, 0])[0]
-        )
-        end = (
-            seg.get("end")
-            if seg.get("end") is not None
-            else seg.get("timestamp", [0, 0])[1]
-        )
-
-        normalized.append(
-            {
-                "start_time": start,
-                "end_time": end,
-                "text": seg.get("text", "").strip(),
-                "speaker": "UNKNOWN",
-            }
-        )
-    return normalized
-
 
 def transcribe_audio(audio_file: str, model_obj, model_type: str):
     log.info(f"Starting {model_type} transcription pass")
@@ -228,8 +235,7 @@ def run_transcription(audio_chunk_file, model_path="whisper-medical-final"):
             torch.cuda.empty_cache()
         gc.collect()
 
-    file_stat = os.stat(audio_chunk_file)
-    recording_start_time = datetime.fromtimestamp(file_stat.st_ctime)
+    recording_start_time = get_chunk_start_datetime(audio_chunk_file)
     log.info(
         f"Recording anchored at: {recording_start_time.strftime('%Y-%m-%d %H:%M:%S')}"
     )
@@ -271,7 +277,10 @@ def run_transcription(audio_chunk_file, model_path="whisper-medical-final"):
         log.error("TRANSCRIPTION VERIFICATION FAILED - STOPPING PIPELINE")
         return None
 
-    normalized_result = normalize_whisper_segments(verified_segments)
+    normalized_result = normalize_whisper_segments(
+        verified_segments,
+        base_datetime=recording_start_time,
+    )
 
     # ==================== STEP 5: EXPORT ====================
     export_start = datetime.now()
