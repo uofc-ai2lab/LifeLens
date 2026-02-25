@@ -168,7 +168,7 @@ def transcribe_audio(audio_file: str, model_obj, model_type: str):
         raise e
 
 
-def run_transcription(audio_chunk_file, model_path="./whisper-medical-final"):
+def run_transcription(audio_chunk_file, model_path="whisper-medical-final"):
     log.info("Starting Transcription Pipeline")
 
     # Memory Check
