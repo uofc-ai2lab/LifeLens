@@ -226,11 +226,11 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
     )
     tracker = DeepOcSort(
         reid_weights="osnet_x0_25_msmt17.pt",
-        device="cuda",
+        device="cpu", #TODO: switch to GPU if availabl
         half=True,
         conf_thres=0.3,
         iou_thres=0.3,
-        max_age=30,
+        max_age=300,
     )
 
     patient_id = None
@@ -258,15 +258,15 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
 
             results = person_model.predict(frame, classes=[0], verbose=False)
 
-            detections = []
+            dets = []
 
             for r in results:
-                boxes = r.boxes
-                for box in boxes:
-                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                    conf = box.conf[0].cpu().numpy()
-                    detections.append([x1, y1, x2, y2, conf, 0])  
-            detections = np.array(detections, dtype=float)
+                for box in r.boxes:
+                    xyxy= box.xyxy[0].cpu().numpy()
+                    conf = float(box.conf[0])
+                    dets.append([*xyxy, conf, 0])  
+            detections=np.array(dets, dtype=float) if dets else np.empty((0, 6), dtype=float)
+            
             tracks = tracker.update(detections, frame)
 
             # Check if frame is valid
