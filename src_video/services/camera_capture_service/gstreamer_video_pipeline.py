@@ -95,7 +95,7 @@ def capture_frame_from_pipeline(frame, image_save_dir: str) -> bool:
     log.info(f"Frame saved to {filename}")
     return True
 
-def draw_overlay(frame, fps: float, processing: bool, tracks: None):
+def draw_overlay(frame, fps: float, processing: bool):
     cv2.putText(
         frame,
         f"FPS: {fps:.1f}",
@@ -117,23 +117,7 @@ def draw_overlay(frame, fps: float, processing: bool, tracks: None):
             2,
         )
 
-        if tracks is not None:
-            for track in tracks:
-                x1, y1, x2, y2, track_id = track[:5]
 
-                x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
-
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-
-                cv2.putText(
-                    frame,
-                    f"ID {int(track_id)}",
-                    (x1, y1 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    (0, 255, 0),
-                    2,
-                )
 
 class GStreamerVideoPipeline:
     """
