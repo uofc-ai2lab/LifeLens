@@ -10,7 +10,7 @@ from huggingface_hub import snapshot_download, hf_hub_download
 import dill  # required for some legacy checkpoints
 import torch  # needed for classification device selection
 
-from src_video.domain.constants import DETECTION_PART_DEFAULT, MIDLINE_PARTS, SIDEABLE_PARTS
+from src_video.domain.constants import DETECTION_PART_DEFAULT, MIDLINE_PARTS, SIDEABLE_PARTS, format_sideable_part_label
 
 
 # NOTE: Torso placeholder
@@ -82,7 +82,7 @@ def _label_with_side(cls_name: str, bbox: tuple[int, int, int, int], midline_x: 
         return cls_name
     suffix = "1" if _bbox_center_x(bbox) < float(midline_x) else "2"
     # Keep this as a single token for filename parsing (we split on '_').
-    return f"{cls_name}{suffix}"
+    return format_sideable_part_label(cls_name, suffix)
 
 def load_model(model_path: str):
     """Load YOLO model with HF direct file preference."""

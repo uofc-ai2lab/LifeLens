@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src_video.domain.constants import DETECTION_PART_DEFAULT, SIDEABLE_PARTS
+from src_video.domain.constants import DETECTION_PART_DEFAULT, SIDEABLE_PARTS, format_sideable_part_label
 
 @dataclass(frozen=True)
 class CropPrediction:
@@ -41,16 +41,12 @@ def create_body_parts():
 
     # Side-disambiguated limb parts (camera/image heuristic)
     for part in sorted(SIDEABLE_PARTS):
-        parts[f"{part}1"] = {"injuries": {}}
-        parts[f"{part}2"] = {"injuries": {}}
+        parts[format_sideable_part_label(part, 1)] = {"injuries": {}}
+        parts[format_sideable_part_label(part, 2)] = {"injuries": {}}
 
     # Additional placeholders used by downstream consumers
     parts.setdefault("chest", {"injuries": {}})
     parts.setdefault("abdomen", {"injuries": {}})
     parts.setdefault("back", {"injuries": {}})
-
-    # Backwards-compat keys (older runs may still emit unsuffixed parts)
-    for part in sorted(SIDEABLE_PARTS):
-        parts.setdefault(part, {"injuries": {}})
 
     return parts
