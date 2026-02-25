@@ -10,6 +10,8 @@ data/video/unused/
 data/audio/unused/
 data/video/unused/
 
+**/data/
+
 simple_camera.py
 
 .gitignore
