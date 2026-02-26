@@ -42,7 +42,7 @@ INTER_COLUMNS = [
 ]
 
 ### ------------------------------- MEDICATION SERVICE ------------------------------- ###
-MEDICATIONS = {
+MEDICATIONS: dict[str, dict] = {
     "Normal Saline": {
         "aliases": ["NS", "Electrolyte"],
         "default_dosage": "100 mL"
@@ -129,6 +129,10 @@ MEDICATIONS = {
     },
     "Dimenhydrinate": {
         "aliases": ["Gravol"],
+        "default_dosage": "50 mg / 1 mL"
+    },
+    "Fentanyl": {
+        "aliases": ["Fent", "Sublimaze"],
         "default_dosage": "50 mg / 1 mL"
     },
     "Diphenhydramine": {
@@ -242,7 +246,7 @@ MEDICATIONS = {
 }
 
 
-ROUTES = {
+ROUTES: frozenset[str] = frozenset({
     "infusion", "iv", "intra-venous", "iv push", "ivp", "iv bolus", "ivb", "bolus",
     "im", "intramuscular",
     "po", "oral",
@@ -253,23 +257,19 @@ ROUTES = {
     "neb", "nebulized",
     "inhaled",
     "topical",
-}
+})
 
-# still need to implement logic
-TIMES = {"hours", "seconds", "minutes"}
-
-DOSAGES = {d.lower() for d in {
+DOSAGES: frozenset[str] = frozenset({
     "mg", "ml", "g", "mg/ml", "mills", "unit", "units", "mcg",
     "milligrams", "milliliters", "grams", "micrograms",
     "l", "liters", "litres", "litre", "liter",
     "cc", "cc's", "drops", "drop", "tablet", "tablets",
     "puffs", "puff", "spray", "sprays", "inhaler",
     "capsule", "capsules", "pills", "pill",
-    "inhalations", "mmol", "millimoles",
-    "micron", "iu", "iu's"
-}}
+    "inhalations", "mmol", "millimoles", "mEq", "milliequivalents"
+})
 
-TEXT_NUMBERS = {
+TEXT_NUMBERS: dict[str, float] = {
     "zero": 0,
     "one": 1,
     "two": 2,
@@ -285,12 +285,16 @@ TEXT_NUMBERS = {
     "quarter": 0.25
 }
 
-NUMBER_PATTERN = re.compile(r"(?:\d*\.\d+|\d+)(?:/\d+)?")
-DOSAGE_TOKEN_PATTERN = re.compile(r"(?:\d*\.\d+|\d+)(?:/\d+)?|[a-z']+")
-LOW_CONFIDENCE_SCORE = 0.4
-HIGH_CONFIDENCE_SCORE = 1.0
+NUMBER_PATTERN: re.Pattern = re.compile(r"(?:\d*\.\d+|\d+)(?:/\d+)?")
+DOSAGE_TOKEN_PATTERN: re.Pattern = re.compile(r"(?:\d*\.\d+|\d+)(?:/\d+)?|[a-z']+")
+LOW_CONFIDENCE_SCORE: float = 0.4
+HIGH_CONFIDENCE_SCORE: float = 1.0
+FUZZY_THRESHOLD: int = 85        
+FUZZY_CONF_SCALE: float = 0.85   
+NER_CONFIDENCE: float = 0.90      
 
-MED_COLUMNS = [
+
+MED_COLUMNS: list[str] = [
     "start_time",
     "end_time",
     "event_type",
@@ -299,3 +303,54 @@ MED_COLUMNS = [
     "route (confidence score)",
     "full_text"
 ]
+
+AUDIT_COLUMNS: list[str] = [
+    "start_time",
+    "end_time",
+    "intent",
+    "medication",
+    "original_text",
+]
+
+PRE_NEGATION_TRIGGERS: frozenset[str] = frozenset({
+    "don't", "do not", "never", "without",
+    "hold", "withhold", "hold off", "avoid",
+    "instead of", "rather than",
+    "let's not", "we're not",
+})
+
+POST_NEGATION_TRIGGERS: frozenset[str] = frozenset({
+    "contraindicated", "not indicated", "withheld", "held",
+    "not given", "not administered",
+    "hold", "withhold", "avoid", "hold off",
+})
+
+REVISED_SIGNALS: frozenset[str] = frozenset({
+    "actually", "correction", "change that", "i mean",
+    "make it", "scratch that", "no wait", "check that", "wait",
+    "update that",
+})
+
+ADMINISTERED_SIGNALS: frozenset[str] = frozenset({
+    "gave", "given", "pushed", "administered", "bolused",
+    "infusing", "infused", "started", "injected", "applied",
+    "nebulizing", "hung", "is in", "are in", "went in", "running",
+})
+
+ORDERED_SIGNALS: frozenset[str] = frozenset({
+    "give", "giving", "push", "pushing", "administer", "administering", "bolus", "start",
+    "run", "hang", "draw up", "nebulize", "use",
+    "apply", "load", "get me", "let's get",
+})
+
+CONSIDERED_SIGNALS: frozenset[str] = frozenset({
+    "should we", "should i", "consider", "thinking about",
+    "what about", "maybe", "might want to", "could we",
+    "would you", "do we want", "prep", "pulling up",
+    "drawing up", "getting ready",
+})
+
+QUESTIONED_SIGNALS: frozenset[str] = frozenset({
+    "did we give", "have we given", "did you give",
+    "was given", "did we already", "already gave",
+})
