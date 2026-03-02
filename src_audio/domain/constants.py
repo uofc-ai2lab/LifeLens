@@ -288,10 +288,13 @@ TEXT_NUMBERS: dict[str, float] = {
 NUMBER_PATTERN: re.Pattern = re.compile(r"(?:\d*\.\d+|\d+)(?:/\d+)?")
 DOSAGE_TOKEN_PATTERN: re.Pattern = re.compile(r"(?:\d*\.\d+|\d+)(?:/\d+)?|[a-z']+")
 LOW_CONFIDENCE_SCORE: float = 0.4
-HIGH_CONFIDENCE_SCORE: float = 1.0
+DEFAULT_DOSAGE_SCORE: float = 0.25
+HIGH_CONFIDENCE_SCORE: float = 0.88
 FUZZY_THRESHOLD: int = 85        
 FUZZY_CONF_SCALE: float = 0.85   
-NER_CONFIDENCE: float = 0.90      
+NER_CONFIDENCE: float = 0.90   
+SENTENCE_END   = re.compile(r'[.!?]\s*$')
+SENTENCE_SPLIT = re.compile(r'(?<=[.!?])\s+')   
 
 
 MED_COLUMNS: list[str] = [

@@ -1,9 +1,10 @@
 from pathlib import Path
 from src_audio.utils.export_to_csv import export_to_csv
 from src_audio.utils.load_csv_file import load_csv_file
-from src_audio.utils.calculate_mean import mean
+import pandas as pd
 from src_audio.domain.constants import (
-    MEDICATIONS, LOW_CONFIDENCE_SCORE, MED_COLUMNS, AUDIT_COLUMNS
+    MEDICATIONS, LOW_CONFIDENCE_SCORE, 
+    MED_COLUMNS, AUDIT_COLUMNS, SENTENCE_SPLIT, SENTENCE_END
 )
 from src_audio.domain.entities import MedicationEntity, MedicationAdministration
 from src_audio.services.medication_extraction_service.extractor import MedicationExtractor
@@ -298,6 +299,62 @@ def prepare_medication_rows(
         for a in administrations
     ]
 
+def merge_incomplete_segments(df: pd.DataFrame) -> list[dict]:
+    """
+    Merge transcript rows into complete sentences before NER/intent processing.
+
+    ASR segments on timing, not sentence boundaries, which can split
+    dosage/route information or negations across rows. This function
+    combines rows into full sentences to preserve context.
+
+    Each segment retains the start_time of its first row and the end_time
+    of its last row.
+
+    Args:
+        df (pd.DataFrame): Transcript with columns text, start_time, end_time.
+
+    Returns:
+        list[dict]: Sentence-level segments with text, start_time, end_time.
+"""
+    segments: list[dict] = []
+    buffer_text:  list[str] = []
+    buffer_start: str | None = None
+    buffer_end:   str | None = None
+
+    for _, row in df.iterrows():
+        # Split on mid-row sentence boundaries before buffering.
+        # A row with no internal boundary yields a single-element list.
+        sub_sentences = SENTENCE_SPLIT.split(str(row["text"]).strip())
+
+        for sub in sub_sentences:
+            sub = sub.strip()
+            if not sub:
+                continue
+
+            if buffer_start is None:
+                buffer_start = row["start_time"]
+
+            buffer_text.append(sub)
+            buffer_end = row["end_time"]
+
+            if SENTENCE_END.search(sub):
+                segments.append({
+                    "text":       " ".join(buffer_text),
+                    "start_time": buffer_start,
+                    "end_time":   buffer_end,
+                })
+                buffer_text, buffer_start, buffer_end = [], None, None
+
+    # Trailing rows without terminal punctuation
+    if buffer_text:
+        segments.append({
+            "text":       " ".join(buffer_text),
+            "start_time": buffer_start,
+            "end_time":   buffer_end,
+        })
+
+    return segments
+
 def run_medication_extraction(
     chunk_path: str,
     transcript_path: str,
@@ -333,16 +390,22 @@ def run_medication_extraction(
     transcript_data = []
 
     df = load_csv_file(transcript_path)
-    log.info(f"Processing {len(df)} segments")
+    log.info(f"Loaded {len(df)} raw row(s) from transcript")
 
-    for _, row in df.iterrows():
-        extracted_entities = extractor.extract_medication_info_from_ner(row["text"])
-        extracted_entities = postprocess_entities(extracted_entities, row["text"])
+    segments = merge_incomplete_segments(df)
+    log.info(f"Merged into {len(segments)} sentence segment(s)")
+
+    texts = [seg["text"] for seg in segments]
+    docs  = extractor.nlp.pipe(texts, batch_size=32)
+
+    for seg, doc in zip(segments, docs):
+        extracted_entities = extractor.extract_entities_from_doc(doc)
+        extracted_entities = postprocess_entities(extracted_entities, seg["text"])
         transcript_data.append({
-            "original_text": row["text"],
-            "start_time": row["start_time"],
-            "end_time": row["end_time"],
-            "entities": extracted_entities,
+            "original_text": seg["text"],
+            "start_time":    seg["start_time"],
+            "end_time":      seg["end_time"],
+            "entities":      extracted_entities,
         })
 
     confirmed_admins = extract_med_admins_with_confidence(

@@ -14,13 +14,45 @@ class MedicationExtractor:
         self.nlp = spacy.load("en_core_med7_lg")
         log.success("Med7 NER model ready")
 
+    def extract_entities_from_doc(self, doc) -> list[MedicationEntity]:
+        """
+        Extract medication entities from an already-processed spaCy Doc.
+
+        Separating entity extraction from NLP processing allows the caller
+        to use nlp.pipe() for batched inference and then call this method
+        per doc, rather than calling nlp() once per segment.
+
+        Args:
+            doc (spacy.tokens.Doc): A Doc produced by this extractor's nlp
+                pipeline (i.e. en_core_med7_lg).
+
+        Returns:
+            list[MedicationEntity]: DRUG, DOSAGE, and ROUTE entities sorted
+                by start_idx. Empty list if no relevant entities are found.
+        """
+        entities: list[MedicationEntity] = []
+        for ent in doc.ents:
+            label = self.map_to_dosage.get(ent.label_, ent.label_)
+            if label not in self.allowed_entities:
+                continue
+            entities.append(
+                MedicationEntity(
+                    entity=label,
+                    word=ent.text,
+                    start_idx=ent.start_char,
+                    score=NER_CONFIDENCE,
+                )
+            )
+        entities.sort(key=lambda e: e.start_idx)
+        return entities
+
     def extract_medication_info_from_ner(self, text: str) -> list[MedicationEntity]:
         """
-        Extract medication-related entities using the Med7 spaCy pipeline.
+        Extract medication entities from a raw text string.
 
-        Returns DRUG, DOSAGE, STRENGTH, and ROUTE entities as
-        MedicationEntity objects (word, start_idx, score), sorted by start_idx.
-        All NER entities receive a fixed confidence score.
+        Convenience wrapper for single-text callers. For processing many
+        segments, prefer batching texts through nlp.pipe() and calling
+        extract_entities_from_doc() on each resulting Doc.
 
         Args:
             text (str): Transcript segment text.
@@ -30,25 +62,4 @@ class MedicationExtractor:
         """
         if not text or not text.strip():
             return []
-
-        doc = self.nlp(text)
-
-        entities: list[MedicationEntity] = []
-        for ent in doc.ents:
-            label = self.map_to_dosage.get(ent.label_, ent.label_)  # remap STRENGTH to DOSAGE, keep others as is
-            if label not in self.allowed_entities:
-                continue
-
-            entities.append(
-                MedicationEntity(
-                    entity=label,
-                    word=ent.text,
-                    start_idx=ent.start_char,
-                    score=NER_CONFIDENCE,
-                )
-            )
-
-        # spaCy returns ents in document order, but sort explicitly
-        # to guarantee the contract for all downstream consumers
-        entities.sort(key=lambda e: e.start_idx)
-        return entities
+        return self.extract_entities_from_doc(self.nlp(text))
