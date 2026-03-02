@@ -5,7 +5,8 @@ import re
 import torch
 import gc
 import psutil
-from transformers import pipeline
+from transformers import pipeline, WhisperForConditionalGeneration, WhisperProcessor
+from peft import PeftModel
 
 from src_audio.utils.export_to_csv import export_to_csv
 from config.logger import Logger
@@ -16,6 +17,15 @@ log = Logger("[audio][transcription]")
 # Persistent global storage
 _WHISPER_PIPE = None  # Your fine-tuned model (HF Pipeline)
 _WHISPER_FALLBACK = None  # Original OpenAI Whisper
+_WHISPER_PIPE_MODEL_PATH = None
+
+_WHISPER_BASE_MODEL_MAP = {
+    "tiny": "openai/whisper-tiny",
+    "base": "openai/whisper-base",
+    "small": "openai/whisper-small",
+    "medium": "openai/whisper-medium",
+    "large": "openai/whisper-large-v3",
+}
 
 
 def normalize_whisper_segments(segments, base_datetime: datetime = None):
@@ -100,25 +110,60 @@ def get_chunk_start_datetime(audio_chunk_file: str) -> datetime:
 
 
 def load_fine_tuned_whisper(model_path: str):
-    """Loads the fine-tuned Whisper model via HF Pipeline."""
-    global _WHISPER_PIPE
-    if _WHISPER_PIPE is not None:
+    """Loads the fine-tuned Whisper LoRA model via HF Pipeline."""
+    global _WHISPER_PIPE, _WHISPER_PIPE_MODEL_PATH
+
+    resolved_model_path = str(Path(model_path).resolve())
+    if _WHISPER_PIPE is not None and _WHISPER_PIPE_MODEL_PATH == resolved_model_path:
         return _WHISPER_PIPE
 
     log.info(f"Loading Fine-Tuned Whisper model (FP16 optimized) from: {model_path}")
     try:
-        device = 0 if torch.cuda.is_available() else -1
+        cuda_available = torch.cuda.is_available()
+        device = 0 if cuda_available else -1
+        dtype = torch.float16 if cuda_available else torch.float32
+
+        model_path_lower = resolved_model_path.lower()
+        base_model_name = None
+        for key, hf_model in _WHISPER_BASE_MODEL_MAP.items():
+            if key in model_path_lower:
+                base_model_name = hf_model
+                break
+
+        if base_model_name is None:
+            log.warning("Could not infer base model size from path. Defaulting to 'base'.")
+            base_model_name = _WHISPER_BASE_MODEL_MAP["base"]
+
+        base_model = WhisperForConditionalGeneration.from_pretrained(
+            base_model_name,
+            torch_dtype=dtype,
+            low_cpu_mem_usage=True,
+            device_map="auto" if cuda_available else None,
+        )
+
+        # merge with base
+        model = PeftModel.from_pretrained(base_model, resolved_model_path)
+        model = model.merge_and_unload()  # Merge LoRA weights into the base model for inference
+        model.eval()  # Set to eval mode for inference
+
+        processor = WhisperProcessor.from_pretrained(resolved_model_path)
+
         # Similar to your Parakeet setup, we force FP16 for memory efficiency
         _WHISPER_PIPE = pipeline(
             "automatic-speech-recognition",
-            model=model_path,
+            model=model,
+            feature_extractor=processor.feature_extractor,
+            tokenizer=processor.tokenizer,
             chunk_length_s=30,
             device=device,
-            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            torch_dtype=dtype
         )
+        _WHISPER_PIPE_MODEL_PATH = resolved_model_path
         log.success("Fine-tuned Whisper pipeline loaded successfully in FP16 mode")
         return _WHISPER_PIPE
     except Exception as e:
+        _WHISPER_PIPE = None
+        _WHISPER_PIPE_MODEL_PATH = None
         log.error(f"Error loading Fine-Tuned Whisper: {e}")
         return None
 
@@ -224,7 +269,7 @@ def transcribe_audio(audio_file: str, model_obj, model_type: str):
         raise e
 
 
-def run_transcription(audio_chunk_file, model_path="whisper-medical-final"):
+def run_transcription(audio_chunk_file, model_path="models/whisper-large-v3-medical-lora"):
     log.info("Starting Transcription Pipeline")
 
     # Memory Check

@@ -348,3 +348,5 @@ data/video/output_files/
 
 # training set
 data/video/source_files/Images/Wound_dataset/
+
+src_audio/services/transcription_service/models/
