@@ -8,9 +8,8 @@ import argparse
 from pathlib import Path
 from typing import Dict, Any, Optional
 from queue import Queue, Empty
-from ultralytics import YOLO
-from boxmot import OcSort
 import numpy as np
+import torch
 
 from config.jetson_startup import run_jetson_startup_tasks
 from config.resource_usage import start_monitoring, stop_monitoring
@@ -32,7 +31,17 @@ from src_video.services.body_ranking.body_injury_ranking import body_ranking
 from src_video.services.classification_service.infer_injuries_on_crops import predict_injuries_on_detection_crops
 from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
-from src_video.services.person_reid_service import ResNet50ReIDExtractor
+
+# ── Re-ID service (new) ───────────────────────────────────────────────────────
+from src_video.services.person_reid_service.reid_service import (
+    load_reid_model,
+    extract_embedding,
+    cosine_similarity,
+    EnrollmentBuffer,
+    SessionRegistry,
+    PATIENT_MATCH_THRESH,
+)
+
 
 def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")
@@ -65,16 +74,15 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
             max_images=int(settings["MAX_IMAGES"]),
             classification_export_dir=None,
         )
-
         log.success("Detection done")
-
+   
     except Exception as e:
         log.error(f"Detection failed: {e}")
         return False
 
     try:
         crops_root = Path(settings["CROPS_ROOT"])
-        infer_summary = predict_injuries_on_detection_crops(
+        predict_injuries_on_detection_crops(
             crops_root=_as_posix(str(crops_root)),
             checkpoint_path=str(settings["INJURY_CHECKPOINT_PATH"]),
             out_json_path=str(settings["INJURY_REPORT_JSON"]),
@@ -86,9 +94,7 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
             filename_delimiter="_",
             body_part_label_position=int(settings["BODY_PART_LABEL_POSITION"]),
         )
-
         log.success("Classification done")
-
     except Exception as e:
         log.error(f"Classification failed: {e}")
 
@@ -110,7 +116,6 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
             log.success(f"De-identification complete: {deidentify_result['processed_count']} images")
         else:
             log.warning(f"De-identification issue: {deidentify_result.get('note', deidentify_result.get('error'))}")
-
     except Exception as e:
         log.error(f"De-identification failed: {e}")
 
@@ -119,7 +124,6 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
         if crops_root.exists():
             shutil.rmtree(crops_root)
             crops_root.mkdir(parents=True, exist_ok=True)
-
     except Exception as e:
         log.warning(f"Cleanup failed: {e}")
 
@@ -138,11 +142,9 @@ def processing_worker(queue: Queue, settings: Dict[str, Any]):
     while True:
         try:
             job = queue.get(timeout=0.5)
-
         except Empty:
             job = None
 
-        # Shutdown
         if job is None and batch:
             pass
         elif job is None:
@@ -156,7 +158,6 @@ def processing_worker(queue: Queue, settings: Dict[str, Any]):
         queue.task_done()
 
         now = time.time()
-
         if (
             len(batch) >= BATCH_SIZE
             or (now - last_flush) >= BATCH_TIMEOUT
@@ -166,21 +167,27 @@ def processing_worker(queue: Queue, settings: Dict[str, Any]):
                 process_single_image(settings)
             except Exception as e:
                 log.error(f"Batch processing error: {e}")
-
             batch.clear()
             last_flush = now
 
     log.info("Processing worker stopped")
 
-def find_patient_track_id(tag_detections, tracks) -> Optional[int]:
+def find_tag_bbox(tag_detections, tracks) -> Optional[tuple[int, tuple]]:
     for tag in tag_detections:
         tag_x = float(tag.center_x)
         tag_y = float(tag.center_y)
         for trk in tracks:
             x1, y1, x2, y2 = trk[0], trk[1], trk[2], trk[3]
             if x1 <= tag_x <= x2 and y1 <= tag_y <= y2:
-                return int(trk[4])
-    return None    
+                return int(trk[4]), (x1, y1, x2, y2)
+    return None
+
+def get_track_bbox(tracks, track_id: int) -> Optional[tuple]:
+    """Return (x1, y1, x2, y2) for a given track_id, or None."""
+    for trk in tracks:
+        if int(trk[4]) == track_id:
+            return (trk[0], trk[1], trk[2], trk[3])
+    return None
 
 
 def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
@@ -194,58 +201,64 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dev", action="store_true")
     args = parser.parse_args()
-    
+
     settings = load_video_pipeline_settings()
-    DEV_MODE = args.dev
-    
+    DEV_MODE  = args.dev
+
     if video_pipeline is None and not DEV_MODE:
         log.error("VIDEO pipeline failed to initialize camera")
         return 1
-        
+    
     if DEV_MODE:
         log.header("DEV Mode")
         start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
         process_single_image(settings)
         stop_monitoring()
         return 0
+    
+    from ultralytics import YOLO
+    from boxmot import DeepOcSort
 
     log.header("Video Pipeline Starting")
-    log.info("Running startup tasks...")
-    #run_jetson_startup_tasks()
-    start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
 
     image_queue = Queue(maxsize=3)
+
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
     worker = threading.Thread(
         target=processing_worker,
         args=(image_queue, settings),
         daemon=True,
     )
-    tracker = OcSort(
+    tracker = DeepOcSort(
+        reid_weights="osnet_ain_x1_0.pt",
+        device="cuda:0",
+        half=True,
+        det_thres=0.5,
+        asso_thresh=0.5,
+        nn_budget=150,
+        ama_alpha=0.9,
         conf_thres=0.3,
-        iou_thres=0.3,  # Lower for better re-identification
-        max_age=30  # 10 seconds at 30fps (was 30 = 1 second)
+        iou_thres=0.3,
+        max_age=300,
     )
 
-    # Initialize ReID extractor for person re-identification
-    reid_extractor = ResNet50ReIDExtractor(
-        model_path="src_video/resnet50_market1501_aicity156.onnx",
-        device="cpu"
+    person_model = YOLO("yolov8n.pt").to(device)
+
+    log.info("Loading OSNet Re-ID model...")
+    reid_model       = load_reid_model(device=device)
+    enrollment_buf   = EnrollmentBuffer(target_frames=5)
+    session_registry = SessionRegistry()
+
+    patient_track_id   : Optional[int] = None
+    patient_session_id : Optional[str] = None
+    enrolling          : bool          = False
+
+    worker = threading.Thread(
+        target=processing_worker,
+        args=(image_queue, settings),
+        daemon=True,
     )
-    
-    # Persistent person tracking
-    track_to_persistent_id = {}  # Maps OcSort track_id -> persistent_person_id
-    persistent_id_counter = 0  # Counter for assigning persistent IDs
-    persistent_features = {}  # Maps persistent_person_id -> feature vector
-    
-    # Primary person tracking
-    primary_person_id = None  # Persistent ID of person with marker
-    primary_person_feature = None  # Stored feature for re-identification
-    primary_person_assigned = False
-
-    patient_id = None
-    person_model = YOLO("yolov8n.pt")
-
     worker.start()
     window = "CSI Camera"
     cv2.namedWindow(window, cv2.WINDOW_NORMAL)
@@ -266,69 +279,23 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
                 log.error("Camera read failed")
                 break
 
+            results = person_model.predict(frame, classes=[0], verbose=False)
+
+            dets = []
+
+            for r in results:
+                for box in r.boxes:
+                    xyxy= box.xyxy[0].cpu().numpy()
+                    conf = float(box.conf[0])
+                    dets.append([*xyxy, conf, 0])
+            detections=np.array(dets, dtype=float) if dets else np.empty((0, 6), dtype=float)
+            
+            tracks = tracker.update(detections, frame)
+
             # Check if frame is valid
             if frame.size == 0:
                 log.error("Empty frame received")
                 continue
-            results = person_model.predict(frame, classes=[0], verbose=False)
-
-            detections = []
-
-            for r in results:
-                boxes = r.boxes
-                for box in boxes:
-                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                    conf = box.conf[0].cpu().numpy()
-                    detections.append([x1, y1, x2, y2, conf, 0])  
-            
-            detections_np = np.array(detections, dtype=np.float32) if detections else np.array([])
-            tracks = tracker.update(detections_np, frame)
-            
-            # Extract ReID features for improved person re-identification
-            if len(tracks) > 0 and len(detections) > 0:
-                person_features = reid_extractor.extract_features(frame, detections)
-                
-                # Assign persistent IDs to tracks
-                for i, track in enumerate(tracks):
-                    track_id = int(track[4])
-                    
-                    # If track already has a persistent ID, skip
-                    if track_id in track_to_persistent_id:
-                        continue
-                    
-                    # Try to match with primary person using appearance features
-                    if primary_person_feature is not None and i < len(person_features) and len(person_features[i]) > 0:
-                        current_feature = person_features[i]
-                        distance = 1 - np.dot(current_feature, primary_person_feature) / (
-                            np.linalg.norm(current_feature) * np.linalg.norm(primary_person_feature) + 1e-5
-                        )
-                        
-                        # If feature distance is low, it's the same person
-                        if distance < 0.5:  # Cosine distance threshold
-                            track_to_persistent_id[track_id] = primary_person_id
-                            log.success(f"Re-identified primary person with new track {track_id} (distance: {distance:.3f})")
-                            continue
-                    
-                    # Assign new persistent ID for new person
-                    persistent_id_counter += 1
-                    track_to_persistent_id[track_id] = persistent_id_counter
-                    
-                    if i < len(person_features) and len(person_features[i]) > 0:
-                        persistent_features[persistent_id_counter] = person_features[i]
-                    
-                    log.info(f"New person {persistent_id_counter} detected (track {track_id})")
-
-
-            # detections = np.array(detections)
-
-            # if not ok or frame is None:
-            #     log.error("Camera read failed")
-            #     break
-
-            # # Check if frame is valid
-            # if frame.size == 0:
-            #     log.error("Empty frame received")
-            #     continue
 
             # FPS
             frame_count += 1
@@ -339,63 +306,87 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
                 frame_count = 0
                 start_time = time.time()
 
-            # Marker detection
-            detected = detect_apriltags(frame)
             now = time.time()
-            
-            # Assign primary person when AprilTag detected
-            if detected and not primary_person_assigned and tracks is not None and len(tracks) > 0:
-                # Find which track has the AprilTag
-                for i, tag in enumerate(detected if isinstance(detected, list) else [detected]):
-                    if not hasattr(tag, 'center_x'):
+
+            # ── Sync registry: remove stale track mappings ────────────────────
+            active_ids = set()
+            if tracks is not None and len(tracks) > 0:
+                active_ids = {int(t[4]) for t in tracks}
+            session_registry.sync_active_tracks(active_ids)
+
+            # ── Per-track: register new tracks in session registry ────────────
+            # This runs every frame for any track_id not yet mapped, providing
+            # both new-person registration and re-entry re-association.
+            if tracks is not None and len(tracks) > 0:
+                for trk in tracks:
+                    tid  = int(trk[4])
+                    bbox = (trk[0], trk[1], trk[2], trk[3])
+
+                    # Skip if already mapped
+                    if session_registry.get_session_id(tid) is not None:
                         continue
-                    tag_x = float(tag.center_x)
-                    tag_y = float(tag.center_y)
-                    
-                    for j, trk in enumerate(tracks):
-                        x1, y1, x2, y2 = trk[0], trk[1], trk[2], trk[3]
-                        track_id = int(trk[4])
-                        
-                        # Check if AprilTag is inside bounding box
-                        if x1 <= tag_x <= x2 and y1 <= tag_y <= y2:
-                            # Get or create persistent ID for this person
-                            if track_id not in track_to_persistent_id:
-                                persistent_id_counter += 1
-                                track_to_persistent_id[track_id] = persistent_id_counter
-                            
-                            primary_person_id = track_to_persistent_id[track_id]
-                            
-                            # Store primary person's feature
-                            if j < len(person_features) and len(person_features[j]) > 0:
-                                primary_person_feature = person_features[j].copy()
-                                persistent_features[primary_person_id] = primary_person_feature
-                            
-                            primary_person_assigned = True
-                            patient_id = primary_person_id
-                            
-                            log.success(f"Primary person assigned: persistent ID {primary_person_id} (track {track_id})")
-                            break
-                    
-                    if primary_person_assigned:
-                        break
 
-            # Capture when primary person is in view or AprilTag is detected
-            should_capture = False
+                    emb = extract_embedding(reid_model, frame, bbox, device)
+                    if emb is None:
+                        continue
 
-            if detected:
-                should_capture = True
+                    sid = session_registry.register_or_match(tid, emb)
+                    log.info(f"Track {tid} → Session {sid}")
 
-            elif primary_person_assigned and primary_person_id is not None:
-                # Or capture when primary person is in view
-                for trk in (tracks if tracks is not None else []):
-                    track_id = int(trk[4])
-                    if track_id in track_to_persistent_id:
-                        if track_to_persistent_id[track_id] == primary_person_id:
-                            should_capture = True
-                            break
+                    # If this new track matches the patient's session, update
+                    # patient_track_id so captures resume automatically.
+                    if sid == patient_session_id and tid != patient_track_id:
+                        patient_track_id = tid
+                        log.success(
+                            f"Patient re-identified on re-entry: "
+                            f"track {tid}, session {patient_session_id}"
+                        )
 
-            # if primary_in_view and (now - last_snap) >= SNAPSHOT_INTERVAL:
-            if should_capture and (now - last_snap) >= SNAPSHOT_INTERVAL:
+            if patient_session_id is None:
+                tag_detections = detect_apriltags(frame)
+
+                if tag_detections and tracks is not None and len(tracks) > 0:
+                    result = find_tag_bbox(tag_detections, tracks)
+
+                    if result is not None:
+                        tag_track_id, tag_bbox = result
+
+                        if not enrolling:
+                            # Start enrollment — assign a stable patient session ID now
+                            patient_session_id = "PATIENT"
+                            enrolling          = True
+                            log.success(
+                                f"AprilTag matched to track {tag_track_id}. "
+                                f"Enrolling patient ({enrollment_buf.progress})..."
+                            )
+
+                        # Buffer embedding frames
+                        emb = extract_embedding(reid_model, frame, tag_bbox, device)
+                        if emb is not None:
+                            complete = enrollment_buf.add(emb)
+
+                            if complete:
+                                # Register patient in session with forced session ID
+                                session_registry.register_or_match(
+                                    track_id=tag_track_id,
+                                    embedding=enrollment_buf.enrolled_embedding,
+                                    is_patient=True,
+                                    forced_session_id=patient_session_id,
+                                )
+                                patient_track_id = tag_track_id
+                                enrolling        = False
+                                log.success(
+                                    f"Patient enrolled. Session ID: {patient_session_id}, "
+                                    f"Track ID: {patient_track_id}"
+                                )
+                            else:
+                                log.info(f"Enrollment buffering {enrollment_buf.progress}")
+
+            patient_in_view = False
+            if patient_track_id is not None and tracks is not None and len(tracks) > 0:
+                patient_in_view = any(int(t[4]) == patient_track_id for t in tracks)
+
+            if patient_in_view and (now - last_snap) >= SNAPSHOT_INTERVAL:
 
                 if capture_frame_from_pipeline(frame, IMAGE_SAVE_DIR):
 
@@ -412,6 +403,32 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
 
 
             draw_overlay(frame, fps, processing, tracks)
+
+            # Draw enrollment status if mid-enrollment
+            # if enrolling:
+            #     cv2.putText(
+            #         frame,
+            #         f"Enrolling patient... {enrollment_buf.progress}",
+            #         (10, 30),
+            #         cv2.FONT_HERSHEY_SIMPLEX,
+            #         0.8,
+            #         (0, 255, 255),
+            #         2,
+            #     )
+
+            # # Draw session IDs on each track bbox
+            # if tracks is not None and len(tracks) > 0:
+            #     for trk in tracks:
+            #         tid  = int(trk[4])
+            #         sid  = session_registry.get_session_id(tid) or "?"
+            #         x1, y1 = int(trk[0]), int(trk[1])
+            #         label = f"{sid}"
+            #         colour = (0, 0, 255) if sid == patient_session_id else (255, 255, 255)
+            #         cv2.putText(
+            #             frame, label, (x1, y1 - 8),
+            #             cv2.FONT_HERSHEY_SIMPLEX, 0.6, colour, 2,
+            #         )
+
             cv2.imshow(window, frame)
             
             # Single waitKey with proper ESC and 'q' handling
@@ -426,14 +443,18 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
 
     finally:
         log.info("Shutting down")
+        # Log final session summary
+        sessions = session_registry.all_sessions()
+        log.info(f"Session summary ({len(sessions)} persons tracked):")
+        for sid, info in sessions.items():
+            marker = " ← PATIENT" if info["is_patient"] else ""
+            log.info(f"  {sid}: last track {info['track_id']}{marker}")
         image_queue.put("STOP")
         worker.join(timeout=5)
 
         video_pipeline.cleanup()
         
         cv2.destroyAllWindows()
-        
-        stop_monitoring()
 
     return 0
 
@@ -441,11 +462,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dev", action="store_true")
     args = parser.parse_args()
-    
+
     if args.dev:
         raise SystemExit(main())
     else:
         # Standalone camera mode
+        log.info("Running startup tasks...")
+        run_jetson_startup_tasks()
+        start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
         video_pipeline = GStreamerVideoPipeline(flip_method=0)
         if not video_pipeline.start():
             log.error("Failed to initialize camera")
@@ -455,3 +479,5 @@ if __name__ == "__main__":
             raise SystemExit(main(video_pipeline))
         finally:
             video_pipeline.cleanup()
+            stop_monitoring()
+
