@@ -79,8 +79,8 @@ def missed_medication_info(text: str, med_list: list[str]) -> list[dict]:
             span_start = word_spans[i][0]
             span_end   = word_spans[i + n - 1][1]
 
-            # Skip if already covered by an exact match
-            if any(s <= span_start and span_end <= e for s, e in covered):
+            # Skip if this candidate span overlaps ANY already-covered span.
+            if any(span_start < e and span_end > s for s, e in covered):
                 continue
 
             candidate = text[span_start:span_end].lower()
@@ -92,7 +92,12 @@ def missed_medication_info(text: str, med_list: list[str]) -> list[dict]:
             )
 
             if result:
-                _, score, _ = result
+                matched_term, score, _ = result
+                candidate_alpha = re.sub(r'[^\w\s]', '', candidate)
+                length_ratio = len(candidate_alpha) / max(len(matched_term), 1)
+                if not (0.5 <= length_ratio <= 2.0):
+                    continue
+                
                 confidence = round((score / 100) * FUZZY_CONF_SCALE, 3)
                 matches.append({
                     "medication": text[span_start:span_end],  # original case
