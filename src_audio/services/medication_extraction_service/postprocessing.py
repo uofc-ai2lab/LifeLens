@@ -6,7 +6,8 @@ from src_audio.domain.constants import (
     MEDICATIONS, HIGH_CONFIDENCE_SCORE, DOSAGE_TOKEN_PATTERN, 
     PRE_NEGATION_TRIGGERS, POST_NEGATION_TRIGGERS,
     REVISED_SIGNALS, ADMINISTERED_SIGNALS, QUESTIONED_SIGNALS,
-    CONSIDERED_SIGNALS, ORDERED_SIGNALS, FUZZY_CONF_SCALE, FUZZY_THRESHOLD
+    CONSIDERED_SIGNALS, ORDERED_SIGNALS, FUZZY_CONF_SCALE, FUZZY_THRESHOLD,
+    LOW_CONFIDENCE_SCORE
 )
 from src_audio.domain.entities import MedicationEntity, MedicationAdministration
 
@@ -286,12 +287,54 @@ def classify_intent(sentence: str, medication_word: str) -> str:
     # Default: treat an unqualified medication mention as an order
     return "ORDERED"
 
+def _assign_dosage(window_text: str, med_record: MedicationAdministration) -> None:
+    """
+    Assign the first detected "<number> <unit>" dosage from text to a medication record.
+
+    Args:
+        window_text (str): Text to search for a dosage pattern.
+        med_record (MedicationAdministration): Record to update in place.
+
+    Returns:
+        None
+    """
+    tokens = [t.lower() for t in DOSAGE_TOKEN_PATTERN.findall(window_text)]
+
+    for i, token in enumerate(tokens):
+        if NUMBER_PATTERN.fullmatch(token):
+            number_value = token
+        elif token in TEXT_NUMBERS:
+            number_value = str(TEXT_NUMBERS[token])
+        else:
+            continue
+
+        if i + 1 < len(tokens) and tokens[i + 1] in DOSAGES:
+            med_record.dosage = f"{number_value} {tokens[i + 1]}"
+            med_record.dosage_score = LOW_CONFIDENCE_SCORE
+            return
+
+def _assign_route(window_text: str, med_record: MedicationAdministration) -> None:
+    """
+    Assign the first detected administration route from text to a medication record.
+
+    Args:
+        window_text (str): Text to search for a route token.
+        med_record (MedicationAdministration): Record to update in place.
+
+    Returns:
+        None
+    """
+    for token in re.findall(r"[a-z']+", window_text):
+        if token in ROUTES:
+            med_record.route = token
+            med_record.route_score = LOW_CONFIDENCE_SCORE
+            return
 
 def fallback_dosage_or_route(
     sentence: str,
     med_record: MedicationAdministration,
-    mode: str = "dosage",
-) -> str | None:
+    mode: str,
+) -> None:
     """
     Extract dosage or route from a ±5-word window if NER missed it.
 
@@ -301,57 +344,36 @@ def fallback_dosage_or_route(
         mode (str): "dosage" or "route".
 
     Returns:
-        Optional[str]: Extracted dosage or route, or None if not found.
+        None
     """
 
     text = sentence.lower()
     medication = med_record.medication.lower()
 
-    # Tokenize sentence and medication
     words = re.findall(r"\S+", text)
     med_tokens = re.findall(r"\S+", medication)
 
     if not med_tokens:
-        return None
+        return
 
-    # Find medication token sequence in sentence tokens
-    med_word_index = None
-
+    # Locate medication span
     for i in range(len(words) - len(med_tokens) + 1):
         if words[i:i + len(med_tokens)] == med_tokens:
             med_word_index = i
             break
+    else:
+        return  # medication not found
 
-    if med_word_index is None:
-        return None  # Medication not found in sentence
-
-    # Build local word window (±5 words)
+    # Build ±5-word window
     window_start = max(0, med_word_index - 5)
     window_end = min(len(words), med_word_index + len(med_tokens) + 5)
     window_text = " ".join(words[window_start:window_end])
 
     if mode == "dosage":
-        tokens = [t.lower() for t in DOSAGE_TOKEN_PATTERN.findall(window_text)]
-        for i, token in enumerate(tokens):
-            if NUMBER_PATTERN.fullmatch(token):
-                number_value = token
-            elif token in TEXT_NUMBERS:
-                number_value = str(TEXT_NUMBERS[token])
-            else:
-                continue
-            
-            if i + 1 < len(tokens) and tokens[i + 1] in DOSAGES:
-                return f"{number_value} {tokens[i + 1]}"
-
-        return None
+        _assign_dosage(window_text, med_record)
 
     elif mode == "route":
-        for token in re.findall(r"[a-z']+", window_text):
-            if token in ROUTES:
-                return token
-        return None
-
-    return None
+        _assign_route(window_text, med_record)
 
 def get_default_dosage(medication_name: str) -> str | None:
     med_lower = medication_name.lower()

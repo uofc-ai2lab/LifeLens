@@ -4,7 +4,8 @@ from src_audio.utils.load_csv_file import load_csv_file
 import pandas as pd
 from src_audio.domain.constants import (
     MEDICATIONS, LOW_CONFIDENCE_SCORE, 
-    MED_COLUMNS, AUDIT_COLUMNS, SENTENCE_SPLIT, SENTENCE_END
+    MED_COLUMNS, AUDIT_COLUMNS, SENTENCE_SPLIT, 
+    SENTENCE_END, DEFAULT_DOSAGE_SCORE
 )
 from src_audio.domain.entities import MedicationEntity, MedicationAdministration
 from src_audio.services.medication_extraction_service.extractor import MedicationExtractor
@@ -100,6 +101,24 @@ def _assign_attrs_to_drugs(
 
     return assignment
 
+def _apply_fallbacks(
+        record: MedicationAdministration, 
+        text: str, 
+        allow_default: bool
+        ) -> None:
+        # Dosage
+        if not record.dosage:
+            fallback_dosage_or_route(text, record, mode="dosage")
+            dose = None
+            if not record.dosage and allow_default:
+                dose = get_default_dosage(record.medication)
+            if dose:
+                record.dosage = dose
+                record.dosage_score = DEFAULT_DOSAGE_SCORE
+
+        # Route
+        if not record.route:
+            fallback_dosage_or_route(text, record, mode="route")
 
 def build_medication_record(
     drug_ent:  MedicationEntity,
@@ -179,22 +198,17 @@ def extract_med_admins_with_confidence(
 
     for segment in segments:
         ents = segment["entities"]
-        original_text = segment["original_text"]
+        text = segment["original_text"]
 
-        # Pre-split entities by type so _assign_attrs_to_drugs can work
-        # across the full sentence without a position-tracking index.
         drug_ents = [e for e in ents if e.entity in accepted_entity_types]
-        attr_ents = [e for e in ents if e.entity not in accepted_entity_types]
-
         if not drug_ents:
             continue
 
-        # Assign each DOSAGE / ROUTE to its nearest preceding drug.
+        attr_ents = [e for e in ents if e.entity not in accepted_entity_types]
         attr_map = _assign_attrs_to_drugs(drug_ents, attr_ents)
 
         for drug_ent in drug_ents:
-            # Intent classification 
-            intent = classify_intent(original_text, drug_ent.word)
+            intent = classify_intent(text, drug_ent.word)
             canonical = _resolve_canonical_name(drug_ent.word)
 
             if intent not in actionable_intents:
@@ -203,30 +217,18 @@ def extract_med_admins_with_confidence(
                     "end_time": segment["end_time"],
                     "intent": intent,
                     "medication": drug_ent.word,
-                    "original_text": original_text,
+                    "original_text": text,
                 })
                 continue
 
             owned_attrs = attr_map[drug_ent.start_idx]
+            record = build_medication_record(drug_ent, owned_attrs, segment)
 
-            # Dosage revision: update existing record if present, otherwise create new
             if intent == "REVISED":
-                record = build_medication_record(drug_ent, owned_attrs, segment)
+                _apply_fallbacks(record, text, allow_default=False)
 
-                if not record.dosage:
-                    dose = fallback_dosage_or_route(original_text, record, mode="dosage")
-                    if dose:
-                        record.dosage = dose
-                        record.dosage_score = LOW_CONFIDENCE_SCORE
-
-                if not record.route:
-                    rte = fallback_dosage_or_route(original_text, record, mode="route")
-                    if rte:
-                        record.route = rte
-                        record.route_score = LOW_CONFIDENCE_SCORE
-
-                if canonical in chunk_records:
-                    existing = chunk_records[canonical]
+                existing = chunk_records.get(canonical)
+                if existing:
                     if record.dosage:
                         existing.dosage = record.dosage
                         existing.dosage_score = record.dosage_score
@@ -239,27 +241,11 @@ def extract_med_admins_with_confidence(
                 tracker.register(canonical)
                 continue
 
-            # Confirmation suppression 
+            # Confirmation suppression
             if canonical in chunk_records or tracker.is_known(canonical):
                 continue
 
-            # New administration record (build with whatever attributes are present, then apply fallbacks)
-            record = build_medication_record(drug_ent, owned_attrs, segment)
-
-            if not record.dosage:
-                dose = fallback_dosage_or_route(original_text, record, mode="dosage")
-                if not dose:
-                    dose = get_default_dosage(record.medication)
-                if dose:
-                    record.dosage       = dose
-                    record.dosage_score = LOW_CONFIDENCE_SCORE
-
-            if not record.route:
-                rte = fallback_dosage_or_route(original_text, record, mode="route")
-                if rte:
-                    record.route       = rte
-                    record.route_score = LOW_CONFIDENCE_SCORE
-
+            _apply_fallbacks(record, text, allow_default=True)
             chunk_records[canonical] = record
             tracker.register(canonical)
 
