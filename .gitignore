@@ -1,5 +1,6 @@
 data/audio/audio_pipeline_metadata.json
 data/data_p3.2/
+data/audio/audio_files/
 data/audio/processed_audio/
 jetson-containers/
 simple_camera.py

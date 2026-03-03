@@ -120,7 +120,8 @@ pip install -r requirements.txt
 
 If operating on a jetson-nano, also install jetson-specific dependencies:
 ```sh
-pip install -r requirements-jetson.txt
+python3 -m pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url=https://pypi.jetson-ai-lab.io/jp6/cu126
+pip install -r requirements-cuda.txt
 sudo pip install ultralytics --no-deps 
 sudo pip install deface --no-deps
 sudo apt update
