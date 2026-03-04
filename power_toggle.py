@@ -1,12 +1,7 @@
-import os
-import signal
-import subprocess
-import sys
-import time
-from evdev import InputDevice, ecodes
+import os, subprocess, sys, time
+from evdev import InputDevice, ecodes, list_devices
 import Jetson.GPIO as GPIO
 
-EVENT_DEV = "/dev/input/event0"
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 CMD = [sys.executable, "-m", "main"]
 LOG_DIR = os.path.join(PROJECT_ROOT, "data")
@@ -17,22 +12,42 @@ LED_PIN = 7  # Jetson Board Pin 7
 os.makedirs(LOG_DIR, exist_ok=True)
 proc_log = open(LOG_FILE, "a", buffering=1)
 
-dev = InputDevice(EVENT_DEV)
+def find_power_button():
+    for path in list_devices():
+        dev = InputDevice(path)
+        caps = dev.capabilities().get(ecodes.EV_KEY, [])
+        if ecodes.KEY_POWER in caps:
+            return dev
+    raise RuntimeError("No input device with KEY_POWER found")
+
+dev = find_power_button()
+print(f"Using input device: {dev.path} ({dev.name})")
 
 GPIO.setmode(GPIO.BOARD)
 GPIO.setup(LED_PIN, GPIO.OUT, initial=GPIO.LOW)
 
-proc = None
-running = False
-last = 0.0
-
-
+# ---------------- LED control (OFF / ON / BLINK) ----------------
 def set_led(is_on: bool):
     GPIO.output(LED_PIN, GPIO.HIGH if is_on else GPIO.LOW)
 
+def blink_led(times: int = 3, on_s: float = 0.15, off_s: float = 0.15):
+    for _ in range(times):
+        set_led(False)
+        time.sleep(off_s)
+        set_led(True)
+        time.sleep(on_s)
+        
+# ---------------- process control ----------------
+proc = None
+last = 0.0
+
 def toggle():
-    global proc, proc_log, running
-    if not running:
+    global proc, proc_log
+    
+    # Process is considered running only if the child exists and hasn't exited
+    is_running = proc is not None and proc.poll() is None
+    
+    if not is_running:
         try:
             proc = subprocess.Popen(
                 CMD,
@@ -54,20 +69,16 @@ def toggle():
             print(f"FAILED_TO_STAY_RUNNING (exit={exit_code})")
             print(f"See logs: {LOG_FILE}")
             proc = None
-            running = False
             return
 
-        running = True
         set_led(True)
         print(f"STARTED pid={proc.pid} (logs: {LOG_FILE})")
     else:
-        if proc is None or proc.poll() is not None:
-            running = False
-            set_led(False)
-            proc = None
-            print("ALREADY_STOPPED")
-            return
-
+        # --- STOP: quick blink animation to acknowledge button press ---
+        # LED ends ON (still running) while main gracefully shuts down.
+        blink_led(times=3, on_s=0.12, off_s=0.12)
+        set_led(True)
+        
         try:
             if proc.stdin is not None:
                 proc.stdin.write("STOP\n")
@@ -76,17 +87,13 @@ def toggle():
             print(f"STOP_COMMAND_FAILED: {e}")
 
         try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.send_signal(signal.SIGTERM)
-            try:
-                proc.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait(timeout=2)
+            # Block until the program has fully exited so a new
+            # start cannot occur while it is still shutting down.
+            proc.wait()
+        except Exception as e:
+            print(f"WAIT_FAILED: {e}")
 
         proc = None
-        running = False
         set_led(False)
         print("STOPPED")
 
