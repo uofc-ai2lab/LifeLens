@@ -382,7 +382,7 @@ def run_medication_extraction(
     log.info(f"Merged into {len(segments)} sentence segment(s)")
 
     texts = [seg["text"] for seg in segments]
-    docs  = extractor.nlp.pipe(texts, batch_size=32)
+    docs  = extractor.nlp.pipe(texts, batch_size=extractor.pipe_batch_size)
 
     for seg, doc in zip(segments, docs):
         extracted_entities = extractor.extract_entities_from_doc(doc)

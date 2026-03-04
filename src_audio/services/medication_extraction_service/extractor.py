@@ -1,4 +1,5 @@
 import spacy
+import torch
 from src_audio.domain.entities import MedicationEntity
 from src_audio.domain.constants import NER_CONFIDENCE
 from config.logger import Logger
@@ -8,11 +9,39 @@ log = Logger("[audio][medication]")
 class MedicationExtractor:
     allowed_entities: frozenset[str] = frozenset({"DRUG", "DOSAGE", "ROUTE"}) # we ignore all other entities med7 gives us (FORM, FREQUENCY, DURATION)
     map_to_dosage: dict[str, str] = {"STRENGTH": "DOSAGE"} # med7 puts numeric dose values in STRENGTH, but we want them under DOSAGE 
+    _MODEL_TRF = "en_core_med7_trf"
+    _MODEL_LG  = "en_core_med7_lg"
 
+    def _gpu_is_functional() -> bool:
+        """
+        Check if GPU is available and can run a simple operation. This is more 
+        robust than just torch.cuda.is_available(), which can return True even 
+        if the GPU isn't working properly.
+
+        Args:
+            None
+        Returns:
+            bool: True if GPU is functional, False otherwise
+        """
+        try:
+            torch.zeros(1).cuda()
+            return True
+        except Exception:
+            return False
+        
     def __init__(self):
         log.info("Loading Med7 NER model for medication extraction")
-        self.nlp = spacy.load("en_core_med7_lg")
-        log.success("Med7 NER model ready")
+        using_gpu = self._gpu_is_functional()
+        if using_gpu:
+            log.info("GPU detected — loading transformer model (en_core_med7_trf)")
+            self.nlp = spacy.load(self._MODEL_TRF)
+            spacy.prefer_gpu()   # tells spacy-transformers to use CUDA
+        else:
+            log.info("GPU check failed — loading CNN model (en_core_med7_lg)")
+            self.nlp = spacy.load(self._MODEL_LG)
+        self.model_name = self._MODEL_TRF if using_gpu else self._MODEL_LG
+        self.pipe_batch_size = 16 if using_gpu else 32
+        log.success(f"Med7 NER model ready: {self.model_name}")
 
     def extract_entities_from_doc(self, doc) -> list[MedicationEntity]:
         """
@@ -45,21 +74,3 @@ class MedicationExtractor:
             )
         entities.sort(key=lambda e: e.start_idx)
         return entities
-
-    def extract_medication_info_from_ner(self, text: str) -> list[MedicationEntity]:
-        """
-        Extract medication entities from a raw text string.
-
-        Convenience wrapper for single-text callers. For processing many
-        segments, prefer batching texts through nlp.pipe() and calling
-        extract_entities_from_doc() on each resulting Doc.
-
-        Args:
-            text (str): Transcript segment text.
-
-        Returns:
-            list[MedicationEntity]: Extracted entities (may be empty).
-        """
-        if not text or not text.strip():
-            return []
-        return self.extract_entities_from_doc(self.nlp(text))

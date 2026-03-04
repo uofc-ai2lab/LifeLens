@@ -18,8 +18,6 @@ from config.audio_settings import USAGE_FILE_PATH
 from config.resource_usage import start_monitoring, stop_monitoring
 from config.logger import audio_logger as log
 
-tracker = MedicationStateTracker()
-audit_log = []
 def put_latest(queue: Queue, item):
     """Drop old signal if queue is full, keep newest."""
     if queue.full():
@@ -65,7 +63,7 @@ def process_audio_chunk() -> bool:
 
         transcript_path = run_transcription(str(chunk_path))
         run_anonymization(str(chunk_path), transcript_path)
-        run_medication_extraction(str(chunk_path), transcript_path, tracker, audit_log)
+        run_medication_extraction(str(chunk_path), transcript_path)
         run_intervention_extraction(str(chunk_path), transcript_path)
         log.success(f"{chunk_path.name} processed")
         return True
