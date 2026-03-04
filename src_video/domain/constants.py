@@ -1,8 +1,6 @@
 """Constants (facts about the code that never change)."""
-
-import os
 from __future__ import annotations
-
+import os
 import re
 
 # Default crop filename format: <stem>_<part>_<idx>.jpg
