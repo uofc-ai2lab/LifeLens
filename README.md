@@ -289,7 +289,7 @@ Place your video/image test data under:
 
 ### Dev Mode (Image Processing Only)
 
-Process whatever is already in `data/videp/saved_imgs/`:
+Process whatever is already in `data/video/saved_imgs/`:
 
 ```sh
 python -m src_video.main_video --dev

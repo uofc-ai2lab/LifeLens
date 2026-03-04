@@ -4,6 +4,7 @@ import time
 import threading, asyncio
 import shutil
 import cv2
+import numpy as np
 import argparse
 from pathlib import Path
 from typing import Dict, Any, Optional
