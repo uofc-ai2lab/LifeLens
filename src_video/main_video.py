@@ -4,6 +4,7 @@ import time
 import threading, asyncio
 import shutil
 import cv2
+import numpy as np
 import argparse
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -31,7 +32,7 @@ from src_video.services.deidentification_service.deidentify import run_deidentif
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
 
 from ultralytics import YOLO
-from boxmot import OCSORT
+from boxmot import OcSort
 
 def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")
@@ -208,7 +209,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
         daemon=True,
     )
 
-    tracker = OCSORT(
+    tracker = OcSort(
         conf_thres=0.3,
         iou_thres=0.3,
         max_age=30
