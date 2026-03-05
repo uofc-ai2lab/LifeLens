@@ -340,7 +340,9 @@ The default training script assumes the dataset is located at:
 
 If you save to a different location (or store the dataset elsewhere), set `PIPELINE_INJURY_CHECKPOINT` in your `.env` to point at the resulting `.pt` file and/or pass `--data-dir` to the training script.
 
-# Full System (Camera + Audio)
+# Full System 
+
+## Through Terminal (Camera + Audio)
 
 Run both pipelines together (camera + mic):
 
@@ -351,6 +353,22 @@ python -m main
 This runs:
 - Video capture from CSI camera → detection → injury classification
 - Audio recording from USB mic → transcription → medication/intervention extraction
+
+## Using Button (Camera + Audio)
+
+Run both pipelines together (camera + mic):
+
+```sh
+python -m power_toggle
+```
+
+This does the following:
+1. Waits for a button press. On the first press, it starts the full system (`python -m main` runs in the background) and turns the LED on.
+2. Saves all output logs under the data directory.
+3. On the second button press, it cleanly shuts down the camera and microphone (audio capture stops and no new files are written); the LED briefly blinks to indicate shutdown.
+4. After the program fully exits, the LED turns off.
+5. While the system is shutting down, additional button presses are ignored until the shutdown is complete.
+
 
 ### Important Notes:
 - If the camera fails to initialize, the audio pipeline will not start.
