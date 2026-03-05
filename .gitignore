@@ -10,6 +10,7 @@ src_audio/services/transcription_service/models/
 
 simple_camera.py
 simple_out.py
+resnet50_market1501_aicity156.onnx
 
 .gitignore
 # OS / Editor
