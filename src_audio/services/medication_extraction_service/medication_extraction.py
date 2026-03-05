@@ -3,9 +3,8 @@ from src_audio.utils.export_to_csv import export_to_csv
 from src_audio.utils.load_csv_file import load_csv_file
 import pandas as pd
 from src_audio.domain.constants import (
-    MEDICATIONS, LOW_CONFIDENCE_SCORE, 
     MED_COLUMNS, AUDIT_COLUMNS, SENTENCE_SPLIT, 
-    SENTENCE_END, DEFAULT_DOSAGE_SCORE
+    SENTENCE_END, DEFAULT_DOSAGE_SCORE, ALIAS_TO_CANONICAL
 )
 from src_audio.domain.entities import MedicationEntity, MedicationAdministration
 from src_audio.services.medication_extraction_service.extractor import MedicationExtractor
@@ -33,14 +32,7 @@ def _resolve_canonical_name(word: str) -> str:
     Returns:
         str: Canonical lowercase name.
     """    
-    word_lower = word.lower()
-    for canonical, info in MEDICATIONS.items():
-        if canonical.lower() == word_lower:
-            return canonical.lower()
-        for alias in info.get("aliases", []):
-            if alias.lower() == word_lower:
-                return canonical.lower()
-    return word_lower
+    return ALIAS_TO_CANONICAL.get(word.lower(), word.lower())
 
 class MedicationStateTracker:
     """

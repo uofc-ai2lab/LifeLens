@@ -3,11 +3,11 @@ from functools import lru_cache
 from rapidfuzz import process as fuzz_process, fuzz
 from src_audio.domain.constants import (
     ROUTES, DOSAGES, TEXT_NUMBERS, NUMBER_PATTERN,
-    MEDICATIONS, HIGH_CONFIDENCE_SCORE, DOSAGE_TOKEN_PATTERN, 
+    HIGH_CONFIDENCE_SCORE, DOSAGE_TOKEN_PATTERN, 
     PRE_NEGATION_TRIGGERS, POST_NEGATION_TRIGGERS,
     REVISED_SIGNALS, ADMINISTERED_SIGNALS, QUESTIONED_SIGNALS,
     CONSIDERED_SIGNALS, ORDERED_SIGNALS, FUZZY_CONF_SCALE, FUZZY_THRESHOLD,
-    LOW_CONFIDENCE_SCORE
+    LOW_CONFIDENCE_SCORE, ALIAS_TO_CANONICAL, CANONICAL_TO_DEFAULT_DOSAGE
 )
 from src_audio.domain.entities import MedicationEntity, MedicationAdministration
 
@@ -21,10 +21,7 @@ def create_all_med_list() -> list[str]:
         list[str]: All medication terms sorted longest-first so that greedy
         matching gives multi-word names precedence over single-word ones.
     """
-    all_med_terms = {name.lower() for name in MEDICATIONS.keys()}
-    for info in MEDICATIONS.values():
-        all_med_terms.update(a.lower() for a in info.get("aliases", []))
-    return sorted(all_med_terms, key=len, reverse=True)
+    return sorted(ALIAS_TO_CANONICAL.keys(), key=len, reverse=True)
 
 def missed_medication_info(text: str, med_list: list[str]) -> list[dict]:
     """
@@ -376,11 +373,7 @@ def fallback_dosage_or_route(
         _assign_route(window_text, med_record)
 
 def get_default_dosage(medication_name: str) -> str | None:
-    med_lower = medication_name.lower()
-    for med_name, info in MEDICATIONS.items():
-        if med_name.lower() == med_lower:
-            return info.get("default_dosage")
-        for a in info.get("aliases", []):
-            if med_lower == a.lower():
-                return info.get("default_dosage")
-    return None
+    canonical = ALIAS_TO_CANONICAL.get(medication_name.lower())
+    if canonical is None:
+        return None
+    return CANONICAL_TO_DEFAULT_DOSAGE.get(canonical)

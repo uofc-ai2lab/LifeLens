@@ -43,208 +43,179 @@ INTER_COLUMNS = [
 
 ### ------------------------------- MEDICATION SERVICE ------------------------------- ###
 MEDICATIONS: dict[str, dict] = {
-    "Normal Saline": {
-        "aliases": ["NS", "Electrolyte"],
-        "default_dosage": "100 mL"
-    },
-    "Acetylsalicylic Acid": {
-        "aliases": ["ASA", "Aspirin"],
-        "default_dosage": "80 mg"
-    },
-    "Adenosine": {
-        "aliases": ["Adeno"],
-        "default_dosage": "6 mg /2 mL"
-    },
-    "Amiodarone": {
-        "aliases": ["Amio"],
-        "default_dosage": "150 mg / 3 mL"
-    },
-    "Atropine": {
-        "aliases": ["Atropine"],
-        "default_dosage": "1 mg / 1 mL"
-    },
-    "Calcium Chloride": {
-        "aliases": ["Calcium", "Cal Chlor"],
-        "default_dosage": "1 g /10 mL"
-    },
-    "Carboprost": {
-        "aliases": ["Hemabate"],
-        "default_dosage": "250 mcg / 1 mL"
-    },
-    "Clopidogrel": {
-        "aliases": ["Plavix"],
-        "default_dosage": "300 mL"
-    },
-    "Dextrose 5% in Water": {
-        "aliases": ["D5W"],
-        "default_dosage": "100 ml"
-    },
-    "Dextrose 50% in Water": {
-        "aliases": ["D50"],
-        "default_dosage": None
-    },
-    "Epinephrine": {
-        "aliases": ["Epi"],
-        "default_dosage": "1 mg / 10 mL"
-    },
-    "Norepinephrine": {
-        "aliases": ["Levo", "Norepi"],
-        "default_dosage": "4 mg / 4 mL"
-    },
-    "Furosemide": {
-        "aliases": ["Lasix"],
-        "default_dosage": "40 mg / 4 mL"
-    },
-    "Isoproterenol": {
-        "aliases": ["Iso", "Isuprel"],
-        "default_dosage": "0.2 mg / 1 mL"
-    },
-    "Labetalol": {
-        "aliases": ["Labetalol", "Trandate"],
-        "default_dosage": "100 mg / 20 mL"
-    },
-    "Metoprolol": {
-        "aliases": ["Metoprolol", "Lopressor"],
-        "default_dosage": "5 mg / 5 mL"
-    },
-    "Nitroglycerin": {
-        "aliases": ["NTG", "Nitro", "Tridil"],
-        "default_dosage": "0.4 mg"
-    },
-    "Phenylephrine": {
-        "aliases": ["Neo", "Phenyl"],
-        "default_dosage": "500 mcg / 10 mL"
-    },
-    "Sodium Bicarbonate": {
-        "aliases": ["Bicarb", "Sodium Bicarb", "Bicarbonate"],
-        "default_dosage": "50 mEq / 50 mL"
-    },
-    "Salbutamol": {
-        "aliases": ["Albuterol", "Ventolin"],
-        "default_dosage": "0.5 mg / mL"
-    },
-    "Ipratropium": {
-        "aliases": ["Atrovent"],
-        "default_dosage": "250 mcg / 2 mL NEB"
-    },
-    "Dimenhydrinate": {
-        "aliases": ["Gravol"],
-        "default_dosage": "50 mg / 1 mL"
-    },
     "Fentanyl": {
         "aliases": ["Fent", "Sublimaze"],
-        "default_dosage": "50 mg / 1 mL"
-    },
-    "Diphenhydramine": {
-        "aliases": ["Benadryl"],
-        "default_dosage": "50 mg / 1 mL"
-    },
-    "Metoclopramide": {
-        "aliases": ["Reglan", "Maxeran", "Primperan"],
-        "default_dosage": "10 mg / 2 mL"
-    },
-    "Loperamide": {
-        "aliases": ["Imodium"],
-        "default_dosage": "2 mg"
+        "default_dosage": "50 mcg"
     },
     "Ondansetron": {
         "aliases": ["Zofran"],
-        "default_dosage": "4 mg / 2 mL"
-    },
-    "Enoxaparin": {
-        "aliases": ["Lovenox"],
-        "default_dosage": "100 mg / 1 mL"
-    },
-    "Heparin": {
-        "aliases": ["Hep"],
-        "default_dosage": "5000 units / 0.5 mL"
-    },
-    "Humulin R": {
-        "aliases": ["Regular insulin", "R-insulin", "Reg", "Reg Insulin"],
-        "default_dosage": "1000 units / 10 mL"
-    },
-    "Magnesium sulfate": {
-        "aliases": ["Mag sulfate", "Mag"],
-        "default_dosage": "5 g / 10 mL"
-    },
-        "Potassium Chloride": {
-        "aliases": ["KCl"],
-        "default_dosage": "10mmol / 100 mL"
-    },
-    "Vitamin K": {
-        "aliases": ["Phytonadione", "Vit K"],
-        "default_dosage": "10 mg / 1 mL"
-    },
-    "Misoprostol": {
-        "aliases": ["Miso"],
-        "default_dosage": "200 mcg"
-    },
-    "Oxytocin": {
-        "aliases": ["Oxy", "Pitocin"], # Double check these abbreviations
-        "default_dosage": "10 units"
-    },
-    "Propofol": {
-        "aliases": ["Prop", "Diprivan"],
-        "default_dosage": "100 mL"
-    },
-    "Lidocaine": {
-        "aliases": ["Lido", "Lido oint", "Xylocaine"],
-        "default_dosage": "2% x 10 mL"
-    },
-    "Naloxone": {
-        "aliases": ["Narcan"],
-        "default_dosage": "4 mg / 10 mL"
-    },
-    "Intralipid": {
-        "aliases": [],
-        "default_dosage": None
-    },
-    "Dexamethasone": {
-        "aliases": ["Dex", "Decadron"],
-        "default_dosage": "4 mg / 1 mL"
-    },
-    "Solu-Medrol": {
-        "aliases": ["Solu-Med", "Methylpred", "MPS"],
-        "default_dosage": "125 mg"
-    },
-    "Clopidogrel": { 
-        "aliases": ["Plavix"],
-        "default_dosage": "75 mg"
-    },
-    "Ticagrelor": {
-        "aliases": ["Brilinta"],
-        "default_dosage": "90 mg"
-    },
-    "TNKase": {
-        "aliases": ["TNK"],
-        "default_dosage": "50 mg"
+        "default_dosage": "4 mg"
     },
     "Tranexamic Acid": {
         "aliases": ["TXA"],
-        "default_dosage": "1000 mg / 10 mL"
+        "default_dosage": "1 g"
+    },
+    "Propofol": {
+        "aliases": ["Prop", "Diprivan"],
+        "default_dosage": "1000 mg"
+    },
+    "Rocuronium": {
+        "aliases": ["Roc", "Zemuron", "Esmeron"],
+        "default_dosage": "50 mg"
+    },
+    "Ketamine": {
+        "aliases": ["Ket"],
+        "default_dosage": "50 mg"
+    },
+    "Norepinephrine": {
+        "aliases": ["Levophed", "Norepi", "NE"],
+        "default_dosage": "4 mg"
+    },
+    "Phenylephrine": {
+        "aliases": ["Neo-Synephrine", "Phenyl"],
+        "default_dosage": "100 mcg"
+    },
+    "Hypertonic Saline 3%": {
+        "aliases": ["3% HTS", "3% Saline", "3% NACL"],
+        "default_dosage": "250 mLs"
+    },
+    "Calcium Chloride": {
+        "aliases": ["Calcium", "Cal Chlor"],
+        "default_dosage": "1 g"
+    },
+    "Dimenhydrinate": {
+        "aliases": ["Gravol", "DIM"],
+        "default_dosage": "50 mg"
+    },
+    "Epinephrine": {
+        "aliases": ["Epi"],
+        "default_dosage": "1 mg"
+    },
+    "Normal Saline IV Solution": {
+        "aliases": ["NS", "Electrolyte"],
+        "default_dosage": "500 mLs"
+    },
+    "Cefazolin": {
+        "aliases": ["Ancef", "Kefzol"],
+        "default_dosage": "2 g"
     },
     "Ceftriaxone": {
         "aliases": ["Rocephin", "CRO"],
-        "default_dosage": "1 gram"
+        "default_dosage": "1 g"
+    },
+    "Midazolam": {
+        "aliases": ["Midaz", "Versed"],
+        "default_dosage": "2 mg"
+    },
+    "Morphine": {
+        "aliases": ["Morph", "MS Contin", "MS"],
+        "default_dosage": "5 mg"
+    },
+    "Sodium Bicarbonate": {
+        "aliases": ["Bicarb", "Sodium Bicarb", "Bicarbonate"],
+        "default_dosage": "50 mEq"
+    },
+    "Calcium Gluconate": {
+        "aliases": ["Ca Gluconate", "Calglucon", "Kalcinate"],
+        "default_dosage": "50 mEq"
+    },
+    "Humulin R": { # Check with Meg if this is same as Insulin Regular (I think it is)
+        "aliases": ["Regular insulin", "R-insulin", "Reg", "Reg Insulin"],
+        "default_dosage": "10 units"
+    },
+    "Levetiracetam": {
+        "aliases": ["LEV", "Keppra"],
+        "default_dosage": "4500 mg"
+    },
+    "Atropine": {
+        "aliases": ["Atro"],
+        "default_dosage": "0.5 mg"
+    },
+    "Lidocaine 2%": { # Check with Meg that dosage shouldn't be 10 mL??
+        "aliases": ["Lido 2%", "2% Lido oint", "Xylocaine 2%"],
+        "default_dosage": "40 mg"
+    },
+    "Naloxone": {
+        "aliases": ["Narcan"],
+        "default_dosage": "0.4 mg"
+    },
+    "Piperacillin-Tazobactam": {
+        "aliases": ["Zosyn", "Pip-Tazo", "PTZ", "PT"],
+        "default_dosage": "4.5 g"
+    },
+    "Potassium Chloride": {
+        "aliases": ["KCl"],
+        "default_dosage": "10 mEq"
+    },
+    "Ringer's Lactate IV Solution": {
+        "aliases": ["RL", "LR"],
+        "default_dosage": "250 mLs"
+    },
+    "Adenosine": {
+        "aliases": ["Adeno", "Adenocard"],
+        "default_dosage": "6 mg"
+    },
+    "Amiodarone": {
+        "aliases": ["Amio", "Ammo"],
+        "default_dosage": "300 mg"
+    },
+    "Azithromycin": {
+        "aliases": ["Zpack", "Zithromax", "AZM"],
+        "default_dosage": "300 mg"
+    },
+    "Digibind": {
+        "aliases": ["Digifab", "Digoxin Immune Fab"],
+        "default_dosage": "160 mg"
     },
     "Haloperidol": {
         "aliases": ["Haldol"],
-        "default_dosage": "5 mg / 2 mL"
+        "default_dosage": "5 mg"
     },
-    "Indomethacin": {
-        "aliases": ["Indo", "Indocin", "Tivorbex"],
-        "default_dosage": "100 mg"
+    "Hydromorphone": {
+        "aliases": ["Dilaudid"],
+        "default_dosage": "5 mg"
     },
-    "Bug Spray": {
-        "aliases": [],
-        "default_dosage": None
+    "Lidocaine 5%": { # Check with Meg that dosage shouldn't be 15 g (ointment)??
+        "aliases": ["Lidoderm", "Lido 5%", "Xylocaine 5%"],
+        "default_dosage": "80 mg"
     },
-    "Sterile Water": {
-        "aliases": [],
-        "default_dosage": "10 ml"
-    }
+    "Lorazepam": {
+        "aliases": ["LZP", "Ativan"],
+        "default_dosage": "1 mg"
+    },
+    "Magnesium Sulfate": {
+        "aliases": ["Mag sulfate", "Mag"],
+        "default_dosage": "2 g"
+    },
+    "Mannitol 20%": {
+        "aliases": ["20% Mannitol", "20% Osmitrol", "M20%"],
+        "default_dosage": "80 g"
+    },
+    "Metoclopramide": {
+        "aliases": ["Reglan", "Maxolon"],
+        "default_dosage": "10 mg"
+    },
+    "Thiamine": {
+        "aliases": ["Thiam", "Thiamin", "Vit B1"],
+        "default_dosage": "300 mg"
+    },
+    "Vancomycin": {
+        "aliases": ["Vanco", "Vancocin", "VAN"],
+        "default_dosage": "1 g"
+    },
 }
 
+ALIAS_TO_CANONICAL: dict[str, str] = {} # Maps every known term (canonical + all aliases, lowercased) → canonical lowercase name. Enables O(1) resolution in _resolve_canonical_name.
+CANONICAL_TO_DEFAULT_DOSAGE: dict[str, str | None] = {} # Maps canonical lowercase name → default dosage string and Enables O(1) lookup in get_default_dosage.
+
+for _canonical, _info in MEDICATIONS.items():
+    _key = _canonical.lower()
+    ALIAS_TO_CANONICAL[_key] = _key
+    CANONICAL_TO_DEFAULT_DOSAGE[_key] = _info.get("default_dosage")
+    for _alias in _info.get("aliases", []):
+        ALIAS_TO_CANONICAL[_alias.lower()] = _key
+
+del _canonical, _info, _key, _alias
 
 ROUTES: frozenset[str] = frozenset({
     "infusion", "iv", "intra-venous", "iv push", "ivp", "iv bolus", "ivb", "bolus",
@@ -293,9 +264,8 @@ HIGH_CONFIDENCE_SCORE: float = 0.88
 FUZZY_THRESHOLD: int = 85        
 FUZZY_CONF_SCALE: float = 0.85   
 NER_CONFIDENCE: float = 0.90   
-SENTENCE_END   = re.compile(r'[.!?]\s*$')
+SENTENCE_END = re.compile(r'[.!?]\s*$')
 SENTENCE_SPLIT = re.compile(r'(?<=[.!?])\s+')   
-
 
 MED_COLUMNS: list[str] = [
     "start_time",
@@ -304,7 +274,6 @@ MED_COLUMNS: list[str] = [
     "medication (confidence score)",
     "dosage (confidence score)",
     "route (confidence score)",
-    "full_text"
 ]
 
 AUDIT_COLUMNS: list[str] = [
