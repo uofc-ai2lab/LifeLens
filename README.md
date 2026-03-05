@@ -365,9 +365,10 @@ python -m power_toggle
 This does the following:
 1. Waits for a button press. On the first press, it starts the full system (`python -m main` runs in the background) and turns the LED on.
 2. Saves all output logs under the data directory.
-3. On the second button press, it cleanly shuts down the camera and microphone (audio capture stops and no new files are written); the LED briefly blinks to indicate shutdown.
+3. On the second button press, it cleanly shuts down the camera and microphone (no new audio/image files are created); the LED briefly blinks to indicate shutdown.
 4. After the program fully exits, the LED turns off.
 5. While the system is shutting down, additional button presses are ignored until the shutdown is complete.
+* Note: the script can constantly be running, when the program is not on, the script standalone takes up very minimal space (it is mostly idle).
 
 
 ### Important Notes:
