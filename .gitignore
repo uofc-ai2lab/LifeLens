@@ -7,10 +7,10 @@ data/resource_usage.csv
 data/audio/unused/
 data/video/unused/
 src_audio/services/transcription_service/models/
-
 simple_camera.py
 simple_out.py
 resnet50_market1501_aicity156.onnx
+data/resource_usage.csv
 
 .gitignore
 # OS / Editor
