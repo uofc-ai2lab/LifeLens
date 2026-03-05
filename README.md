@@ -340,9 +340,9 @@ The default training script assumes the dataset is located at:
 
 If you save to a different location (or store the dataset elsewhere), set `PIPELINE_INJURY_CHECKPOINT` in your `.env` to point at the resulting `.pt` file and/or pass `--data-dir` to the training script.
 
-# Full System 
+# Full System (Camera + Audio)
 
-## Through Terminal (Camera + Audio)
+## Through Terminal 
 
 Run both pipelines together (camera + mic):
 
@@ -354,7 +354,7 @@ This runs:
 - Video capture from CSI camera → detection → injury classification
 - Audio recording from USB mic → transcription → medication/intervention extraction
 
-## Using Button (Camera + Audio)
+## Using Buttons
 
 Run both pipelines together (camera + mic):
 
