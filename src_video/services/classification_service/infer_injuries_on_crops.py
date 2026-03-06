@@ -85,6 +85,9 @@ def _collect_crop_paths(crops_root: str) -> List[Path]:
             path
             for path in crops_root_path.rglob("*")
             if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png"}
+            # Ignore alpha-masked helper exports; they are not classifier inputs and
+            # their filename suffix breaks body_part parsing (e.g. *_arm1_0_alpha.png).
+            and not path.stem.lower().endswith("_alpha")
         ]
     )
     if not crop_paths:

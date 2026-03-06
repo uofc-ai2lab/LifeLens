@@ -4,6 +4,7 @@ import time
 import threading, asyncio
 import shutil
 import cv2
+import numpy as np
 import argparse
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -29,9 +30,6 @@ from src_video.services.body_ranking.body_injury_ranking import body_ranking
 from src_video.services.classification_service.infer_injuries_on_crops import predict_injuries_on_detection_crops
 from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
-
-from ultralytics import YOLO
-import numpy as np
 
 def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")
@@ -208,8 +206,6 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
         daemon=True,
     )
 
-    person_model = YOLO("yolov8n.pt")  
-
     worker.start()
     window = "CSI Camera"
     cv2.namedWindow(window, cv2.WINDOW_NORMAL)
@@ -230,7 +226,6 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
                 log.error("Camera read failed")
                 break
 
-        
             # Check if frame is valid
             if frame.size == 0:
                 log.error("Empty frame received")

@@ -117,8 +117,6 @@ def draw_overlay(frame, fps: float, processing: bool):
             2,
         )
 
-
-
 class GStreamerVideoPipeline:
     """
     Manages a GStreamer video capture pipeline using NVIDIA Jetson CSI camera.
