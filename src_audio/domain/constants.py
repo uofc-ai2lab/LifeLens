@@ -148,7 +148,7 @@ MEDICATIONS: dict[str, dict] = {
         "default_dosage": "10 mEq"
     },
     "Ringer's Lactate IV Solution": {
-        "aliases": ["RL", "LR"],
+        "aliases": ["RL", "LR", "Ringers"],
         "default_dosage": "250 mLs"
     },
     "Adenosine": {
