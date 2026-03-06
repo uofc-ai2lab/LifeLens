@@ -7,7 +7,7 @@ data/video/source_files/Images/Wound_dataset/
 /experiments/*
 jetson-containers/
 simple_camera.py
-simpel_out.py
+simple_out.py
 data/resource_usage.csv
 
 simple_camera.py
