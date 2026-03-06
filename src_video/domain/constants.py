@@ -1,10 +1,50 @@
 """Constants (facts about the code that never change)."""
 
+from __future__ import annotations
+
+import re
+
 # Default crop filename format: <stem>_<part>_<idx>.jpg
 FILENAME_DELIMITER = "_"
 
 # Common image extensions used across the video pipeline.
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
+
+# -------------------------
+# Detection / body-part labeling
+# -------------------------
+
+# Default parts we attempt to crop from the segmentation model.
+DETECTION_PART_DEFAULT = ["face", "arm", "hand", "leg", "foot", "neck", "torso", "head"]
+
+# Parts that can occur twice and benefit from side-like disambiguation.
+# NOTE: This is a *camera/image* heuristic, not anatomical left/right.
+SIDEABLE_PARTS = {"arm", "hand", "leg", "foot"}
+
+# Parts used to estimate the body's approximate midline.
+MIDLINE_PARTS = {"torso", "head", "face", "neck"}
+
+# -------------------------
+# Body-part normalization (ranking / reporting)
+# -------------------------
+
+# Canonical side label format used across the pipeline.
+# IMPORTANT: do NOT use an underscore here (e.g. "arm_1") because crops are named
+# like: <stem>_<body_part>_<idx>.jpg and classification parses body_part by
+# splitting on '_' (see BODY_PART_LABEL_POSITION).
+BODY_PART_SIDE_LABEL_SEPARATOR = ""  # e.g. "arm1", "arm2"
+
+
+def format_sideable_part_label(part: str, side_index: int | str) -> str:
+	return f"{part}{BODY_PART_SIDE_LABEL_SEPARATOR}{side_index}"
+
+
+# Accept variants like: arm1, arm_1, arm 1, arm-1
+# NOTE: This is normalization only; the pipeline *emits* canonical labels via
+# format_sideable_part_label() to keep filenames parseable.
+BODY_PART_SIDE_SUFFIX_PATTERN = r"^([a-zA-Z_ -]+?)[ _-]*([12])$"
+
+BODY_PART_SIDE_SUFFIX_RE = re.compile(BODY_PART_SIDE_SUFFIX_PATTERN)
 
 # Color settings for annotations
 COLOR_OUTLINE = (0, 255, 0)

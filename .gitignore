@@ -1,16 +1,18 @@
-data/audio/audio_pipeline_metadata.json
 data/data_p3.2/
 data/audio/processed_audio/
+data/audio/unused/
+data/video/unused/
+data/video/output_files/
+data/video/source_files/Images/Wound_dataset/
+/experiments/*
 jetson-containers/
 simple_camera.py
+simple_out.py
 data/resource_usage.csv
-data/audio/unused/
-data/video/unused/
-
-data/audio/unused/
-data/video/unused/
 
 simple_camera.py
+src_audio/services/transcription_service/models/whisper-base-medical-lora
+src_audio/services/transcription_service/models/whisper-large-v3-medical-lora/
 
 .gitignore
 # OS / Editor
@@ -337,12 +339,3 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
-
-# Experiment files
-/experiments/*
-
-# visual outputs
-data/video/output_files/
-
-# training set
-data/video/source_files/Images/Wound_dataset/

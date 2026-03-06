@@ -4,6 +4,7 @@ import time
 import threading, asyncio
 import shutil
 import cv2
+import numpy as np
 import argparse
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -32,7 +33,9 @@ from src_video.services.classification_service.infer_injuries_on_crops import pr
 from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
 
-
+from ultralytics import YOLO
+from boxmot import DeepOcSort
+    
 def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")
 
@@ -212,9 +215,6 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
         process_single_image(settings)
         stop_monitoring()
         return 0
-    
-    from ultralytics import YOLO
-    from boxmot import DeepOcSort
 
     log.header("Video Pipeline Starting")
 
@@ -323,7 +323,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
                     log.success("Job queued")
 
 
-            draw_overlay(frame, fps, processing, tracks)
+            draw_overlay(frame, fps, processing)
             cv2.imshow(window, frame)
             
             # Single waitKey with proper ESC and 'q' handling
