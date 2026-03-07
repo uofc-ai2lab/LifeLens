@@ -60,7 +60,6 @@ class MedicationStateTracker:
         """Clear all state. Call between independent recording sessions."""
         self._known.clear()
 
-
 def _assign_attrs_to_drugs(
     drug_ents: list[MedicationEntity],
     attr_ents: list[MedicationEntity],
