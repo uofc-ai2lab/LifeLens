@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-import threading, asyncio
+import threading
 import shutil
 import cv2
 import numpy as np
@@ -31,20 +31,24 @@ from src_video.services.classification_service.infer_injuries_on_crops import pr
 from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
 
+# ── NEW: ReID service ──────────────────────────────────────────────────────
+from src_video.services.person_reid_service.reid_service import build_reid_service, ReIDEvent
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")
 
 
 def put_latest(queue: Queue, item):
-    """
-    Drop old item if queue is full, keep newest.
-    """
+    """Drop old item if queue is full, keep newest."""
     if queue.full():
         try:
             queue.get_nowait()
         except Empty:
             pass
     queue.put(item)
+
 
 def process_single_image(settings: Dict[str, Any]) -> bool:
     try:
@@ -62,16 +66,14 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
             max_images=int(settings["MAX_IMAGES"]),
             classification_export_dir=None,
         )
-
         log.success("Detection done")
-
     except Exception as e:
         log.error(f"Detection failed: {e}")
         return False
 
     try:
         crops_root = Path(settings["CROPS_ROOT"])
-        infer_summary = predict_injuries_on_detection_crops(
+        predict_injuries_on_detection_crops(
             crops_root=_as_posix(str(crops_root)),
             checkpoint_path=str(settings["INJURY_CHECKPOINT_PATH"]),
             out_json_path=str(settings["INJURY_REPORT_JSON"]),
@@ -83,9 +85,7 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
             filename_delimiter="_",
             body_part_label_position=int(settings["BODY_PART_LABEL_POSITION"]),
         )
-
         log.success("Classification done")
-
     except Exception as e:
         log.error(f"Classification failed: {e}")
 
@@ -107,7 +107,6 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
             log.success(f"De-identification complete: {deidentify_result['processed_count']} images")
         else:
             log.warning(f"De-identification issue: {deidentify_result.get('note', deidentify_result.get('error'))}")
-
     except Exception as e:
         log.error(f"De-identification failed: {e}")
 
@@ -116,7 +115,6 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
         if crops_root.exists():
             shutil.rmtree(crops_root)
             crops_root.mkdir(parents=True, exist_ok=True)
-
     except Exception as e:
         log.warning(f"Cleanup failed: {e}")
 
@@ -125,21 +123,19 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
 
 
 def processing_worker(queue: Queue, settings: Dict[str, Any]):
-    BATCH_SIZE = 2
+    BATCH_SIZE    = 2
     BATCH_TIMEOUT = 2.0
-    batch = []
-    last_flush = time.time()
+    batch         = []
+    last_flush    = time.time()
 
     log.info("Processing worker started")
 
     while True:
         try:
             job = queue.get(timeout=0.5)
-
         except Empty:
             job = None
 
-        # Shutdown
         if job is None and batch:
             pass
         elif job is None:
@@ -153,17 +149,12 @@ def processing_worker(queue: Queue, settings: Dict[str, Any]):
         queue.task_done()
 
         now = time.time()
-
-        if (
-            len(batch) >= BATCH_SIZE
-            or (now - last_flush) >= BATCH_TIMEOUT
-        ):
+        if len(batch) >= BATCH_SIZE or (now - last_flush) >= BATCH_TIMEOUT:
             log.info(f"Processing batch ({len(batch)} jobs)")
             try:
                 process_single_image(settings)
             except Exception as e:
                 log.error(f"Batch processing error: {e}")
-
             batch.clear()
             last_flush = now
 
@@ -171,24 +162,17 @@ def processing_worker(queue: Queue, settings: Dict[str, Any]):
 
 
 def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
-    """
-    Main video processing pipeline.
-    
-    Args:
-        video_pipeline: Pre-initialized GStreamer video pipeline object from orchestrator.
-    """
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--dev", action="store_true")
     args = parser.parse_args()
-    
+
     settings = load_video_pipeline_settings()
-    DEV_MODE = args.dev
-    
+    DEV_MODE  = args.dev
+
     if video_pipeline is None and not DEV_MODE:
         log.error("VIDEO pipeline failed to initialize camera")
         return 1
-        
+
     if DEV_MODE:
         log.header("DEV Mode")
         start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
@@ -198,25 +182,42 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
 
     log.header("Video Pipeline Starting")
 
-    image_queue = Queue(maxsize=3)
+    # ── NEW: initialise ReID service ─────────────────────────────────────
+    image_queue = Queue(maxsize=3)   # shared with reid callback below
+
+    def _on_reid(event: ReIDEvent):
+        """Callback invoked on the video-loop thread when primary person found."""
+        log.success(f"ReID triggered  sim={event.similarity:.3f}")
+        if capture_frame_from_pipeline(event.frame, IMAGE_SAVE_DIR):
+            job = {"time": event.timestamp, "id": int(event.timestamp * 1000), "source": "reid"}
+            put_latest(image_queue, job)
+
+    reid = build_reid_service(
+        use_trt           = bool(settings.get("REID_USE_TRT",   False)),
+        similarity_thresh = float(settings.get("REID_THRESHOLD", 0.55)),
+        on_reid_callback  = _on_reid,
+    )
+    log.success("ReID service ready")
+    # ─────────────────────────────────────────────────────────────────────
 
     worker = threading.Thread(
         target=processing_worker,
         args=(image_queue, settings),
         daemon=True,
     )
-
     worker.start()
+
     window = "CSI Camera"
     cv2.namedWindow(window, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(window, 960, 540)
 
-    last_snap = 0
-    frame_count = 0
-    start_time = time.time()
-    fps = 0.0
+    last_snap     = 0.0
+    frame_count   = 0
+    start_time    = time.time()
+    fps           = 0.0
+    processing    = False
+    enrolled      = False   # NEW: track enrolment state for overlay
 
-    processing = False
     log.header("Video Pipeline Started")
 
     try:
@@ -225,51 +226,58 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
             if not ok or frame is None:
                 log.error("Camera read failed")
                 break
-
-            # Check if frame is valid
             if frame.size == 0:
                 log.error("Empty frame received")
                 continue
 
-            # FPS
             frame_count += 1
             elapsed = time.time() - start_time
-
             if elapsed >= 2.0:
-                fps = frame_count / elapsed
+                fps        = frame_count / elapsed
                 frame_count = 0
-                start_time = time.time()
+                start_time  = time.time()
 
-            # Marker detection
+            # ── AprilTag detection ────────────────────────────────────────
             detected = detect_apriltags(frame)
-            now = time.time()
+            now      = time.time()
 
-            # Capture
-            if detected and (now - last_snap) >= SNAPSHOT_INTERVAL:
+            # ── CHANGED: on tag detection, enroll OR capture ──────────────
+            if detected:
+                if not enrolled:
+                    # Enrolment phase: buffer face embeddings
+                    if reid.enroll_from_frame(frame):
+                        enrolled   = True
+                        last_snap  = now
+                        log.success("Primary person enrolled – beginning ReID tracking")
 
-                if capture_frame_from_pipeline(frame, IMAGE_SAVE_DIR):
+                elif (now - last_snap) >= SNAPSHOT_INTERVAL:
+                    # Tag still visible after enrolment → direct snapshot
+                    if capture_frame_from_pipeline(frame, IMAGE_SAVE_DIR):
+                        job = {"time": now, "id": int(now * 1000), "source": "tag"}
+                        put_latest(image_queue, job)
+                        processing = True
+                        last_snap  = now
+                        log.success("Job queued (tag)")
 
-                    job = {
-                        "time": now,
-                        "id": int(now * 1000),
-                    }
-
-                    put_latest(image_queue, job)
+            # ── NEW: continuous ReID matching (only after enrolment) ──────
+            if enrolled:
+                reid_event = reid.process_frame(frame)
+                if reid_event:
                     processing = True
-                    last_snap = now
-
-                    log.success("Job queued")
-
+            # ─────────────────────────────────────────────────────────────
 
             draw_overlay(frame, fps, processing)
             cv2.imshow(window, frame)
-            
-            # Single waitKey with proper ESC and 'q' handling
+
             key = cv2.waitKey(1) & 0xFF
             if key == 27 or key == ord('q'):
                 log.info("Exit key pressed")
                 break
-
+            # Optional: press 'r' to reset enrolment mid-session
+            if key == ord('r'):
+                reid.reset_enrollment()
+                enrolled = False
+                log.info("Enrolment reset via keypress")
 
     except KeyboardInterrupt:
         log.info("Interrupted")
@@ -278,9 +286,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
         log.info("Shutting down")
         image_queue.put("STOP")
         worker.join(timeout=5)
-
         video_pipeline.cleanup()
-        
         cv2.destroyAllWindows()
 
     return 0
@@ -289,11 +295,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dev", action="store_true")
     args = parser.parse_args()
-    
+
     if args.dev:
         raise SystemExit(main())
     else:
-        # Standalone camera mode
         log.info("Running startup tasks...")
         run_jetson_startup_tasks()
         start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
@@ -301,7 +306,6 @@ if __name__ == "__main__":
         if not video_pipeline.start():
             log.error("Failed to initialize camera")
             raise SystemExit(1)
-        
         try:
             raise SystemExit(main(video_pipeline))
         finally:
