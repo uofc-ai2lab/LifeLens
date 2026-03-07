@@ -1,7 +1,6 @@
 from pathlib import Path
 import os, platform
 from dotenv import load_dotenv
-from google import genai
 import spacy
 
 # Load environment variables from .env

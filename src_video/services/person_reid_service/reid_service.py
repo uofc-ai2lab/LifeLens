@@ -122,44 +122,83 @@ class YuNetFaceDetector:
         nms_thresh:   float = YUNET_NMS_THRESH,
         top_k:        int   = YUNET_TOP_K,
     ):
-        if not Path(model_path).exists():
-            raise FileNotFoundError(
-                f"YuNet model not found: {model_path}\n"
-                "Download:\n"
-                "  wget https://github.com/opencv/opencv_zoo/raw/main/models/"
-                "face_detection_yunet/face_detection_yunet_2023mar.onnx"
-            )
-
-        self._detector = cv2.FaceDetectorYN.create(
-            model_path,
-            "",
-            input_size,
-            score_thresh,
-            nms_thresh,
-            top_k,
-            cv2.dnn.DNN_BACKEND_CUDA,
-            cv2.dnn.DNN_TARGET_CUDA,
-        )
+        self._detector = None
         self._input_size = input_size
-        log.success("YuNet face detector loaded (CUDA backend)")
+        self._failed = False
+        
+        if not Path(model_path).exists():
+            log.warning(
+                f"YuNet model not found: {model_path} — "
+                "face detection disabled, using fallback enrollment"
+            )
+            self._failed = True
+            return
+
+        try:
+            # Use CPU backend for better compatibility with OpenCV 4.5.4
+            # CUDA DNN backend has known issues with some model architectures
+            self._detector = cv2.FaceDetectorYN.create(
+                model_path,
+                "",
+                input_size,
+                score_thresh,
+                nms_thresh,
+                top_k,
+                cv2.dnn.DNN_BACKEND_OPENCV,
+                cv2.dnn.DNN_TARGET_CPU,
+            )
+            log.success("YuNet face detector loaded (CPU backend)")
+        except Exception as e:
+            log.error(f"Failed to initialize YuNet: {e} — using fallback mode")
+            self._detector = None
+            self._failed = True
 
     def detect(self, frame_bgr: np.ndarray) -> list[dict]:
         """
         Returns list of dicts:
             { 'bbox': (x, y, w, h), 'score': float, 'landmarks': np.ndarray(5,2) }
+        Returns empty list if detector is unavailable or fails.
         """
+        if self._detector is None or self._failed:
+            return []
+        
         h, w = frame_bgr.shape[:2]
-        self._detector.setInputSize((w, h))
-        _, faces = self._detector.detect(frame_bgr)
+        input_w, input_h = self._input_size
+
+        resized = cv2.resize(frame_bgr, (input_w, input_h))
+        self._detector.setInputSize((input_w, input_h))
+
+        try:
+            _, faces = self._detector.detect(resized)
+        except (cv2.error, Exception) as e:
+            if not self._failed:  # Only log once
+                log.error(f"YuNet detect failed: {e} — disabling face detection")
+                self._failed = True
+            return []
 
         results = []
         if faces is None:
             return results
 
+        sx = w / float(input_w)
+        sy = h / float(input_h)
+
         for face in faces:
-            x, y, fw, fh = int(face[0]), int(face[1]), int(face[2]), int(face[3])
+            x = int(face[0] * sx)
+            y = int(face[1] * sy)
+            fw = int(face[2] * sx)
+            fh = int(face[3] * sy)
+
+            x = max(0, min(x, w - 1))
+            y = max(0, min(y, h - 1))
+            fw = max(1, min(fw, w - x))
+            fh = max(1, min(fh, h - y))
+
             score = float(face[-1])
-            lm    = face[4:14].reshape(5, 2)
+            lm = face[4:14].reshape(5, 2).copy()
+            lm[:, 0] *= sx
+            lm[:, 1] *= sy
+
             results.append({
                 "bbox":      (x, y, fw, fh),
                 "score":     score,
@@ -172,6 +211,26 @@ class YuNetFaceDetector:
 # ═══════════════════════════════════════════════════════════════════════════
 # BODY CROP UTILITIES
 # ═══════════════════════════════════════════════════════════════════════════
+
+def extract_center_body_crop(frame_bgr: np.ndarray) -> tuple[np.ndarray, tuple[int, int, int, int]]:
+    """
+    Fallback body extraction when face detection is unavailable.
+    Extracts a central region assuming person is roughly centered in frame.
+    
+    Returns (body_crop, body_bbox).
+    """
+    fh, fw = frame_bgr.shape[:2]
+    
+    # Use center 60% width, 80% height biased upward (head typically in upper frame)
+    crop_w = int(fw * 0.6)
+    crop_h = int(fh * 0.8)
+    
+    x = (fw - crop_w) // 2
+    y = int(fh * 0.1)  # Start at 10% from top
+    
+    crop = frame_bgr[y:y+crop_h, x:x+crop_w]
+    return crop, (x, y, crop_w, crop_h)
+
 
 def expand_face_to_body(
     frame_bgr: np.ndarray,
@@ -351,20 +410,25 @@ class ReIDService:
         """
         Called when an AprilTag is detected.
 
-        1. YuNet checks for a face — skips frame if none found.
-        2. Largest face bbox is expanded to a full-body crop.
-        3. ResNet50 embeds the body crop and buffers it.
-        4. Returns True when ENROLL_N_FRAMES have been buffered and
+        1. YuNet checks for a face — if available and face found:
+             - Largest face bbox is expanded to a full-body crop
+           Otherwise, falls back to center body crop.
+        2. ResNet50 embeds the body crop and buffers it.
+        3. Returns True when ENROLL_N_FRAMES have been buffered and
            enrollment is finalised.
         """
         faces = self._face_detector.detect(frame_bgr)
-        if not faces:
-            log.warning("Enrollment: no face detected — skipping frame")
-            return False
-
-        # Use the largest detected face as the primary subject
-        face = max(faces, key=lambda f: f["bbox"][2] * f["bbox"][3])
-        body_crop, _ = expand_face_to_body(frame_bgr, face["bbox"])
+        
+        if faces:
+            # Use face-based body extraction (most accurate)
+            face = max(faces, key=lambda f: f["bbox"][2] * f["bbox"][3])
+            body_crop, _ = expand_face_to_body(frame_bgr, face["bbox"])
+            log.info(f"Enrollment: using face-guided body crop ({len(faces)} faces)")
+        else:
+            # Fallback to center region when face detection unavailable/failed
+            body_crop, _ = extract_center_body_crop(frame_bgr)
+            if not self._face_detector._failed:
+                log.info("Enrollment: no face detected, using center body crop")
 
         if body_crop.size == 0:
             log.warning("Enrollment: body crop is empty — skipping frame")
@@ -498,14 +562,21 @@ class ReIDService:
 
         status = "ENROLLED" if enrolled else f"ENROLLING {buffered}/{ENROLL_N_FRAMES}"
         color  = (0, 255, 0) if enrolled else (0, 165, 255)
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.7
+        thickness = 2
+        (text_w, _), baseline = cv2.getTextSize(status, font, font_scale, thickness)
+        margin = 10
+        x = max(margin, frame_bgr.shape[1] - text_w - margin)
+        y = max(30, margin + baseline)
         cv2.putText(
             frame_bgr,
             status,
-            (10, 30),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
+            (x, y),
+            font,
+            font_scale,
             color,
-            2,
+            thickness,
         )
 
 

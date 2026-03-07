@@ -24,9 +24,9 @@ VIDEO_OUTPUT_DIR = VIDEO_DIR / "output_files"
 SNAPSHOT_INTERVAL = int(os.getenv('SNAPSHOT_INTERVAL', '2'))  # seconds between snapshots
 
 YUNET_MODEL_PATH   = "src_video/services/person_reid_service/face_detection_yunet_2023mar.onnx"
-EMBEDDER_ONNX_PATH = "src_video/services/person_reid_service/mobilefacenet.onnx"
-REID_USE_TRT       = True
-REID_THRESHOLD     = 0.55
+EMBEDDER_ONNX_PATH = "src_video/services/person_reid_service/resnet50_market1501_aicity156.onnx"
+REID_USE_TRT       = False
+REID_THRESHOLD     = 0.65
 
 IMAGE_SAVE_DIR = VIDEO_DIR / "saved_imgs"
 os.makedirs(IMAGE_SAVE_DIR, exist_ok=True)

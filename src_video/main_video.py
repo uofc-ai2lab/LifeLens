@@ -30,7 +30,7 @@ from src_video.services.body_ranking.body_injury_ranking import body_ranking
 from src_video.services.classification_service.infer_injuries_on_crops import predict_injuries_on_detection_crops
 from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
-from src_video.services.reid_service.reid_service import build_reid_service, ReIDEvent
+from src_video.services.person_reid_service.reid_service import build_reid_service, ReIDEvent
 
 
 def _as_posix(path: str) -> str:
@@ -186,8 +186,8 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
             log.info(f"Snapshot saved ({snapshot_count} total)")
 
     reid = build_reid_service(
-        yunet_path        = settings.get("YUNET_MODEL_PATH",   "src_video/services/reid_service/face_detection_yunet_2023mar.onnx"),
-        embedder_path     = settings.get("EMBEDDER_ONNX_PATH", "src_video/services/reid_service/resnet50_market1501_aicity156.onnx"),
+        yunet_path        = settings.get("YUNET_MODEL_PATH",   "src_video/services/person_reid_service/face_detection_yunet_2023mar.onnx"),
+        embedder_path     = settings.get("EMBEDDER_ONNX_PATH", "src_video/services/person_reid_service/resnet50_market1501_aicity156.onnx"),
         use_trt           = bool(settings.get("REID_USE_TRT",   False)),
         similarity_thresh = float(settings.get("REID_THRESHOLD", 0.65)),
         on_reid_callback  = _on_reid,
@@ -246,14 +246,9 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
                             snapshot_count += 1
                             log.info(f"Enrollment snapshot saved ({snapshot_count} total)")
 
-                elif (now - last_snap) >= SNAPSHOT_INTERVAL:
-                    # Tag still visible after enrollment — direct snapshot
-                    if capture_frame_from_pipeline(frame, IMAGE_SAVE_DIR):
-                        snapshot_count += 1
-                        last_snap = now
-                        log.info(f"Tag snapshot saved ({snapshot_count} total)")
-
             # Continuous ReID matching — every frame after enrollment
+            # Snapshots are now ONLY captured via the _on_reid callback when
+            # the enrolled person is actually recognized in frame
             if enrolled:
                 reid.process_frame(frame)
 
