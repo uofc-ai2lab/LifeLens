@@ -127,6 +127,9 @@ sudo pip install ultralytics --no-deps
 sudo pip install deface --no-deps
 sudo apt update
 sudo apt install -y python3-gi gir1.2-gstreamer-1.0 gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good
+sudo apt install -y evtest
+
+# Need to manually install ultralytics due to dependency issues 
 ```
 
 ###  Download MedCAT Model (One-Time Setup) - for Medication Intervention
@@ -188,6 +191,13 @@ Dataset Assets (Priv_personpart):
    - `PIPELINE_ROOT` (defaults to `data/video/output_files`)
    - `PIPELINE_DETECTION_OUTPUT` (defaults to `data/video/output_files/DetectionOutput`)
    - `PIPELINE_INJURY_CHECKPOINT` (checkpoint used for injury inference)
+
+   For Jetson memory stability, you can also tune camera load:
+
+   - `VIDEO_CAPTURE_WIDTH` / `VIDEO_CAPTURE_HEIGHT` (defaults: `1280x720`)
+   - `VIDEO_DISPLAY_WIDTH` / `VIDEO_DISPLAY_HEIGHT` (defaults: `640x360`)
+   - `VIDEO_FRAME_RATE` (default: `20`)
+   - `VIDEO_FLIP_METHOD` (default: `0`)
 
 **Keep env.template updated with any new variables your services require.**
 
@@ -334,6 +344,8 @@ If you save to a different location (or store the dataset elsewhere), set `PIPEL
 
 # Full System (Camera + Audio)
 
+## Through Terminal 
+
 Run both pipelines together (camera + mic):
 
 ```sh
@@ -343,6 +355,23 @@ python -m main
 This runs:
 - Video capture from CSI camera → detection → injury classification
 - Audio recording from USB mic → transcription → medication/intervention extraction
+
+## Using Buttons
+
+Run both pipelines together (camera + mic):
+
+```sh
+python -m power_toggle
+```
+
+This does the following:
+1. Waits for a button press. On the first press, it starts the full system (`python -m main` runs in the background) and turns the LED on.
+2. Saves all output logs under the data directory.
+3. On the second button press, it cleanly shuts down the camera and microphone (no new audio/image files are created); the LED briefly blinks to indicate shutdown.
+4. After the program fully exits, the LED turns off.
+5. While the system is shutting down, additional button presses are ignored until the shutdown is complete.
+* Note: the script can constantly be running, when the program is not on, the script standalone takes up very minimal space (it is mostly idle).
+
 
 ### Important Notes:
 - If the camera fails to initialize, the audio pipeline will not start.

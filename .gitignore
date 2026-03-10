@@ -10,10 +10,8 @@ jetson-containers/
 simple_camera.py
 simple_out.py
 data/resource_usage.csv
-
-simple_camera.py
-src_audio/services/transcription_service/models/whisper-base-medical-lora
-src_audio/services/transcription_service/models/whisper-large-v3-medical-lora/
+src_audio/services/transcription_service/models/
+resnet50_market1501_aicity156.onnx
 
 .gitignore
 # OS / Editor

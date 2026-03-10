@@ -1,4 +1,5 @@
 import asyncio
+import sys
 import threading
 import time
 
@@ -39,17 +40,42 @@ GStreamer handles the heavy lifting:
 """
 
 
-def run_audio_pipeline():
+def _start_stdin_stop_listener(stop_event: threading.Event):
+    """Listens for STOP commands on stdin and sets a shared stop event."""
+
+    def _listen():
+        try:
+            for raw in sys.stdin:
+                cmd = raw.strip().upper()
+                if cmd in {"STOP", "EXIT", "Q", "QUIT"}:
+                    log.info(f"Stop command received on stdin: {cmd}")
+                    stop_event.set()
+                    break
+        except Exception as e:
+            log.warning(f"stdin stop listener ended: {e}")
+
+    threading.Thread(target=_listen, name="StdinStopListener", daemon=True).start()
+
+
+def run_audio_pipeline(stop_event: threading.Event):
     """Runs audio async pipeline in its own event loop with GStreamer."""
     log.info("Starting AUDIO pipeline thread")
     try:
-        asyncio.run(audio_main())
+        audio_main(
+            register_signal_handlers=False,
+            external_stop_event=stop_event,
+            enable_enter=False,
+        )
     except Exception as e:
         log.error(f"AUDIO pipeline error: {e}")
     log.info("AUDIO pipeline finished")
 
 
-def run_video_pipeline(video_ready: threading.Event, video_failed: threading.Event):
+def run_video_pipeline(
+    video_ready: threading.Event,
+    video_failed: threading.Event,
+    stop_event: threading.Event,
+):
     """Runs video async pipeline in its own event loop with GStreamer.
 
     Important: Open and release the CSI camera in the SAME thread to avoid
@@ -68,7 +94,7 @@ def run_video_pipeline(video_ready: threading.Event, video_failed: threading.Eve
         video_ready.set()
         
         # Run video processing pipeline with initialized camera
-        asyncio.run(video_main(video_pipeline))
+        asyncio.run(video_main(video_pipeline, external_stop_event=stop_event))
         
     except Exception as e:
         video_failed.set()
@@ -101,12 +127,15 @@ def main():
     # Synchronization events
     video_ready = threading.Event()
     video_failed = threading.Event()
+    stop_event = threading.Event()
+
+    _start_stdin_stop_listener(stop_event)
 
     # Start video thread (must initialize camera first)
     video_thread = threading.Thread(
         target=run_video_pipeline,
         name="VideoThread_GStreamer",
-        args=(video_ready, video_failed),
+        args=(video_ready, video_failed, stop_event),
         daemon=False,
     )
 
@@ -114,6 +143,7 @@ def main():
     audio_thread = threading.Thread(
         target=run_audio_pipeline,
         name="AudioThread_GStreamer",
+        args=(stop_event,),
         daemon=False,
     )
 
@@ -131,6 +161,9 @@ def main():
         log.error("VIDEO pipeline failed to initialize. Aborting audio pipeline.")
     else:
         log.success("VIDEO pipeline ready. Starting AUDIO pipeline...")
+        startup_settle_s = 2.0
+        log.info(f"Settling {startup_settle_s:.1f}s before AUDIO startup to reduce memory pressure")
+        time.sleep(startup_settle_s)
         audio_thread.start()
     
     # Wait for both threads to complete

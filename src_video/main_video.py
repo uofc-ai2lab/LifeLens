@@ -170,7 +170,10 @@ def processing_worker(queue: Queue, settings: Dict[str, Any]):
     log.info("Processing worker stopped")
 
 
-def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
+def main(
+    video_pipeline: Optional[GStreamerVideoPipeline] = None,
+    external_stop_event: Optional[threading.Event] = None,
+) -> int:
     """
     Main video processing pipeline.
     
@@ -221,6 +224,10 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
 
     try:
         while True:
+            if external_stop_event is not None and external_stop_event.is_set():
+                log.info("External stop requested")
+                break
+
             ok, frame = video_pipeline.read_frame()
             if not ok or frame is None:
                 log.error("Camera read failed")
@@ -268,6 +275,8 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
             key = cv2.waitKey(1) & 0xFF
             if key == 27 or key == ord('q'):
                 log.info("Exit key pressed")
+                if external_stop_event is not None:
+                    external_stop_event.set()
                 break
 
 
