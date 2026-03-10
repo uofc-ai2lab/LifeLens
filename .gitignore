@@ -1,18 +1,21 @@
-data/audio/audio_pipeline_metadata.json
 data/data_p3.2/
+data/audio/audio_files/
 data/audio/processed_audio/
-jetson-containers/
-simple_camera.py
-data/resource_usage.csv
-data/audio/unused/
-data/video/unused/
 
 data/audio/unused/
 data/video/unused/
 
 **/data/
 
+data/video/output_files/
+data/video/source_files/Images/Wound_dataset/
+/experiments/*
+jetson-containers/
 simple_camera.py
+simple_out.py
+data/resource_usage.csv
+src_audio/services/transcription_service/models/
+resnet50_market1501_aicity156.onnx
 
 .gitignore
 # OS / Editor
@@ -349,4 +352,5 @@ data/video/output_files/
 # training set
 data/video/source_files/Images/Wound_dataset/
 
+# transcription models
 src_audio/services/transcription_service/models/
