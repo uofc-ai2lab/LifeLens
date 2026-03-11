@@ -1,20 +1,29 @@
 import os
+import re
+import wave
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 import torch
 import gc
 import psutil
 from transformers import pipeline
 
 from src_audio.utils.export_to_csv import export_to_csv
+from src_audio.domain.constants import CHUNK_SECONDS
 from config.logger import Logger
-from config.audio_settings import IS_JETSON, MODEL_CACHE_PATH
+from config.audio_settings import MODEL_CACHE_PATH
 
 log = Logger("[audio][transcription]")
 
 # Persistent global storage
-_WHISPER_PIPE = None  # Your fine-tuned model (HF Pipeline)
+_WHISPER_PIPE = None  # fine-tuned model (HF Pipeline)
 _WHISPER_FALLBACK = None  # Original OpenAI Whisper
+_STARTING_TIME_SECONDS = 1
+_CURRENT_RECORDING_KEY = None
+
+_RECORDING_FILENAME_PATTERN = re.compile(
+    r"^recording_(?P<date>\d{8})_(?P<time>\d{6})_chunk_(?P<chunk_index>\d+)\.[^.]+$"
+)
 
 
 def normalize_whisper_segments(segments, base_datetime: datetime = None):
@@ -44,11 +53,8 @@ def normalize_whisper_segments(segments, base_datetime: datetime = None):
         )
 
         # 2. Add relative seconds to the base datetime
-        # This handles the "Simple Math" you mentioned in a way that scales
-        import datetime as dt
-
-        real_start_dt = base_datetime + dt.timedelta(seconds=rel_start)
-        real_end_dt = base_datetime + dt.timedelta(seconds=rel_end)
+        real_start_dt = base_datetime + timedelta(seconds=rel_start)
+        real_end_dt = base_datetime + timedelta(seconds=rel_end)
 
         # 3. Format as string (e.g., 14:30:05)
         str_start = real_start_dt.strftime("%H:%M:%S")
@@ -60,10 +66,45 @@ def normalize_whisper_segments(segments, base_datetime: datetime = None):
                 "end_time": str_end,  # Now real-world time
                 "text": seg.get("text", "").strip(),
                 "speaker": "UNKNOWN",
-                "rel_start": rel_start,  # Keeping raw offset just in case
             }
         )
     return normalized
+
+
+def parse_recording_base_datetime(audio_file: str):
+    """Parse base datetime and chunk index from recording_YYYYMMDD_HHMMSS_chunk_N.*"""
+    filename = Path(audio_file).name
+    match = _RECORDING_FILENAME_PATTERN.match(filename)
+    if not match:
+        return None, None, None
+
+    recording_key = f"{match.group('date')}_{match.group('time')}"
+    try:
+        base_datetime = datetime.strptime(recording_key, "%Y%m%d_%H%M%S")
+        chunk_index = int(match.group("chunk_index"))
+        return base_datetime, recording_key, chunk_index
+    except ValueError:
+        return None, None, None
+
+
+def get_chunk_advance_seconds(audio_file: str) -> float:
+    """Advance by CHUNK_SECONDS, unless actual duration is shorter (manual stop/final chunk)."""
+    advance_seconds = float(CHUNK_SECONDS)
+    try:
+        with wave.open(str(audio_file), "rb") as wav_file:
+            frame_rate = wav_file.getframerate()
+            frame_count = wav_file.getnframes()
+            if frame_rate > 0:
+                duration_seconds = frame_count / frame_rate
+                if duration_seconds < advance_seconds:
+                    advance_seconds = duration_seconds
+    except Exception as e:
+        log.warning(
+            f"Could not read WAV duration for chunk advance ({Path(audio_file).name}): {e}. "
+            f"Using CHUNK_SECONDS={CHUNK_SECONDS}."
+        )
+
+    return max(advance_seconds, 0.0)
 
 
 def load_fine_tuned_whisper(model_path: str):
@@ -148,33 +189,6 @@ def verify_transcription_output(result: dict):
         log.warning("No segments found")
         return []
 
-def normalize_whisper_segments(segments):
-    """Convert keys to pipeline-standard keys for CSV export."""
-    normalized = []
-    for seg in segments:
-        # Compatibility check for HF 'timestamp' vs OpenAI 'start'/'end'
-        start = (
-            seg.get("start")
-            if seg.get("start") is not None
-            else seg.get("timestamp", [0, 0])[0]
-        )
-        end = (
-            seg.get("end")
-            if seg.get("end") is not None
-            else seg.get("timestamp", [0, 0])[1]
-        )
-
-        normalized.append(
-            {
-                "start_time": start,
-                "end_time": end,
-                "text": seg.get("text", "").strip(),
-                "speaker": "UNKNOWN",
-            }
-        )
-    return normalized
-
-
 def transcribe_audio(audio_file: str, model_obj, model_type: str):
     log.info(f"Starting {model_type} transcription pass")
     try:
@@ -218,6 +232,9 @@ def transcribe_audio(audio_file: str, model_obj, model_type: str):
 
 
 def run_transcription(audio_chunk_file, model_path="whisper-medical-final"):
+    global _STARTING_TIME_SECONDS
+    global _CURRENT_RECORDING_KEY
+
     log.info("Starting Transcription Pipeline")
 
     # Memory Check
@@ -228,13 +245,49 @@ def run_transcription(audio_chunk_file, model_path="whisper-medical-final"):
             torch.cuda.empty_cache()
         gc.collect()
 
-    file_stat = os.stat(audio_chunk_file)
-    recording_start_time = datetime.fromtimestamp(file_stat.st_ctime)
+    parsed_base_time, recording_key, chunk_index = parse_recording_base_datetime(
+        audio_chunk_file
+    )
+    if parsed_base_time is not None:
+        if _CURRENT_RECORDING_KEY != recording_key:
+            _CURRENT_RECORDING_KEY = recording_key
+            _STARTING_TIME_SECONDS = 1
+            log.info(
+                f"Detected new recording session {recording_key}. Reset global starting offset to 1s."
+            )
+
+        expected_min_offset = 1 + (chunk_index * CHUNK_SECONDS)
+        if _STARTING_TIME_SECONDS < expected_min_offset:
+            log.debug(
+                f"Synchronizing global offset with chunk index {chunk_index}: "
+                f"{_STARTING_TIME_SECONDS:.2f}s -> {expected_min_offset:.2f}s"
+            )
+            _STARTING_TIME_SECONDS = float(expected_min_offset)
+
+        recording_start_time = parsed_base_time
+    else:
+        file_stat = os.stat(audio_chunk_file)
+        recording_start_time = datetime.fromtimestamp(file_stat.st_ctime)
+        log.warning(
+            "Filename did not match recording_YYYYMMDD_HHMMSS_chunk_N pattern. "
+            "Using file system creation time as base."
+        )
+
+    effective_chunk_base_time = recording_start_time + timedelta(
+        seconds=_STARTING_TIME_SECONDS
+    )
     log.info(
-        f"Recording anchored at: {recording_start_time.strftime('%Y-%m-%d %H:%M:%S')}"
+        f"Recording anchored at: {recording_start_time.strftime('%Y-%m-%d %H:%M:%S')} | "
+        f"chunk base offset: {_STARTING_TIME_SECONDS:.2f}s | "
+        f"effective base: {effective_chunk_base_time.strftime('%Y-%m-%d %H:%M:%S')}"
     )
 
-    # ==================== STEP 1: LOAD MODEL ====================
+    # ==================== STEP 1: CHECK INPUT ====================
+    if verify_audio_file_exists(audio_chunk_file) is False:
+        log.error("File does not exist or is invalid. Stopping transcription.")
+        return None
+
+    # ==================== STEP 2: LOAD MODEL ====================
     model = load_fine_tuned_whisper(model_path)
     model_type = "fine_tuned"
 
@@ -248,11 +301,6 @@ def run_transcription(audio_chunk_file, model_path="whisper-medical-final"):
         return None
 
     log.info(f"Current audio file: {Path(audio_chunk_file).name}")
-
-    # ==================== STEP 2: CHECK INPUT ====================
-    if verify_audio_file_exists(audio_chunk_file) is False:
-        log.error("File does not exist or is invalid. Stopping transcription.")
-        return None
 
     total_start = datetime.now()
 
@@ -271,7 +319,17 @@ def run_transcription(audio_chunk_file, model_path="whisper-medical-final"):
         log.error("TRANSCRIPTION VERIFICATION FAILED - STOPPING PIPELINE")
         return None
 
-    normalized_result = normalize_whisper_segments(verified_segments)
+    normalized_result = normalize_whisper_segments(
+        verified_segments,
+        base_datetime=effective_chunk_base_time,
+    )
+
+    advance_seconds = get_chunk_advance_seconds(audio_chunk_file)
+    _STARTING_TIME_SECONDS += advance_seconds
+    log.debug(
+        f"Updated global starting offset by {advance_seconds:.2f}s. "
+        f"Next chunk offset: {_STARTING_TIME_SECONDS:.2f}s"
+    )
 
     # ==================== STEP 5: EXPORT ====================
     export_start = datetime.now()

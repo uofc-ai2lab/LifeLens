@@ -3,7 +3,7 @@ from peft import PeftModel, PeftConfig
 from transformers import WhisperForConditionalGeneration, WhisperProcessor
 
 # 1. Paths
-adapter_model_dir = "./whisper-large-v3-medical-lora" # Your training output
+adapter_model_dir = "./whisper-large-v3-medical-lora"  # training output
 merged_model_dir = "./whisper-medical-final"         # Where the final model goes
 
 # 2. Load the Config and the Base Model

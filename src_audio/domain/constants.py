@@ -153,3 +153,10 @@ MED_COLUMNS = [
     "route (confidence score)",
     "full_text"
 ]
+
+### ------------------------------- TRANSCRIPTION SERVICE ------------------------------- ###
+
+MODEL_NAME_OR_PATH = "openai/whisper-large-v3"
+TRANSCRIPTION_MODEL_OUTPUT_DIR = "./whisper-large-v3-medical-lora"
+
+DATASET_NAME = "leduckhai/MultiMed-ST"
