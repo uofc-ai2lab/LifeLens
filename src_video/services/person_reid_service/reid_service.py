@@ -1,288 +1,725 @@
 from __future__ import annotations
 
+"""
+reid_service.py  —  Multi-person body ReID using YOLO ONNX + ResNet50
+======================================================================
+No pycuda / MobileFaceNet / YuNet required.
+
+Detector
+--------
+YOLOv8n (person class only) exported to ONNX.
+Export command (one-time, on any machine with ultralytics installed):
+
+    pip install ultralytics
+    python -c "
+    from ultralytics import YOLO
+    model = YOLO('yolov8n.pt')
+    model.export(format='onnx', imgsz=640, opset=12, simplify=True)
+    # outputs yolov8n.onnx — copy to your reid service directory
+    "
+
+The ONNX file runs with onnxruntime-gpu (already in your environment).
+No ultralytics needed at inference time — pure ORT + NumPy.
+
+Architecture
+------------
+PRIMARY PATH  — per-person body crop matching
+  1. YOLO detects all persons in the frame (class 0).
+  2. Each person bbox is cropped from the frame.
+  3. ResNet50 embeds each crop → 2048-dim vector.
+  4. Cosine similarity computed per-person vs enrolled reference.
+  5. Snapshot triggered ONLY if at least one person exceeds threshold.
+     If persons detected but none match → return None.
+
+FALLBACK PATH — center body crop
+  Used ONLY when YOLO detects zero persons in the frame.
+  Higher threshold, LOW confidence flag.
+
+Key improvements vs. current_reid_service.py
+---------------------------------------------
+1. Per-person bbox loop replaces the single full-frame crop.
+2. "Persons detected but no match" returns None immediately.
+   A stranger in frame cannot trigger a snapshot.
+3. YOLO produces tight, person-only bboxes — no body expand heuristics.
+4. Enrollment averages ENROLL_N_FRAMES crops for a stable reference.
+5. Threshold raised to 0.72 (body crops need higher bar than original 0.65).
+
+Threshold guidance
+------------------
+Body-crop cosine similarity is sensitive to clothing and lighting.
+Recommended starting points:
+  > 0.76  →  high confidence same person
+  0.72–0.76 → probable match
+  < 0.72  →  treat as different person
+
+To calibrate: enable debug logging, walk in front of the camera alone,
+note your similarity scores, then add a second person and note theirs.
+Pick a threshold in the gap.
+
+False positive mitigations
+--------------------------
+- YOLO gives per-person isolation: a stranger is never blended with you.
+- Raised threshold (0.72 vs 0.65).
+- Enrollment averages 8 frames, not 5.
+- Body fallback (no detections) uses a stricter threshold (0.77).
+- SNAPSHOT_ON_LOW_CONFIDENCE in main_video.py skips fallback snapshots.
+- PERSON_MIN_AREA_PX filters tiny/distant detections.
+"""
+
 import time
-from typing import Optional
-import numpy as np
-import torch
-import torch.nn.functional as F
+import threading
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Optional, Callable
+
 import cv2
-import torchreid
+import numpy as np
+
+from config.logger import Logger
+
+log = Logger("[video][reid]")
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MODEL PATHS
+# ═══════════════════════════════════════════════════════════════════════════
+
+_DIR = Path(__file__).parent
+_DEFAULT_YOLO_PATH = str(_DIR / "yolov8n.onnx")
+_DEFAULT_REID_PATH = str(_DIR / "resnet50_market1501_aicity156.onnx")
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CONFIGURATION
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── YOLO person detector ──────────────────────────────────────────────────
+YOLO_INPUT_SIZE       = 640          # square input; YOLOv8n default
+YOLO_CONF_THRESH      = 0.45         # minimum detection confidence
+YOLO_NMS_IOU_THRESH   = 0.45         # NMS IoU threshold
+YOLO_PERSON_CLASS     = 0            # COCO class 0 = person
+PERSON_MIN_AREA_PX    = 3000         # ignore detections smaller than this
+                                     # (pixels²) — filters out distant bystanders
+                                     # tune based on your camera distance
+
+# ── ResNet50 body ReID ────────────────────────────────────────────────────
+REID_INPUT_SIZE = (128, 256)          # (W, H) Market1501 canonical
+REID_MEAN       = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+REID_STD        = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+
+# ── Matching thresholds ───────────────────────────────────────────────────
+BODY_SIMILARITY_THRESH      = 0.72   # primary path — YOLO bbox → body crop
+BODY_HIGH_CONF_THRESH       = 0.76   # above this → high confidence
+BODY_FALLBACK_THRESH        = 0.77   # fallback path (no YOLO detections)
+
+# ── Enrollment ────────────────────────────────────────────────────────────
+ENROLL_N_FRAMES  = 8
+REID_COOLDOWN_S  = 2.0
 
 
-REID_MODEL_NAME       = "osnet_x0_25"          # Lightest OSNet — good for Jetson Orin
-REID_INPUT_SIZE       = (256, 128)
-ENROLLMENT_FRAMES     = 5                       # Frames to average for enrollment embedding
-PATIENT_MATCH_THRESH  = 0.70                    # Cosine similarity threshold for patient match
-PERSON_MATCH_THRESH   = 0.65                    # Slightly looser for general session re-association
+# ═══════════════════════════════════════════════════════════════════════════
+# DOMAIN ENTITIES
+# ═══════════════════════════════════════════════════════════════════════════
+
+@dataclass
+class ReIDEvent:
+    timestamp:   float
+    similarity:  float
+    bbox:        tuple[int, int, int, int]   # x, y, w, h in pixel coords
+    frame:       Optional[np.ndarray] = None
+    match_type:  str = "body_crop"           # "body_crop" | "body_fallback"
+    confidence:  str = "high"
 
 
-def load_reid_model(device: str = "cuda:0") -> torch.nn.Module:
-    """
-    Load a lightweight OSNet x0.25 model for embedding extraction.
-    Downloads pretrained weights automatically on first run.
-    """
-    model = torchreid.models.build_model(
-        name=REID_MODEL_NAME,
-        num_classes=1000,
-        pretrained=True,
-    )
-    model = model.to(device)
-    model.eval()
-    return model
-
-
-def extract_embedding(
-    model: torch.nn.Module,
-    frame: np.ndarray,
-    bbox: tuple[float, float, float, float],
-    device: str = "cuda:0",
-) -> Optional[torch.Tensor]:
-    """
-    Crop person from frame using bbox, preprocess, and extract L2-normalised embedding.
-
-    Args:
-        model:  Loaded OSNet model.
-        frame:  Full BGR frame from camera.
-        bbox:   (x1, y1, x2, y2) bounding box.
-        device: Torch device string.
-
-    Returns:
-        1-D normalised embedding tensor, or None if crop is invalid.
-    """
-    x1, y1, x2, y2 = [int(v) for v in bbox]
-
-    # Guard against out-of-bounds crops
-    h, w = frame.shape[:2]
-    x1, y1 = max(0, x1), max(0, y1)
-    x2, y2 = min(w, x2), min(h, y2)
-
-    if x2 <= x1 or y2 <= y1:
-        return None
-
-    crop = frame[y1:y2, x1:x2]
-
-    if crop.size == 0:
-        return None
-
-    # Preprocess: resize → RGB → normalise → tensor
-    crop_rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
-    crop_resized = cv2.resize(crop_rgb, (REID_INPUT_SIZE[1], REID_INPUT_SIZE[0]))
-
-    tensor = torch.from_numpy(crop_resized).permute(2, 0, 1).float() / 255.0
-    mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
-    std  = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
-    tensor = (tensor - mean) / std
-    tensor = tensor.unsqueeze(0).to(device)
-
-    with torch.no_grad():
-        embedding = model(tensor)
-
-    # L2 normalise so cosine similarity == dot product
-    embedding = F.normalize(embedding, p=2, dim=1).squeeze(0).cpu()
-    return embedding
-
-
-def average_embeddings(embeddings: list[torch.Tensor]) -> torch.Tensor:
-    """Average a list of embeddings and re-normalise."""
-    stacked = torch.stack(embeddings, dim=0)
-    mean_emb = stacked.mean(dim=0)
-    return F.normalize(mean_emb, p=2, dim=0)
-
-
-def cosine_similarity(a: torch.Tensor, b: torch.Tensor) -> float:
-    """Cosine similarity between two 1-D normalised tensors."""
-    return float(torch.dot(a, b).clamp(-1.0, 1.0))
-
-
-# ─────────────────────────────────────────────
-# Enrollment Buffer
-# ─────────────────────────────────────────────
-
-class EnrollmentBuffer:
-    """
-    Accumulates embeddings over N frames after AprilTag detection
-    to produce a robust averaged enrollment embedding.
-    """
-
-    def __init__(self, target_frames: int = ENROLLMENT_FRAMES):
-        self.target_frames = target_frames
-        self._buffer: list[torch.Tensor] = []
-        self.enrolled_embedding: Optional[torch.Tensor] = None
-        self.is_complete = False
-
-    def add(self, embedding: torch.Tensor) -> bool:
-        """
-        Add an embedding frame. Returns True when enrollment is complete.
-        """
-        if self.is_complete:
-            return True
-
-        self._buffer.append(embedding)
-
-        if len(self._buffer) >= self.target_frames:
-            self.enrolled_embedding = average_embeddings(self._buffer)
-            self.is_complete = True
-            return True
-
-        return False
+@dataclass
+class EnrollmentState:
+    embedding:         Optional[np.ndarray] = None
+    enrolled_at:       float = 0.0
+    embeddings_buffer: list  = field(default_factory=list)
 
     @property
-    def progress(self) -> str:
-        return f"{len(self._buffer)}/{self.target_frames}"
+    def is_enrolled(self) -> bool:
+        return self.embedding is not None
+
+    def add_candidate(self, emb: np.ndarray) -> bool:
+        self.embeddings_buffer.append(emb)
+        n = len(self.embeddings_buffer)
+        if n >= ENROLL_N_FRAMES:
+            stack          = np.stack(self.embeddings_buffer, axis=0)
+            mean           = stack.mean(axis=0)
+            self.embedding = mean / (np.linalg.norm(mean) + 1e-6)
+            self.enrolled_at = time.time()
+            self.embeddings_buffer.clear()
+            log.success(f"Enrolled: averaged {ENROLL_N_FRAMES} body embeddings")
+            return True
+        log.info(f"Enrollment: {n}/{ENROLL_N_FRAMES} frames buffered")
+        return False
 
     def reset(self):
-        self._buffer.clear()
-        self.enrolled_embedding = None
-        self.is_complete = False
+        self.embedding = None
+        self.enrolled_at = 0.0
+        self.embeddings_buffer.clear()
+        log.info("Enrollment state reset")
 
 
-# ─────────────────────────────────────────────
-# Session Person Registry
-# ─────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# YOLO PERSON DETECTOR
+# ═══════════════════════════════════════════════════════════════════════════
 
-class SessionRegistry:
+class YOLOPersonDetector:
     """
-    Maintains a session-scoped registry of all persons seen during the stream.
+    YOLOv8n (ONNX) person detector.
 
-    Each person gets a stable session_id (e.g. P001, P002...) that persists
-    even if DeepOCSORT assigns a new track ID on re-entry.
+    Runs pure ORT inference — no ultralytics at runtime.
+    Handles its own pre/post-processing:
+      - letterbox resize to 640×640
+      - decode YOLOv8 output tensor (1, 84, 8400)
+      - filter to class 0 (person) above conf threshold
+      - NMS
+      - unscale bboxes back to original frame coords
 
-    Flow:
-      - New track ID seen → extract embedding → check against registry
-      - Match found       → re-associate with existing session_id
-      - No match          → register as new person, assign new session_id
+    Input  : (1, 3, 640, 640)  float32  normalised [0,1] RGB
+    Output : (1, 84, 8400)     float32  [cx, cy, w, h, cls0..cls79]
     """
 
-    def __init__(self, match_threshold: float = PERSON_MATCH_THRESH):
-        self.threshold = match_threshold
-        self._registry: dict[str, dict] = {}          # session_id → {embedding, track_id, last_seen, ...}
-        self._track_to_session: dict[int, str] = {}   # current track_id → session_id
-        self._counter = 0
-
-    def _new_session_id(self) -> str:
-        self._counter += 1
-        return f"P{self._counter:03d}"
-
-    def get_session_id(self, track_id: int) -> Optional[str]:
-        """Return the session_id for a currently active track, if known."""
-        return self._track_to_session.get(track_id)
-
-    def register_or_match(
+    def __init__(
         self,
-        track_id: int,
-        embedding: torch.Tensor,
-        is_patient: bool = False,
-        forced_session_id: Optional[str] = None,
-    ) -> str:
+        model_path:   str   = _DEFAULT_YOLO_PATH,
+        input_size:   int   = YOLO_INPUT_SIZE,
+        conf_thresh:  float = YOLO_CONF_THRESH,
+        nms_thresh:   float = YOLO_NMS_IOU_THRESH,
+    ):
+        self._session    = None
+        self._inp_name   = None
+        self._failed     = False
+        self._input_size = input_size
+        self._conf       = conf_thresh
+        self._nms        = nms_thresh
+
+        if not Path(model_path).exists():
+            log.warning(
+                f"YOLO model not found: {model_path}\n"
+                "  Export with:\n"
+                "    pip install ultralytics\n"
+                "    python -c \"from ultralytics import YOLO; "
+                "YOLO('yolov8n.pt').export(format='onnx', imgsz=640, opset=12)\"\n"
+                "  Falling back to center-crop body mode."
+            )
+            self._failed = True
+            return
+
+        try:
+            import onnxruntime as ort
+            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+            opts = ort.SessionOptions()
+            opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            opts.intra_op_num_threads = 2
+            self._session  = ort.InferenceSession(model_path, sess_options=opts, providers=providers)
+            self._inp_name = self._session.get_inputs()[0].name
+            log.success(f"YOLO person detector loaded ({self._session.get_providers()[0]})")
+        except Exception as e:
+            log.error(f"YOLO load failed: {e} — fallback mode")
+            self._failed = True
+
+    @property
+    def available(self) -> bool:
+        return self._session is not None and not self._failed
+
+    # ── Pre/post-processing ───────────────────────────────────────────────
+
+    def _letterbox(
+        self, img: np.ndarray, size: int
+    ) -> tuple[np.ndarray, float, tuple[int, int]]:
         """
-        Given a new track_id and its embedding, either:
-          - Re-associate to an existing session_id via Re-ID matching, or
-          - Create a new session entry.
-
-        Args:
-            track_id:          DeepOCSORT track ID.
-            embedding:         Extracted OSNet embedding.
-            is_patient:        Flag to mark this as the enrolled patient.
-            forced_session_id: If provided, force-assign this session_id
-                               (used when patient is first enrolled via AprilTag).
-
-        Returns:
-            The session_id assigned to this track.
+        Resize with padding to a square canvas.
+        Returns (padded_img, scale, (pad_left, pad_top)).
         """
-        # Already mapped
-        if track_id in self._track_to_session:
-            sid = self._track_to_session[track_id]
-            self._registry[sid]["last_seen"] = time.time()
-            self._registry[sid]["track_id"] = track_id
-            return sid
+        h, w = img.shape[:2]
+        scale = min(size / h, size / w)
+        new_w = int(round(w * scale))
+        new_h = int(round(h * scale))
+        resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
 
-        # Try to match against existing registry entries
-        best_sid   = None
-        best_score = -1.0
+        canvas = np.full((size, size, 3), 114, dtype=np.uint8)
+        pad_left = (size - new_w) // 2
+        pad_top  = (size - new_h) // 2
+        canvas[pad_top:pad_top + new_h, pad_left:pad_left + new_w] = resized
+        return canvas, scale, (pad_left, pad_top)
 
-        for sid, entry in self._registry.items():
-            score = cosine_similarity(embedding, entry["embedding"])
-            if score > best_score:
-                best_score = score
-                best_sid = sid
+    def _decode(
+        self,
+        output:    np.ndarray,          # (1, 84, 8400)
+        scale:     float,
+        pad:       tuple[int, int],
+        orig_h:    int,
+        orig_w:    int,
+    ) -> list[dict]:
+        """
+        Decode YOLOv8 output tensor to person bboxes in original frame coords.
+        Returns list of {'bbox': (x,y,w,h), 'score': float}.
+        """
+        preds = output[0]               # (84, 8400)
+        # rows: [cx, cy, w, h, cls0_score, cls1_score, ...]
+        # transpose to (8400, 84) for easier indexing
+        preds = preds.T                 # (8400, 84)
 
-        if forced_session_id is not None:
-            # AprilTag enrollment: force-assign regardless of match
-            sid = forced_session_id
-            if sid not in self._registry:
-                self._registry[sid] = {}
-            self._registry[sid].update({
-                "embedding":  embedding,
-                "track_id":   track_id,
-                "last_seen":  time.time(),
-                "is_patient": is_patient,
+        # Person class score is column 4 (index = 4 + YOLO_PERSON_CLASS)
+        person_scores = preds[:, 4 + YOLO_PERSON_CLASS]
+        mask = person_scores >= self._conf
+
+        if not np.any(mask):
+            return []
+
+        filtered = preds[mask]          # (N, 84)
+        scores   = person_scores[mask]  # (N,)
+
+        # cx, cy, w, h in letterboxed 640×640 space
+        cx = filtered[:, 0]
+        cy = filtered[:, 1]
+        bw = filtered[:, 2]
+        bh = filtered[:, 3]
+
+        # Convert to x1y1x2y2 in letterboxed space
+        x1 = cx - bw / 2
+        y1 = cy - bh / 2
+        x2 = cx + bw / 2
+        y2 = cy + bh / 2
+
+        # Unscale: remove padding, divide by scale
+        pad_left, pad_top = pad
+        x1 = (x1 - pad_left) / scale
+        y1 = (y1 - pad_top)  / scale
+        x2 = (x2 - pad_left) / scale
+        y2 = (y2 - pad_top)  / scale
+
+        # Clamp to original frame
+        x1 = np.clip(x1, 0, orig_w)
+        y1 = np.clip(y1, 0, orig_h)
+        x2 = np.clip(x2, 0, orig_w)
+        y2 = np.clip(y2, 0, orig_h)
+
+        # NMS (cv2 expects x1y1wh)
+        boxes_xywh = np.stack([x1, y1, x2 - x1, y2 - y1], axis=1).tolist()
+        indices    = cv2.dnn.NMSBoxes(
+            boxes_xywh,
+            scores.tolist(),
+            self._conf,
+            self._nms,
+        )
+
+        results = []
+        if len(indices) == 0:
+            return results
+
+        # cv2.dnn.NMSBoxes returns shape (N,1) or (N,) depending on OpenCV version
+        indices = np.array(indices).flatten()
+
+        for i in indices:
+            bx = int(x1[i]);  by = int(y1[i])
+            bw_ = int(x2[i] - x1[i]);  bh_ = int(y2[i] - y1[i])
+            area = bw_ * bh_
+            if area < PERSON_MIN_AREA_PX:
+                continue
+            results.append({
+                "bbox":  (bx, by, bw_, bh_),
+                "score": float(scores[i]),
             })
-            self._track_to_session[track_id] = sid
-            return sid
 
-        if best_sid is not None and best_score >= self.threshold:
-            # Re-association: returning person
-            self._registry[best_sid]["track_id"] = track_id
-            self._registry[best_sid]["last_seen"] = time.time()
-            self._registry[best_sid]["embedding"] = average_embeddings(
-                [self._registry[best_sid]["embedding"], embedding]
-            )  # Online update: blend old + new embedding
-            self._track_to_session[track_id] = best_sid
-            return best_sid
+        return results
 
-        # New person
-        sid = self._new_session_id()
-        self._registry[sid] = {
-            "embedding":  embedding,
-            "track_id":   track_id,
-            "last_seen":  time.time(),
-            "is_patient": is_patient,
-        }
-        self._track_to_session[track_id] = sid
-        return sid
+    def detect(self, frame_bgr: np.ndarray) -> list[dict]:
+        """
+        Detect all persons in frame_bgr.
 
-    def remove_track(self, track_id: int):
-        """Called when a track is lost — unmaps track_id but keeps session entry."""
-        self._track_to_session.pop(track_id, None)
+        Returns list of:
+            { 'bbox': (x, y, w, h), 'score': float }
+        Detections smaller than PERSON_MIN_AREA_PX are filtered out.
+        Returns [] when detector unavailable or no persons found.
+        """
+        if not self.available:
+            return []
 
-    def get_patient_session_id(self) -> Optional[str]:
-        """Return the session_id of the enrolled patient, if any."""
-        for sid, entry in self._registry.items():
-            if entry.get("is_patient"):
-                return sid
-        return None
+        orig_h, orig_w = frame_bgr.shape[:2]
+        letterboxed, scale, pad = self._letterbox(frame_bgr, self._input_size)
 
-    def get_patient_embedding(self) -> Optional[torch.Tensor]:
-        """Return the current embedding for the enrolled patient."""
-        for entry in self._registry.values():
-            if entry.get("is_patient"):
-                return entry["embedding"]
-        return None
+        # BGR -> RGB, normalise to [0,1], NCHW
+        rgb  = cv2.cvtColor(letterboxed, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+        blob = rgb.transpose(2, 0, 1)[np.newaxis]
 
-    def is_patient_track(self, track_id: int) -> bool:
-        """Return True if a given track_id maps to the patient's session."""
-        sid = self._track_to_session.get(track_id)
-        if sid is None:
+        try:
+            output = self._session.run(None, {self._inp_name: blob})
+        except Exception as e:
+            if not self._failed:
+                log.error(f"YOLO inference error: {e}")
+                self._failed = True
+            return []
+
+        return self._decode(output[0], scale, pad, orig_h, orig_w)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# BODY CROP UTILITIES
+# ═══════════════════════════════════════════════════════════════════════════
+
+def extract_center_body_crop(
+    frame_bgr: np.ndarray,
+) -> tuple[np.ndarray, tuple[int, int, int, int]]:
+    """Center-of-frame crop — last-resort fallback when YOLO finds nothing."""
+    fh, fw  = frame_bgr.shape[:2]
+    crop_w  = int(fw * 0.6)
+    crop_h  = int(fh * 0.8)
+    x       = (fw - crop_w) // 2
+    y       = int(fh * 0.1)
+    return frame_bgr[y:y + crop_h, x:x + crop_w], (x, y, crop_w, crop_h)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# RESNET50 EMBEDDER  (unchanged model)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class ResNet50ReIDEmbedder:
+    """
+    resnet50_market1501_aicity156 via ONNX Runtime.
+    Input  : (1, 3, 256, 128)  float32  ImageNet-normalised RGB
+    Output : (1, 2048)         float32  L2-normalised feature vector
+    """
+
+    def __init__(self, model_path: str = _DEFAULT_REID_PATH):
+        self._session  = None
+        self._inp_name = None
+        self._failed   = False
+
+        if not Path(model_path).exists():
+            log.warning(f"ReID model not found: {model_path}")
+            self._failed = True
+            return
+
+        try:
+            import onnxruntime as ort
+            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+            opts = ort.SessionOptions()
+            opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            opts.intra_op_num_threads = 2
+            self._session  = ort.InferenceSession(model_path, sess_options=opts, providers=providers)
+            self._inp_name = self._session.get_inputs()[0].name
+            log.success(f"ResNet50 embedder loaded ({self._session.get_providers()[0]})")
+        except Exception as e:
+            log.error(f"ResNet50 load failed: {e}")
+            self._failed = True
+
+    @property
+    def available(self) -> bool:
+        return self._session is not None and not self._failed
+
+    def embed(self, crop_bgr: np.ndarray) -> np.ndarray:
+        if not self.available or crop_bgr is None or crop_bgr.size == 0:
+            return np.zeros(2048, dtype=np.float32)
+        resized = cv2.resize(crop_bgr, REID_INPUT_SIZE)
+        rgb     = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+        normed  = (rgb - REID_MEAN) / REID_STD
+        blob    = normed.transpose(2, 0, 1)[np.newaxis].astype(np.float32)
+        emb     = self._session.run(None, {self._inp_name: blob})[0][0]
+        return emb / (np.linalg.norm(emb) + 1e-6)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SIMILARITY
+# ═══════════════════════════════════════════════════════════════════════════
+
+def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    return float(np.dot(a, b))
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# REID SERVICE
+# ═══════════════════════════════════════════════════════════════════════════
+
+class ReIDService:
+    """
+    Multi-person body ReID using YOLO + ResNet50.
+
+    ENROLLMENT  (while AprilTag visible)
+    ─────────────────────────────────────
+    1. YOLO detects all persons in frame.
+    2. The LARGEST bbox is selected (closest person, assumed to be the
+       user standing in front of the marker).
+    3. That person's crop is embedded by ResNet50.
+    4. Steps 1-3 repeat for ENROLL_N_FRAMES, then embeddings are
+       averaged into a single stable reference vector.
+    If YOLO detects nothing, center-crop fallback is used.
+
+    TRACKING  (every frame after enrollment)
+    ─────────────────────────────────────────
+    1. YOLO detects ALL persons in the frame.
+    2. For EACH person bbox, ResNet50 embeds the crop individually.
+    3. The best cosine similarity across all persons is found.
+    4. Triggered ONLY if best_sim >= BODY_SIMILARITY_THRESH.
+       If persons are detected but none match → return None.
+       A stranger in frame cannot trigger a snapshot.
+    5. If YOLO finds nobody → center-crop fallback at stricter threshold.
+    """
+
+    def __init__(
+        self,
+        person_detector:   YOLOPersonDetector,
+        embedder:          ResNet50ReIDEmbedder,
+        similarity_thresh: float = BODY_SIMILARITY_THRESH,
+        fallback_thresh:   float = BODY_FALLBACK_THRESH,
+        reid_cooldown_s:   float = REID_COOLDOWN_S,
+        on_reid_callback:  Optional[Callable[[ReIDEvent], None]] = None,
+    ):
+        self._detector    = person_detector
+        self._embedder    = embedder
+        self._thresh      = similarity_thresh
+        self._fb_thresh   = fallback_thresh
+        self._cooldown    = reid_cooldown_s
+        self._callback    = on_reid_callback
+
+        self._state       = EnrollmentState()
+        self._last_reid   = 0.0
+        self._lock        = threading.Lock()
+
+        self._last_persons: list[dict] = []
+        self._last_event:   Optional[ReIDEvent] = None
+
+    # ── Enrollment ──────────────────────────────────────────────────────────
+
+    def enroll_from_frame(self, frame_bgr: np.ndarray) -> bool:
+        persons = self._detector.detect(frame_bgr)
+
+        if persons:
+            # Enroll from the LARGEST person — closest to camera
+            primary = max(persons, key=lambda p: p["bbox"][2] * p["bbox"][3])
+            x, y, w, h = primary["bbox"]
+            fh, fw = frame_bgr.shape[:2]
+            crop = frame_bgr[max(y, 0):min(y+h, fh), max(x, 0):min(x+w, fw)]
+
+            if crop.size == 0:
+                log.warning("Enrollment: person crop empty — skipping frame")
+                return False
+
+            emb = self._embedder.embed(crop)
+            with self._lock:
+                return self._state.add_candidate(emb)
+
+        # No person detected → center-crop fallback
+        log.info("Enrollment: no person detected by YOLO — using center-crop fallback")
+        crop, _ = extract_center_body_crop(frame_bgr)
+        if crop.size == 0:
             return False
-        return self._registry.get(sid, {}).get("is_patient", False)
 
-    def all_sessions(self) -> dict:
-        """Return a snapshot of the full session registry."""
-        return {
-            sid: {
-                "track_id":   e["track_id"],
-                "last_seen":  e["last_seen"],
-                "is_patient": e.get("is_patient", False),
-            }
-            for sid, e in self._registry.items()
-        }
+        emb = self._embedder.embed(crop)
+        with self._lock:
+            return self._state.add_candidate(emb)
 
-    def sync_active_tracks(self, active_track_ids: set[int]):
+    def reset_enrollment(self):
+        with self._lock:
+            self._state.reset()
+        self._last_persons = []
+        self._last_event   = None
+
+    # ── Per-frame tracking ────────────────────────────────────────────────────
+
+    def process_frame(
+        self,
+        frame_bgr:     np.ndarray,
+        person_bboxes: Optional[list[tuple[int, int, int, int]]] = None,
+    ) -> Optional[ReIDEvent]:
         """
-        Remove stale track_id → session mappings for tracks no longer reported
-        by the tracker. Call once per frame after tracker.update().
-        """
-        stale = [tid for tid in self._track_to_session if tid not in active_track_ids]
-        for tid in stale:
-            self.remove_track(tid)
+        Multi-person tracking pass.
 
+        person_bboxes: optional external detections (e.g. from run_detection).
+                       If provided, YOLO is skipped and these bboxes are used.
+                       Useful if run_detection already runs on each frame.
+                       If None (default), YOLO runs internally.
+        """
+        with self._lock:
+            if not self._state.is_enrolled:
+                return None
+            ref_emb = self._state.embedding
+
+        fh, fw = frame_bgr.shape[:2]
+
+        # Use external bboxes if provided, otherwise run YOLO
+        if person_bboxes is not None:
+            persons = [
+                {"bbox": bbox, "score": 1.0}
+                for bbox in person_bboxes
+            ]
+        else:
+            persons = self._detector.detect(frame_bgr)
+
+        self._last_persons = persons
+
+        # ── Primary path: per-person embedding loop ───────────────────────────
+        if persons:
+            best_sim  = -1.0
+            best_bbox = None
+
+            for person in persons:
+                x, y, w, h = person["bbox"]
+                crop = frame_bgr[max(y, 0):min(y+h, fh), max(x, 0):min(x+w, fw)]
+                if crop.size == 0:
+                    continue
+
+                emb = self._embedder.embed(crop)
+                sim = cosine_similarity(ref_emb, emb)
+
+                log.debug(
+                    f"Person {person['bbox']}  "
+                    f"det={person['score']:.2f}  sim={sim:.3f}"
+                )
+
+                if sim > best_sim:
+                    best_sim  = sim
+                    best_bbox = person["bbox"]
+
+            # Persons detected but none match → enrolled person NOT here
+            if best_sim >= self._thresh:
+                confidence = "high" if best_sim >= BODY_HIGH_CONF_THRESH else "low"
+                return self._maybe_emit(
+                    frame_bgr, best_sim, best_bbox,
+                    match_type="body_crop", confidence=confidence,
+                )
+
+            log.debug(
+                f"Persons detected, no match  "
+                f"(best={best_sim:.3f} < {self._thresh})  "
+                f"enrolled person NOT in frame"
+            )
+            return None
+
+        # ── Fallback: YOLO found nobody ───────────────────────────────────────
+        crop, bbox = extract_center_body_crop(frame_bgr)
+        if crop.size == 0:
+            return None
+
+        emb = self._embedder.embed(crop)
+        sim = cosine_similarity(ref_emb, emb)
+
+        if sim >= self._fb_thresh:
+            return self._maybe_emit(
+                frame_bgr, sim, bbox,
+                match_type="body_fallback", confidence="low",
+            )
+
+        return None
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _maybe_emit(
+        self,
+        frame_bgr:  np.ndarray,
+        similarity: float,
+        bbox:       tuple,
+        match_type: str,
+        confidence: str,
+    ) -> Optional[ReIDEvent]:
+        now = time.time()
+        if (now - self._last_reid) < self._cooldown:
+            return None
+
+        self._last_reid = now
+        event = ReIDEvent(
+            timestamp  = now,
+            similarity = similarity,
+            bbox       = bbox,
+            frame      = frame_bgr.copy(),
+            match_type = match_type,
+            confidence = confidence,
+        )
+        self._last_event = event
+        log.success(
+            f"ReID  [{match_type}]  sim={similarity:.3f}  "
+            f"confidence={confidence}  bbox={bbox}"
+        )
+        if self._callback:
+            self._callback(event)
+        return event
+
+    # ── Debug overlay ─────────────────────────────────────────────────────────
+
+    def draw_debug(
+        self,
+        frame_bgr:     np.ndarray,
+        event:         Optional[ReIDEvent] = None,
+        person_bboxes: Optional[list[tuple[int, int, int, int]]] = None,
+    ):
+        """
+        Blue box  — detected person, no match
+        Green box — matched person (enrolled)
+        Top-right — enrollment status
+        Top-left  — ReID score when triggered
+        """
+        active_event = event or self._last_event
+
+        for person in self._last_persons:
+            x, y, w, h = person["bbox"]
+            matched = (
+                active_event is not None
+                and active_event.match_type == "body_crop"
+                and person["bbox"] == active_event.bbox
+            )
+            color = (0, 220, 0) if matched else (220, 100, 0)
+            cv2.rectangle(frame_bgr, (x, y), (x + w, y + h), color, 2)
+            cv2.putText(
+                frame_bgr,
+                f"{person['score']:.2f}",
+                (x, max(y - 6, 12)),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1,
+            )
+
+        if active_event:
+            label = (
+                f"MATCH [{active_event.match_type}] "
+                f"{active_event.similarity:.2f} [{active_event.confidence}]"
+            )
+            cv2.putText(
+                frame_bgr, label,
+                (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 220, 0), 2,
+            )
+
+        with self._lock:
+            buffered = len(self._state.embeddings_buffer)
+            enrolled = self._state.is_enrolled
+
+        status = f"ENROLLED" if enrolled else f"ENROLLING {buffered}/{ENROLL_N_FRAMES}"
+        color  = (0, 220, 0) if enrolled else (0, 165, 255)
+        font, fs, th = cv2.FONT_HERSHEY_SIMPLEX, 0.65, 2
+        (tw, _), bl = cv2.getTextSize(status, font, fs, th)
+        m = 10
+        cv2.putText(
+            frame_bgr, status,
+            (max(m, frame_bgr.shape[1] - tw - m), max(25, m + bl)),
+            font, fs, color, th,
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# FACTORY
+# ═══════════════════════════════════════════════════════════════════════════
+
+def build_reid_service(
+    yolo_path:         str   = _DEFAULT_YOLO_PATH,
+    embedder_path:     str   = _DEFAULT_REID_PATH,
+    use_trt:           bool  = False,
+    similarity_thresh: float = BODY_SIMILARITY_THRESH,
+    on_reid_callback:  Optional[Callable[[ReIDEvent], None]] = None,
+) -> ReIDService:
+    """
+    Factory for the body-detector ReID service.
+
+    Args:
+        yolo_path:         Path to yolov8n.onnx
+        embedder_path:     Path to resnet50_market1501_aicity156.onnx
+        use_trt:           Reserved for future TRT path
+        similarity_thresh: Cosine similarity gate for body crops
+        on_reid_callback:  Called with ReIDEvent when enrolled person detected
+    """
+    detector = YOLOPersonDetector(yolo_path)
+    embedder = ResNet50ReIDEmbedder(embedder_path)
+
+    return ReIDService(
+        person_detector    = detector,
+        embedder           = embedder,
+        similarity_thresh  = similarity_thresh,
+        on_reid_callback   = on_reid_callback,
+    )
