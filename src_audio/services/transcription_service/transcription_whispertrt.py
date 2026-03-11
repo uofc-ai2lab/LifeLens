@@ -6,7 +6,8 @@ from datetime import datetime, timedelta
 import torch
 import gc
 import psutil
-from transformers import pipeline
+from transformers import pipeline, WhisperForConditionalGeneration, WhisperProcessor
+from peft import PeftModel
 
 from src_audio.utils.export_to_csv import export_to_csv
 from src_audio.domain.constants import CHUNK_SECONDS
@@ -18,6 +19,18 @@ log = Logger("[audio][transcription]")
 # Persistent global storage
 _WHISPER_PIPE = None  # fine-tuned model (HF Pipeline)
 _WHISPER_FALLBACK = None  # Original OpenAI Whisper
+_WHISPER_PIPE_MODEL_PATH = None
+
+_WHISPER_BASE_MODEL_MAP = {
+    "tiny": "openai/whisper-tiny",
+    "base": "openai/whisper-base",
+    "small": "openai/whisper-small",
+    "medium": "openai/whisper-medium",
+    "large": "openai/whisper-large-v3",
+}
+
+# At the top of transcription_service.py
+_SERVICE_DIR = Path(__file__).resolve().parent  # always points to transcription_service/
 _STARTING_TIME_SECONDS = 1
 _CURRENT_RECORDING_KEY = None
 
@@ -27,20 +40,16 @@ _RECORDING_FILENAME_PATTERN = re.compile(
 
 
 def normalize_whisper_segments(segments, base_datetime: datetime = None):
-    """
-    Convert Whisper segments to real-time clock timestamps.
-    base_datetime: The actual wall-clock time when the audio recording STARTED.
-    """
     if base_datetime is None:
-        # Fallback to 'now' if no start time is provided
         base_datetime = datetime.now()
-        log.warning(
-            "No base_datetime provided. Timestamps will be relative to current execution time."
-        )
+        log.warning("No base_datetime provided. Timestamps will be relative to current execution time.")
+
+    log.debug(f"Normalizing {len(segments)} segments. Sample raw segment: {segments[0] if segments else 'N/A'}")
 
     normalized = []
-    for seg in segments:
-        # 1. Get relative offsets from Whisper
+    for i, seg in enumerate(segments):
+        import datetime as dt
+
         rel_start = (
             seg.get("start")
             if seg.get("start") is not None
@@ -49,7 +58,7 @@ def normalize_whisper_segments(segments, base_datetime: datetime = None):
         rel_end = (
             seg.get("end")
             if seg.get("end") is not None
-            else seg.get("timestamp", [0, 0])[1]
+            else seg.get("timestamp", [None, None])[1]
         )
 
         # 2. Add relative seconds to the base datetime
@@ -108,29 +117,96 @@ def get_chunk_advance_seconds(audio_file: str) -> float:
 
 
 def load_fine_tuned_whisper(model_path: str):
-    """Loads the fine-tuned Whisper model via HF Pipeline."""
-    global _WHISPER_PIPE
-    if _WHISPER_PIPE is not None:
+    """Loads the fine-tuned Whisper LoRA model via HF Pipeline."""
+    global _WHISPER_PIPE, _WHISPER_PIPE_MODEL_PATH
+
+    resolved_model_path = str(Path(model_path).resolve())
+    if _WHISPER_PIPE is not None and _WHISPER_PIPE_MODEL_PATH == resolved_model_path:
         return _WHISPER_PIPE
 
     log.info(f"Loading Fine-Tuned Whisper model (FP16 optimized) from: {model_path}")
     try:
-        device = 0 if torch.cuda.is_available() else -1
-        # Similar to your Parakeet setup, we force FP16 for memory efficiency
+        cuda_available = torch.cuda.is_available()
+        dtype = torch.float16 if cuda_available else torch.float32
+
+        # Processor always lives in root adapter dir, not inside checkpoint subfolders
+        processor_path = str(Path(resolved_model_path).parent) \
+            if "checkpoint-" in resolved_model_path else resolved_model_path
+
+        log.info(f"Adapter path:   {resolved_model_path}")
+        log.info(f"Processor path: {processor_path}")
+
+        # Infer base model size from path
+        model_path_lower = resolved_model_path.lower()
+        base_model_name = next(
+            (hf for key, hf in _WHISPER_BASE_MODEL_MAP.items() if key in model_path_lower),
+            _WHISPER_BASE_MODEL_MAP["base"]
+        )
+        log.info(f"Inferred base model: {base_model_name}")
+
+        # Step 1: Load base model — no device_map, keeps accelerate out entirely
+        base_model = WhisperForConditionalGeneration.from_pretrained(
+            base_model_name,
+            torch_dtype=dtype,
+            low_cpu_mem_usage=True,
+        )
+
+        # Step 2: Merge LoRA weights on CPU
+        model = PeftModel.from_pretrained(base_model, resolved_model_path)
+        model = model.merge_and_unload()
+        model.eval()
+
+        # Step 3: Fix generation config to suppress warnings and lock to English
+        model.generation_config.forced_decoder_ids = None
+        model.generation_config.language = "en"
+        model.generation_config.task = "transcribe"
+
+        # Step 4: Move merged model to GPU after merge is complete
+        if cuda_available:
+            import ctypes
+            gc.collect()
+            gc.collect()
+            ctypes.CDLL("libc.so.6").malloc_trim(0)
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+
+            free_mem = torch.cuda.mem_get_info()[0] / 1e9
+            log.info(f"Free CUDA memory before GPU move: {free_mem:.2f}GB")
+
+            model = model.to("cuda", dtype=dtype)
+
+        log.info(f"Model device: {next(model.parameters()).device}")
+
+        processor = WhisperProcessor.from_pretrained(processor_path)
+
+        # Step 5: Build pipeline — device=0 safe since accelerate was never involved
         _WHISPER_PIPE = pipeline(
             "automatic-speech-recognition",
-            model=model_path,
+            model=model,
+            feature_extractor=processor.feature_extractor,
+            tokenizer=processor.tokenizer,
             chunk_length_s=30,
-            device=device,
-            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            stride_length_s=5,         # reduce chunk overlap to prevent segment duplication
+            dtype=dtype,
+            device=0 if cuda_available else -1,
+            ignore_warning=True,
+            generate_kwargs={
+                "language": "en",
+                "task": "transcribe",
+                "no_repeat_ngram_size": 3,   # prevents "so, so, so..." loops
+                "repetition_penalty": 1.05,    # penalises repeated tokens
+                "temperature": 0.0,           # greedy decode, no randomness
+            }
         )
-        log.success("Fine-tuned Whisper pipeline loaded successfully in FP16 mode")
+        _WHISPER_PIPE_MODEL_PATH = resolved_model_path
+        log.info("Fine-tuned Whisper pipeline loaded successfully on GPU")
         return _WHISPER_PIPE
+
     except Exception as e:
+        _WHISPER_PIPE = None
+        _WHISPER_PIPE_MODEL_PATH = None
         log.error(f"Error loading Fine-Tuned Whisper: {e}")
         return None
-
-
 def load_whisper_fallback(model_size="base"):
     """Lazy-loads original OpenAI Whisper as a safety net."""
     global _WHISPER_FALLBACK
@@ -231,11 +307,14 @@ def transcribe_audio(audio_file: str, model_obj, model_type: str):
         raise e
 
 
-def run_transcription(audio_chunk_file, model_path="whisper-medical-final"):
+def run_transcription(audio_chunk_file, model_path=None):
+    if model_path is None:
+        model_path = str(_SERVICE_DIR / "models/whisper-base-medical-lora/checkpoint-3000")
+    
     global _STARTING_TIME_SECONDS
     global _CURRENT_RECORDING_KEY
 
-    log.info("Starting Transcription Pipeline")
+    log.info(f"Resolved model path: {model_path}") 
 
     # Memory Check
     available_gb = psutil.virtual_memory().available / (1024**3)
