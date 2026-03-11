@@ -194,7 +194,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
     body_thresh = float(
         settings.get(
             "REID_BODY_THRESHOLD",
-            settings.get("REID_THRESHOLD", 0.72),
+            settings.get("REID_THRESHOLD", 0.75),
         )
     )
 

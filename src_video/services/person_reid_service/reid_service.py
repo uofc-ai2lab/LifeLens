@@ -112,7 +112,7 @@ BODY_FALLBACK_THRESH        = 0.77   # fallback path (no YOLO detections)
 
 # ── Enrollment ────────────────────────────────────────────────────────────
 ENROLL_N_FRAMES  = 8
-REID_COOLDOWN_S  = 2.0
+REID_COOLDOWN_S  = 5.0
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -563,14 +563,19 @@ class ReIDService:
                 emb = self._embedder.embed(crop)
                 sim = cosine_similarity(ref_emb, emb)
 
-                log.debug(
-                    f"Person {person['bbox']}  "
-                    f"det={person['score']:.2f}  sim={sim:.3f}"
-                )
+                # log.debug(
+                #     f"Person {person['bbox']} "
+                #     f"det={person['score']:.2f} sim={sim:.3f}"
+                # )
 
                 if sim > best_sim:
                     best_sim  = sim
                     best_bbox = person["bbox"]
+            
+            log.debug(
+                    f"Person {best_bbox} "
+                    f"det={person['score']:.2f} sim={best_sim:.3f}"
+                )
 
             # Persons detected but none match → enrolled person NOT here
             if best_sim >= self._thresh:
@@ -579,13 +584,13 @@ class ReIDService:
                     frame_bgr, best_sim, best_bbox,
                     match_type="body_crop", confidence=confidence,
                 )
-
-            log.debug(
-                f"Persons detected, no match  "
-                f"(best={best_sim:.3f} < {self._thresh})  "
-                f"enrolled person NOT in frame"
-            )
-            return None
+            else:
+                log.debug(
+                    f"Persons detected, no match "
+                    f"(best={best_sim:.3f}<{self._thresh}) "
+                    f"enrolled person NOT in frame"
+                )
+                return None
 
         # ── Fallback: YOLO found nobody ───────────────────────────────────────
         crop, bbox = extract_center_body_crop(frame_bgr)
@@ -628,8 +633,8 @@ class ReIDService:
         )
         self._last_event = event
         log.success(
-            f"ReID  [{match_type}]  sim={similarity:.3f}  "
-            f"confidence={confidence}  bbox={bbox}"
+            f"ReID [{match_type}] sim={similarity:.3f} "
+            f"confidence={confidence} bbox={bbox}"
         )
         if self._callback:
             self._callback(event)
@@ -667,16 +672,6 @@ class ReIDService:
                 cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1,
             )
 
-        if active_event:
-            label = (
-                f"MATCH [{active_event.match_type}] "
-                f"{active_event.similarity:.2f} [{active_event.confidence}]"
-            )
-            cv2.putText(
-                frame_bgr, label,
-                (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 220, 0), 2,
-            )
-
         with self._lock:
             buffered = len(self._state.embeddings_buffer)
             enrolled = self._state.is_enrolled
@@ -686,11 +681,27 @@ class ReIDService:
         font, fs, th = cv2.FONT_HERSHEY_SIMPLEX, 0.65, 2
         (tw, _), bl = cv2.getTextSize(status, font, fs, th)
         m = 10
+        status_x = max(m, frame_bgr.shape[1] - tw - m)
+        status_y = max(25, m + bl)
         cv2.putText(
             frame_bgr, status,
-            (max(m, frame_bgr.shape[1] - tw - m), max(25, m + bl)),
+            (status_x, status_y),
             font, fs, color, th,
         )
+
+        if active_event:
+            label = (
+                f"MATCH [{active_event.match_type}] "
+                f"{active_event.similarity:.2f} [{active_event.confidence}]"
+            )
+            label_font, label_fs, label_th = cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2
+            (lw, lh), lbl_bl = cv2.getTextSize(label, label_font, label_fs, label_th)
+            label_x = max(m, frame_bgr.shape[1] - lw - m)
+            label_y = status_y + lh + lbl_bl + 8
+            cv2.putText(
+                frame_bgr, label,
+                (label_x, label_y), label_font, label_fs, (0, 220, 0), label_th,
+            )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
