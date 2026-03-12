@@ -10,16 +10,17 @@ from typing import Optional
 import signal
 
 from config.audio_settings import AUDIO_CHUNKS_DIR, PROCESSED_AUDIO_DIR
+from src_audio.domain.constants import AUDIT_COLUMNS
 from src_audio.services.transcription_service.transcription_whispertrt import run_transcription
 from src_audio.services.anonymization_service.transcript_anonymization import run_anonymization
-from src_audio.services.medication_extraction_service.medication_extraction import run_medication_extraction
+from src_audio.services.medication_extraction_service.medication_extraction import run_medication_extraction, MedicationStateTracker
 from src_audio.services.intervention_extraction_service.intervention_extraction import run_intervention_extraction
 from src_audio.services.recording_audio_service.gstreamer_audio_pipeline import record_one_chunk
 from config.jetson_startup import run_jetson_startup_tasks
 from config.audio_settings import USAGE_FILE_PATH
 from config.resource_usage import start_monitoring, stop_monitoring
 from config.logger import audio_logger as log
-
+from src_audio.utils.export_to_csv import export_to_csv
 
 def put_latest(queue: Queue, item):
     """Drop old signal if queue is full, keep newest."""
@@ -30,6 +31,9 @@ def put_latest(queue: Queue, item):
             pass
     queue.put(item)
 
+# creating global tracker and audit log object instance to maintain state across chunks (for medication extraction)
+medication_tracker = MedicationStateTracker()
+audit_log = []
 
 def move_chunk_to_processed(chunk_path: Path) -> Path:
     """
@@ -66,7 +70,7 @@ def process_audio_chunk() -> bool:
 
         transcript_path = run_transcription(str(chunk_path))
         run_anonymization(str(chunk_path), transcript_path)
-        run_medication_extraction(str(chunk_path), transcript_path)
+        run_medication_extraction(str(chunk_path), transcript_path, medication_tracker, audit_log)
         run_intervention_extraction(str(chunk_path), transcript_path)
         log.success(f"{chunk_path.name} processed")
         return True
@@ -118,6 +122,15 @@ def main(
         start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
         process_audio_chunk()
         stop_monitoring()
+        # Export audit log entries produced (if any)
+        if audit_log:
+            export_to_csv(
+                data=audit_log,
+                audio_chunk_path=Path(PROCESSED_AUDIO_DIR),
+                service="medX_audit",
+                columns=AUDIT_COLUMNS,
+                empty_ok=False,
+            )
         return 0
     
     log.header("Audio Pipeline Starting")
@@ -176,6 +189,16 @@ def main(
     finally:
         log.info("Recording stopped, waiting for processing...")
         audio_queue.join()
+
+         # Export audit log entries produced (if any)
+        if audit_log:
+            export_to_csv(
+                data=audit_log,
+                audio_chunk_path=Path(PROCESSED_AUDIO_DIR),
+                service="medX_audit",
+                columns=AUDIT_COLUMNS,
+                empty_ok=False,
+            )
 
         log.info("Processing finished, shutting down worker...")
         audio_queue.put("STOP")

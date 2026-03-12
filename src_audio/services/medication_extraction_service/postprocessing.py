@@ -1,125 +1,389 @@
 import re
 from functools import lru_cache
-from src_audio.domain.constants import ROUTES, DOSAGES, TEXT_NUMBERS, NUMBER_PATTERN, MEDICATIONS, LOW_CONFIDENCE_SCORE, HIGH_CONFIDENCE_SCORE
-from src_audio.domain.entities import MedicationEntity
+from rapidfuzz import process as fuzz_process, fuzz
+from src_audio.domain.constants import (
+    ROUTES, DOSAGES, TEXT_NUMBERS, NUMBER_PATTERN,
+    HIGH_CONFIDENCE_SCORE, DOSAGE_TOKEN_PATTERN,
+    PRE_NEGATION_TRIGGERS, POST_NEGATION_TRIGGERS,
+    REVISED_SIGNALS, ADMINISTERED_SIGNALS, QUESTIONED_SIGNALS,
+    CONSIDERED_SIGNALS, ORDERED_SIGNALS, FUZZY_CONF_SCALE, FUZZY_THRESHOLD,
+    LOW_CONFIDENCE_SCORE, ALIAS_TO_CANONICAL, CANONICAL_TO_DEFAULT_DOSAGE
+)
+from src_audio.domain.entities import MedicationEntity, MedicationAdministration
+
 
 @lru_cache(maxsize=1)
-def create_all_med_list(med_list=MEDICATIONS) -> list[str]:
+def create_all_med_list() -> list[str]:
     """
     Build one master list of all medication names including aliases.
     Cached to avoid recomputation for every sentence.
-    """
-    all_med_terms = set()
-    for med, aliases in med_list.items():
-        all_med_terms.add(med.lower())
-        for alias in aliases:
-            all_med_terms.add(alias.lower())
-            
-    return sorted(all_med_terms, key=len, reverse=True)
 
-def missed_medication_info(text, med_list):
-    """
-    Find medications in text that the NER model might have missed.
-    Args:
-        text (str): Input sentence or text.
-        med_list (list[str]): List of medication names to search for.
     Returns:
-        List[dict]: List of missed medications with keys: medication (str), start_index (int) 
+        list[str]: All medication terms sorted longest-first so that greedy
+        matching gives multi-word names precedence over single-word ones.
+    """
+    return sorted(ALIAS_TO_CANONICAL.keys(), key=len, reverse=True)
+
+
+def missed_medication_info(text: str, med_list: list[str]) -> list[dict]:
+    """
+    Detect medication mentions missed by the NER model.
+
+    Two-pass strategy:
+    1) Exact word-boundary regex match (high confidence).
+    2) Fuzzy n-gram matching (rapidfuzz) for transcription errors.
+
+    Returns a list of dicts with:
+        medication (str), start_idx (int),
+        score (float: 0.90 exact; proportional fuzzy),
+        match_type ("exact" | "fuzzy").
+
+    Args:
+        text (str): Original-case input text.
+        med_list (list[str]): Sorted medication terms.
+
+    Returns:
+        list[dict]: Detected medications (may be empty).
     """
     if not text:
         return []
-    pattern = r'\b(' + '|'.join(re.escape(term) for term in med_list) + r')\b' # regex from the medication list
+
+    # --- Pass 1: exact match ---
+    pattern = r'\b(' + '|'.join(re.escape(term) for term in med_list) + r')\b'
     med_regex = re.compile(pattern, re.IGNORECASE)
-    
-    matches = []
-    for match in med_regex.finditer(text): # Scan the sentence for exact word matches
-        matched_text = match.group(0)  # original case as in text
-        start_idx = match.start()
+
+    matches: list[dict] = []
+    covered: set[tuple[int, int]] = set()
+
+    for m in med_regex.finditer(text):
+        start, end = m.start(), m.end()
         matches.append({
-            "medication": matched_text,
-            "start_idx": start_idx,
+            "medication": m.group(0),
+            "start_idx":  start,
+            "score":      HIGH_CONFIDENCE_SCORE,  # 0.90 for exact dict match
+            "match_type": "exact",
         })
-    
+        covered.add((start, end))
+
+    # --- Pass 2: fuzzy match ---
+
+    # Build unigram, bigram, and trigram candidates.
+    # Multi-word names ("normal saline") need bigram candidates to be found.
+    word_spans = [
+        (m.start(), m.end())
+        for m in re.finditer(r'\S+', text)
+    ]
+
+    for n in range(1, 4):
+        for i in range(len(word_spans) - n + 1):
+            span_start = word_spans[i][0]
+            span_end = word_spans[i + n - 1][1]
+
+            # Skip if this candidate span overlaps ANY already-covered span.
+            if any(span_start < e and span_end > s for s, e in covered):
+                continue
+
+            candidate = text[span_start:span_end].lower()
+            result = fuzz_process.extractOne(
+                candidate,
+                med_list,
+                scorer=fuzz.token_set_ratio,
+                score_cutoff=FUZZY_THRESHOLD,
+            )
+
+            if result:
+                matched_term, score, _ = result
+                candidate_alpha = re.sub(r'[^\w\s]', '', candidate)
+                length_ratio = len(candidate_alpha) / max(len(matched_term), 1)
+                if not (0.5 <= length_ratio <= 2.0):
+                    continue
+
+                confidence = round((score / 100) * FUZZY_CONF_SCALE, 3)
+                matches.append({
+                    "medication": text[span_start:span_end],  # original case
+                    "start_idx":  span_start,
+                    "score":      confidence,
+                    "match_type": "fuzzy",
+                })
+                covered.add((span_start, span_end))
+
     return matches
 
-def ensure_proper_medication_name(entities, sentence):
-    """
-    Correct partial or cut-off medication names using the sentence context.
-    Args:
-        entities (list[MedicationEntity]): NER-extracted entities.
-        sentence (str): Original sentence.
-    Returns:
-        list[MedicationEntity]: Entities with corrected medication names.
-    """
-    for ent in entities:
-        found_med = ent.word
-        tokens = re.findall(r"[\w'-]+", sentence)
-        if found_med not in tokens:
-            start_idx = ent.start_idx
-            end_idx = start_idx
-            while end_idx < len(sentence) and not sentence[end_idx].isspace():
-                end_idx += 1
-            ent.word = sentence[start_idx:end_idx]
-            
-    return entities
 
-def postprocess_entities(entities, sentence):
+def _is_duplicate(
+    word: str,
+    start_idx: int,
+    already_found: list[tuple[str, int]]
+) -> bool:
     """
-    Add any missed medications from a master list and ensure proper spans.
+    Return True if the word is a near-duplicate of a previously found match.
+
+    Duplicates are the same lowercase word occurring within 4 characters
+    of an existing start index.
+
     Args:
-        entities (list[MedicationEntity]): NER-extracted entities.
-        sentence (str): Original sentence.
+        word (str): Candidate medication word.
+        start_idx (int): Character index of the candidate word.
+        already_found (list[tuple[str, int]]): List containing words already found by NER
+
     Returns:
-        list[MedicationEntity]: Fully post-processed entities.
+        bool: True if a duplicate a duplicate is found, False otherwise.
+
     """
+    word_lower = word.lower()
+    return any(
+        found_word == word_lower
+        # allow small position variance to account for minor tokenization differences
+        and abs(found_idx - start_idx) <= 4
+        for found_word, found_idx in already_found
+    )
+
+
+def postprocess_entities(
+    entities: list[MedicationEntity],
+    sentence: str,
+) -> list[MedicationEntity]:
+    """
+    Augment NER-detected medications with dictionary fallback matches.
+
+    Adds exact and fuzzy matches for medications the NER model may have
+    missed. Deduplicates by character position so repeated mentions are
+    preserved. Fuzzy matches retain their confidence scores.
+
+    Args:
+        entities (list[MedicationEntity]): Existing NER entities (mutated in place).
+        sentence (str): Original-case sentence text.
+
+    Returns:
+        list[MedicationEntity]: All entities sorted by start_idx.
+"""
     med_list = create_all_med_list()
-    already_found = {e.word.lower() for e in entities if e.entity.startswith("B-Medication")}
-    missed = missed_medication_info(sentence.lower(), med_list)
-    for m in missed:
-        if m["medication"].lower() not in already_found:
+
+    # Position-aware index of already-found drug entities.
+    # Stored as (normalised_word, start_idx) pairs.
+    # Two entries are the same span if they share the same word AND their
+    # positions are within 5 characters of each other.
+    already_found: list[tuple[str, int]] = [
+        (e.word.lower(), e.start_idx)
+        for e in entities
+        if e.entity == "DRUG"
+    ]
+
+    for m in missed_medication_info(sentence, med_list):
+        if not _is_duplicate(m["medication"], m["start_idx"], already_found):
             entities.append(MedicationEntity(
-                entity="MEDICATION",
+                entity="DRUG",
                 word=m["medication"],
                 start_idx=m["start_idx"],
-                score=HIGH_CONFIDENCE_SCORE
+                score=m["score"],
             ))
+            # Register so subsequent loop iterations don't double-add
+            already_found.append((m["medication"].lower(), m["start_idx"]))
+
     entities.sort(key=lambda e: e.start_idx)
-    return ensure_proper_medication_name(entities, sentence)
-        
-def fallback_dosage_or_route(sentence: str, med_start_idx: int, mode: str = "dosage") -> str | None:
+    return entities
+
+
+def _build_context_window(
+    sentence: str,
+    medication_word: str,
+    window_size: int = 7,
+) -> tuple[str, str]:
     """
-    Extract medication dosage or route if NER missed it.
-    
+    Return lowercased pre- and post-medication token windows.
+
+    Tokens are stripped of leading/trailing punctuation before matching,
+    so "epi?" aligns with "epi" and "ketamine." with "ketamine".
+
+    Args:
+        sentence (str): Input sentence (case-insensitive).
+        medication_word (str): Medication name to locate.
+        window_size (int): Tokens to include on each side.
+
+    Returns:
+        tuple[str, str]: (pre_window, post_window).
+        If the medication is not found, returns (sentence.lower(), "").
+    """
+    words_raw = sentence.lower().split()
+    # Strip sentence-boundary punctuation from each token for comparison, preserving internal characters like hyphens
+    words_clean = [re.sub(r'^[^\w]+|[^\w]+$', '', w) for w in words_raw]
+    med_tokens = [re.sub(r'^[^\w]+|[^\w]+$', '', t)
+                  for t in medication_word.lower().split()]
+    n = len(med_tokens)
+
+    for i in range(len(words_clean) - n + 1):
+        if words_clean[i:i + n] == med_tokens:
+            pre = " ".join(words_raw[max(0, i - window_size): i])
+            post = " ".join(
+                words_raw[i + n: min(len(words_raw), i + n + window_size)])
+            return pre, post
+
+    return sentence.lower(), ""
+
+
+def classify_intent(sentence: str, medication_word: str) -> str:
+    """
+    Classify the administration intent of a medication mention.
+
+    Uses a ±7-token rule-based context window and returns the highest-priority match:
+
+    Priority (high → low):
+        NEGATED > REVISED > ADMINISTERED > QUESTIONED > CONSIDERED > ORDERED (default)
+
+    Negation:
+        Pre- and post-negation triggers are evaluated only on their respective
+        sides of the medication to avoid cross-negation (e.g., "instead of").
+        Bare "no"/"not" use a 3-token proximity check.
+        "no" is ignored if a REVISED signal is present (e.g., "no wait").
+
+    Args:
+        sentence (str): Transcript segment.
+        medication_word (str): Medication as written.
+
+    Returns:
+        str: Intent label.
+    """
+    pre, post = _build_context_window(sentence, medication_word)
+    full_window = f"{pre} {post}"
+    sentence_lower = sentence.lower()
+
+    close_pre = pre.split()[-3:]
+
+    # Negation (highest priority)
+
+    # --- Broad pre-negation (unambiguous triggers in the pre-window) ---
+    if any(t in pre for t in PRE_NEGATION_TRIGGERS):
+        return "NEGATED"
+
+     # Close-range "no"
+    if "no" in close_pre and not any(r in sentence_lower for r in REVISED_SIGNALS):
+        return "NEGATED"
+
+    # Close-range "not"
+    if "not" in close_pre:
+        return "NEGATED"
+
+    # Post-negation
+    if any(t in post for t in POST_NEGATION_TRIGGERS):
+        return "NEGATED"
+
+    # --- Revision: correcting a previously recorded dosage/route ---
+    if any(s in sentence_lower for s in REVISED_SIGNALS):
+        return "REVISED"
+
+    # --- Administered: past-tense / confirmed delivery ---
+    if any(s in full_window for s in ADMINISTERED_SIGNALS):
+        return "ADMINISTERED"
+
+    # --- Questioned: verifying a prior administration ---
+    if any(s in sentence_lower for s in QUESTIONED_SIGNALS):
+        return "QUESTIONED"
+
+    # --- Considered: preparation or discussion without commitment ---
+    if any(s in full_window for s in CONSIDERED_SIGNALS):
+        return "CONSIDERED"
+
+    # --- Ordered: imperative instruction ---
+    if any(s in full_window for s in ORDERED_SIGNALS):
+        return "ORDERED"
+
+    # Default: treat an unqualified medication mention as an order
+    return "ORDERED"
+
+
+def _assign_dosage(window_text: str, med_record: MedicationAdministration) -> None:
+    """
+    Assign the first detected "<number> <unit>" dosage from text to a medication record.
+
+    Args:
+        window_text (str): Text to search for a dosage pattern.
+        med_record (MedicationAdministration): Record to update in place.
+
+    Returns:
+        None
+    """
+    tokens = [t.lower() for t in DOSAGE_TOKEN_PATTERN.findall(window_text)]
+
+    for i, token in enumerate(tokens):
+        if NUMBER_PATTERN.fullmatch(token):
+            number_value = token
+        elif token in TEXT_NUMBERS:
+            number_value = str(TEXT_NUMBERS[token])
+        else:
+            continue
+
+        if i + 1 < len(tokens) and tokens[i + 1] in DOSAGES:
+            med_record.dosage = f"{number_value} {tokens[i + 1]}"
+            med_record.dosage_score = LOW_CONFIDENCE_SCORE
+            return
+
+
+def _assign_route(window_text: str, med_record: MedicationAdministration) -> None:
+    """
+    Assign the first detected administration route from text to a medication record.
+
+    Args:
+        window_text (str): Text to search for a route token.
+        med_record (MedicationAdministration): Record to update in place.
+
+    Returns:
+        None
+    """
+    for token in re.findall(r"[a-z']+", window_text):
+        if token in ROUTES:
+            med_record.route = token
+            med_record.route_score = LOW_CONFIDENCE_SCORE
+            return
+
+
+def fallback_dosage_or_route(
+    sentence: str,
+    med_record: MedicationAdministration,
+    mode: str,
+) -> None:
+    """
+    Extract dosage or route from a ±5-word window if NER missed it.
+
     Args:
         sentence (str): Input sentence.
-        med_start_idx (int): Start index of medication in sentence.
-        mode (str): "dosage" or "route" — what to extract.
-        
+        med_record (MedicationAdministration): The record being built.
+        mode (str): "dosage" or "route".
+
     Returns:
-        Optional[str]: Extracted dosage or route, or None if not found.
+        None
     """
+
     text = sentence.lower()
-    after_med = text[med_start_idx:]
+    medication = med_record.medication.lower()
+
+    words = re.findall(r"\S+", text)
+    med_tokens = re.findall(r"\S+", medication)
+
+    if not med_tokens:
+        return
+
+    # Locate medication span
+    for i in range(len(words) - len(med_tokens) + 1):
+        if words[i:i + len(med_tokens)] == med_tokens:
+            med_word_index = i
+            break
+    else:
+        return  # medication not found
+
+    # Build ±5-word window
+    window_start = max(0, med_word_index - 5)
+    window_end = min(len(words), med_word_index + len(med_tokens) + 5)
+    window_text = " ".join(words[window_start:window_end])
 
     if mode == "dosage":
-        # Tokenize numbers, hyphens, slashes, and words
-        tokens = re.findall(r"\d+(?:\.\d+)?(?:/\d+)?|[a-z']+", after_med)
-        for i in range(len(tokens) - 1):
-            number_token, unit_token = tokens[i], tokens[i + 1]
-            
-            # Numeric check
-            is_number = NUMBER_PATTERN.fullmatch(number_token)
-            if not is_number and number_token in TEXT_NUMBERS:
-                is_number = True
+        _assign_dosage(window_text, med_record)
 
-            if is_number and unit_token in DOSAGES:
-                return f"{number_token} {unit_token}"
-    
     elif mode == "route":
-        # Tokenize words
-        tokens = re.findall(r"[a-z']+", after_med)
-        for token in tokens:
-            if token in ROUTES:
-                return token
-    
-    return None
+        _assign_route(window_text, med_record)
+
+
+def get_default_dosage(medication_name: str) -> str | None:
+    canonical = ALIAS_TO_CANONICAL.get(medication_name.lower())
+    if canonical is None:
+        return None
+    return CANONICAL_TO_DEFAULT_DOSAGE.get(canonical)

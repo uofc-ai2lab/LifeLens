@@ -124,12 +124,13 @@ If operating on a jetson-nano, install jetson-specific dependencies:
 python3 -m pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url=https://pypi.jetson-ai-lab.io/jp6/cu126
 pip install -r requirements-cuda.txt
 sudo pip install ultralytics --no-deps 
-sudo pip install deface --no-deps
+sudo pip install deface --no-
+sudo pip install https://huggingface.co/kormilitzin/en_core_med7_lg/resolve/main/en_core_med7_lg-any-py3-none-any.whl --no-deps
 sudo apt update
 sudo apt install -y python3-gi gir1.2-gstreamer-1.0 gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good
 sudo apt install -y evtest
-
 # Need to manually install ultralytics due to dependency issues 
+# Install med7 manually after installing requirements.txt. Including it in the file triggers spaCy warnings that stop the install. Use pip <=25 (pip 26+ causes errors).
 ```
 
 ###  Download MedCAT Model (One-Time Setup) - for Medication Intervention
