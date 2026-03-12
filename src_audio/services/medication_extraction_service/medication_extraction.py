@@ -3,11 +3,13 @@ from src_audio.utils.export_to_csv import export_to_csv
 from src_audio.utils.load_csv_file import load_csv_file
 import pandas as pd
 from src_audio.domain.constants import (
-    MED_COLUMNS, AUDIT_COLUMNS, SENTENCE_SPLIT, 
-    SENTENCE_END, DEFAULT_DOSAGE_SCORE, ALIAS_TO_CANONICAL
+    MED_COLUMNS, SENTENCE_SPLIT,SENTENCE_END, 
+    DEFAULT_DOSAGE_SCORE, ALIAS_TO_CANONICAL
 )
 from src_audio.domain.entities import MedicationEntity, MedicationAdministration
-from src_audio.services.medication_extraction_service.extractor import MedicationExtractor
+from src_audio.services.medication_extraction_service.extractor import (
+    MedicationExtractor,
+)
 from src_audio.services.medication_extraction_service.postprocessing import (
     postprocess_entities,
     fallback_dosage_or_route,
@@ -17,6 +19,7 @@ from src_audio.services.medication_extraction_service.postprocessing import (
 from config.logger import Logger
 
 log = Logger("[audio][medication]")
+
 
 def _resolve_canonical_name(word: str) -> str:
     """
@@ -31,8 +34,9 @@ def _resolve_canonical_name(word: str) -> str:
 
     Returns:
         str: Canonical lowercase name.
-    """    
+    """
     return ALIAS_TO_CANONICAL.get(word.lower(), word.lower())
+
 
 class MedicationStateTracker:
     """
@@ -44,21 +48,50 @@ class MedicationStateTracker:
 
     Skips emitting repeat mentions unless a revision signal is present.
     """
+
     def __init__(self) -> None:
         # Set of canonical lowercase medication names seen across all chunks
-        self._known: set[str] = set()
+        self._known: dict[str, float] = {}
 
-    def is_known(self, canonical: str) -> bool:
-        """Return True if this medication has been registered in a prior chunk."""
-        return canonical in self._known
-
-    def register(self, canonical: str) -> None:
+    def is_known(self, canonical: str, current_time, window_minutes: float = 3.0) -> bool:
+        """
+        Check if a medication has been registered within the time window.
+        Args:
+            canonical (str): Canonical medication name to check.        
+            current_time (str | int | float): Current timestamp in HH:MM:SS.mmm format or seconds.          
+            window_minutes (float): Time window in minutes to consider for suppression.
+        Returns:            
+            bool: True if the medication is known and within the time window, False otherwise.
+        """
+        if canonical not in self._known:
+            return False
+        elapsed_minutes = (self._to_seconds(current_time) - self._known[canonical]) / 60.0
+        return elapsed_minutes < window_minutes
+    
+    def register(self, canonical: str, timestamp) -> None:
         """Mark a medication as administered so future chunks can detect confirmations."""
-        self._known.add(canonical)
+        self._known[canonical] = self._to_seconds(timestamp)
 
     def reset_session(self) -> None:
         """Clear all state. Call between independent recording sessions."""
         self._known.clear()
+
+    def _to_seconds(self, timestamp) -> float:
+        """
+        Convert HH:MM:SS.mmm string to seconds, or pass through if already numeric.
+        Args:
+            timestamp (str | int | float): Time in HH:MM:SS.mmm format or already in seconds.
+        Returns:
+            float: Time in seconds.
+        """
+        if isinstance(timestamp, (int, float)):
+            return float(timestamp)
+        try:
+            h, m, s = timestamp.split(":")
+            return int(h) * 3600 + int(m) * 60 + float(s)
+        except Exception:
+            return 0.0
+
 
 def _assign_attrs_to_drugs(
     drug_ents: list[MedicationEntity],
@@ -87,34 +120,34 @@ def _assign_attrs_to_drugs(
 
     for attr in attr_ents:
         preceding = [d for d in sorted_drugs if d.start_idx < attr.start_idx]
-        owner     = preceding[-1] if preceding else sorted_drugs[0]
+        owner = preceding[-1] if preceding else sorted_drugs[0]
         assignment[owner.start_idx].append(attr)
 
     return assignment
 
-def _apply_fallbacks(
-        record: MedicationAdministration, 
-        text: str, 
-        allow_default: bool
-        ) -> None:
-        # Dosage
-        if not record.dosage:
-            fallback_dosage_or_route(text, record, mode="dosage")
-            dose = None
-            if not record.dosage and allow_default:
-                dose = get_default_dosage(record.medication)
-            if dose:
-                record.dosage = dose
-                record.dosage_score = DEFAULT_DOSAGE_SCORE
 
-        # Route
-        if not record.route:
-            fallback_dosage_or_route(text, record, mode="route")
+def _apply_fallbacks(
+    record: MedicationAdministration, text: str, allow_default: bool
+) -> None:
+    # Dosage
+    if not record.dosage:
+        fallback_dosage_or_route(text, record, mode="dosage")
+        dose = None
+        if not record.dosage and allow_default:
+            dose = get_default_dosage(record.medication)
+        if dose:
+            record.dosage = dose
+            record.dosage_score = DEFAULT_DOSAGE_SCORE
+
+    # Route
+    if not record.route:
+        fallback_dosage_or_route(text, record, mode="route")
+
 
 def build_medication_record(
-    drug_ent:  MedicationEntity,
+    drug_ent: MedicationEntity,
     attr_ents: list[MedicationEntity],
-    segment:   dict,
+    segment: dict,
 ) -> MedicationAdministration:
     """
     Create a MedicationAdministration record from a drug and its attributes.
@@ -130,9 +163,9 @@ def build_medication_record(
     Returns:
         MedicationAdministration: Populated record. Dosage and route are None
         if not provided.
-"""
+    """
     dosage_ent = next((e for e in attr_ents if e.entity == "DOSAGE"), None)
-    route_ent  = next((e for e in attr_ents if e.entity == "ROUTE"),  None)
+    route_ent = next((e for e in attr_ents if e.entity == "ROUTE"), None)
 
     return MedicationAdministration(
         medication=drug_ent.word,
@@ -144,6 +177,7 @@ def build_medication_record(
         start_time=segment["start_time"],
         end_time=segment["end_time"],
     )
+
 
 def extract_med_admins_with_confidence(
     segments: list[dict],
@@ -182,7 +216,9 @@ def extract_med_admins_with_confidence(
     accepted_entity_types: frozenset[str] = frozenset({"DRUG"})
 
     # Intents that proceed past the gate to record building
-    actionable_intents: frozenset[str] = frozenset({"ADMINISTERED", "ORDERED", "REVISED"})
+    actionable_intents: frozenset[str] = frozenset(
+        {"ADMINISTERED", "ORDERED", "REVISED"}
+    )
 
     # Within-chunk record store: canonical_name → MedicationAdministration
     chunk_records: dict[str, MedicationAdministration] = {}
@@ -203,13 +239,15 @@ def extract_med_admins_with_confidence(
             canonical = _resolve_canonical_name(drug_ent.word)
 
             if intent not in actionable_intents:
-                audit_log.append({
-                    "start_time": segment["start_time"],
-                    "end_time": segment["end_time"],
-                    "intent": intent,
-                    "medication": drug_ent.word,
-                    "original_text": text,
-                })
+                audit_log.append(
+                    {
+                        "start_time": segment["start_time"],
+                        "end_time": segment["end_time"],
+                        "intent": intent,
+                        "medication": drug_ent.word,
+                        "original_text": text,
+                    }
+                )
                 continue
 
             owned_attrs = attr_map[drug_ent.start_idx]
@@ -229,18 +267,29 @@ def extract_med_admins_with_confidence(
                 else:
                     chunk_records[canonical] = record
 
-                tracker.register(canonical)
+                tracker.register(canonical, record.start_time)
                 continue
 
             # Confirmation suppression
-            if canonical in chunk_records or tracker.is_known(canonical):
+            if canonical in chunk_records or tracker.is_known(canonical, record.start_time):
+                audit_log.append(
+                    {
+                        "start_time": segment["start_time"],
+                        "end_time": segment["end_time"],
+                        "intent": f"{intent} AND SUPRESSED AS DUPLICATE",
+                        "medication": drug_ent.word,
+                        "original_text": text,
+                    }
+                )
+                tracker.register(canonical, record.start_time) # update timestamp of the medication mention even if suppressed, to prevent future duplicates in the session
                 continue
 
             _apply_fallbacks(record, text, allow_default=True)
             chunk_records[canonical] = record
-            tracker.register(canonical)
+            tracker.register(canonical, record.start_time)
 
     return list(chunk_records.values())
+
 
 def prepare_medication_rows(
     administrations: list[MedicationAdministration],
@@ -252,29 +301,29 @@ def prepare_medication_rows(
         administrations (list[MedicationAdministration]): Confirmed records.
 
     Returns:
-        list[MedicationAdministration]: List of finalized administrations with confidence scores.   
+        list[MedicationAdministration]: List of finalized administrations with confidence scores.
     """
     return [
         {
             "start_time": a.start_time,
-            "end_time":   a.end_time,
+            "end_time": a.end_time,
             "event_type": "medication",
             "medication (confidence score)": (
                 f"{a.medication} ({a.medication_score:.3f})"
-                if a.medication else "Not Found"
+                if a.medication
+                else "Not Found"
             ),
             "dosage (confidence score)": (
-                f"{a.dosage} ({a.dosage_score:.3f})"
-                if a.dosage else "Not Found"
+                f"{a.dosage} ({a.dosage_score:.3f})" if a.dosage else "Not Found"
             ),
             "route (confidence score)": (
-                f"{a.route} ({a.route_score:.3f})"
-                if a.route else "Not Found"
+                f"{a.route} ({a.route_score:.3f})" if a.route else "Not Found"
             ),
             "full_text": "",
         }
         for a in administrations
     ]
+
 
 def merge_incomplete_segments(df: pd.DataFrame) -> list[dict]:
     """
@@ -292,11 +341,11 @@ def merge_incomplete_segments(df: pd.DataFrame) -> list[dict]:
 
     Returns:
         list[dict]: Sentence-level segments with text, start_time, end_time.
-"""
+    """
     segments: list[dict] = []
-    buffer_text:  list[str] = []
+    buffer_text: list[str] = []
     buffer_start: str | None = None
-    buffer_end:   str | None = None
+    buffer_end: str | None = None
 
     for _, row in df.iterrows():
         # Split on mid-row sentence boundaries before buffering.
@@ -315,22 +364,27 @@ def merge_incomplete_segments(df: pd.DataFrame) -> list[dict]:
             buffer_end = row["end_time"]
 
             if SENTENCE_END.search(sub):
-                segments.append({
-                    "text":       " ".join(buffer_text),
-                    "start_time": buffer_start,
-                    "end_time":   buffer_end,
-                })
+                segments.append(
+                    {
+                        "text": " ".join(buffer_text),
+                        "start_time": buffer_start,
+                        "end_time": buffer_end,
+                    }
+                )
                 buffer_text, buffer_start, buffer_end = [], None, None
 
     # Trailing rows without terminal punctuation
     if buffer_text:
-        segments.append({
-            "text":       " ".join(buffer_text),
-            "start_time": buffer_start,
-            "end_time":   buffer_end,
-        })
+        segments.append(
+            {
+                "text": " ".join(buffer_text),
+                "start_time": buffer_start,
+                "end_time": buffer_end,
+            }
+        )
 
     return segments
+
 
 def run_medication_extraction(
     chunk_path: str,
@@ -362,7 +416,7 @@ def run_medication_extraction(
         tracker = MedicationStateTracker()
     if audit_log is None:
         audit_log = []
-
+    initial_audit_count: int = len(audit_log)
     extractor = MedicationExtractor()
     transcript_data = []
 
@@ -373,17 +427,19 @@ def run_medication_extraction(
     log.info(f"Merged into {len(segments)} sentence segment(s)")
 
     texts = [seg["text"] for seg in segments]
-    docs  = extractor.nlp.pipe(texts, batch_size=extractor.pipe_batch_size)
+    docs = extractor.nlp.pipe(texts, batch_size=extractor.pipe_batch_size)
 
     for seg, doc in zip(segments, docs):
         extracted_entities = extractor.extract_entities_from_doc(doc)
         extracted_entities = postprocess_entities(extracted_entities, seg["text"])
-        transcript_data.append({
-            "original_text": seg["text"],
-            "start_time":    seg["start_time"],
-            "end_time":      seg["end_time"],
-            "entities":      extracted_entities,
-        })
+        transcript_data.append(
+            {
+                "original_text": seg["text"],
+                "start_time": seg["start_time"],
+                "end_time": seg["end_time"],
+                "entities": extracted_entities,
+            }
+        )
 
     confirmed_admins = extract_med_admins_with_confidence(
         transcript_data, tracker, audit_log
@@ -398,17 +454,11 @@ def run_medication_extraction(
         columns=MED_COLUMNS,
         empty_ok=True,
     )
-    log.info(f"{len(rows)} confirmed medication(s) found")
 
-    # Export audit log entries produced by this chunk (if any)
-    if audit_log:
-        export_to_csv(
-            data=audit_log,
-            audio_chunk_path=Path(chunk_path),
-            service="medX_audit",
-            columns=AUDIT_COLUMNS,
-            empty_ok=False,
+    log.info(f"{len(rows)} confirmed medication(s) found")
+    if initial_audit_count < len(audit_log):
+        log.info(
+            f"{len(audit_log) - initial_audit_count} non-administered event(s) logged for audit review."
         )
-        log.info(f"{len(audit_log)} non-administered event(s) written to audit log")
 
     log.success("Medication extraction completed successfully!")

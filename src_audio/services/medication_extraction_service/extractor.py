@@ -5,21 +5,25 @@ from config.logger import Logger
 
 log = Logger("[audio][medication]")
 
+
 class MedicationExtractor:
-    allowed_entities: frozenset[str] = frozenset({"DRUG", "DOSAGE", "ROUTE"}) # we ignore all other entities med7 gives us (FORM, FREQUENCY, DURATION)
-    map_to_dosage: dict[str, str] = {"STRENGTH": "DOSAGE"} # med7 puts numeric dose values in STRENGTH, but we want them under DOSAGE 
-    _MODEL_LG  = "en_core_med7_lg"
-        
+    # we ignore all other entities med7 gives us (FORM, FREQUENCY, DURATION)
+    allowed_entities: frozenset[str] = frozenset({"DRUG", "DOSAGE", "ROUTE"})
+    # med7 puts numeric dose values in STRENGTH, but we want them under DOSAGE
+    map_to_dosage: dict[str, str] = {"STRENGTH": "DOSAGE"}
+    _MODEL_LG = "en_core_med7_lg"
+
     def __init__(self):
         log.info("Initializing Med7 NER (LG model)")
-        
+
         try:
             self.nlp = spacy.load(self._MODEL_LG)
         except Exception as e:
-            log.error(f"Failed to load model. Please ensure you have the '{self._MODEL_LG}' model installed. Error details: {e}")
+            log.error(
+                f"Failed to load model. Please ensure you have the '{self._MODEL_LG}' model installed. Error details: {e}")
             exit(1)
-            
-        self.pipe_batch_size = 32 
+
+        self.pipe_batch_size = 32
         log.success(f"Med7 NER ready")
 
     def extract_entities_from_doc(self, doc) -> list[MedicationEntity]:

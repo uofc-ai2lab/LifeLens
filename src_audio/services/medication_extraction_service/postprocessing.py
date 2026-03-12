@@ -3,13 +3,14 @@ from functools import lru_cache
 from rapidfuzz import process as fuzz_process, fuzz
 from src_audio.domain.constants import (
     ROUTES, DOSAGES, TEXT_NUMBERS, NUMBER_PATTERN,
-    HIGH_CONFIDENCE_SCORE, DOSAGE_TOKEN_PATTERN, 
+    HIGH_CONFIDENCE_SCORE, DOSAGE_TOKEN_PATTERN,
     PRE_NEGATION_TRIGGERS, POST_NEGATION_TRIGGERS,
     REVISED_SIGNALS, ADMINISTERED_SIGNALS, QUESTIONED_SIGNALS,
     CONSIDERED_SIGNALS, ORDERED_SIGNALS, FUZZY_CONF_SCALE, FUZZY_THRESHOLD,
     LOW_CONFIDENCE_SCORE, ALIAS_TO_CANONICAL, CANONICAL_TO_DEFAULT_DOSAGE
 )
 from src_audio.domain.entities import MedicationEntity, MedicationAdministration
+
 
 @lru_cache(maxsize=1)
 def create_all_med_list() -> list[str]:
@@ -22,6 +23,7 @@ def create_all_med_list() -> list[str]:
         matching gives multi-word names precedence over single-word ones.
     """
     return sorted(ALIAS_TO_CANONICAL.keys(), key=len, reverse=True)
+
 
 def missed_medication_info(text: str, med_list: list[str]) -> list[dict]:
     """
@@ -47,7 +49,7 @@ def missed_medication_info(text: str, med_list: list[str]) -> list[dict]:
         return []
 
     # --- Pass 1: exact match ---
-    pattern   = r'\b(' + '|'.join(re.escape(term) for term in med_list) + r')\b'
+    pattern = r'\b(' + '|'.join(re.escape(term) for term in med_list) + r')\b'
     med_regex = re.compile(pattern, re.IGNORECASE)
 
     matches: list[dict] = []
@@ -75,7 +77,7 @@ def missed_medication_info(text: str, med_list: list[str]) -> list[dict]:
     for n in range(1, 4):
         for i in range(len(word_spans) - n + 1):
             span_start = word_spans[i][0]
-            span_end   = word_spans[i + n - 1][1]
+            span_end = word_spans[i + n - 1][1]
 
             # Skip if this candidate span overlaps ANY already-covered span.
             if any(span_start < e and span_end > s for s, e in covered):
@@ -95,7 +97,7 @@ def missed_medication_info(text: str, med_list: list[str]) -> list[dict]:
                 length_ratio = len(candidate_alpha) / max(len(matched_term), 1)
                 if not (0.5 <= length_ratio <= 2.0):
                     continue
-                
+
                 confidence = round((score / 100) * FUZZY_CONF_SCALE, 3)
                 matches.append({
                     "medication": text[span_start:span_end],  # original case
@@ -107,9 +109,10 @@ def missed_medication_info(text: str, med_list: list[str]) -> list[dict]:
 
     return matches
 
+
 def _is_duplicate(
-    word: str, 
-    start_idx: int, 
+    word: str,
+    start_idx: int,
     already_found: list[tuple[str, int]]
 ) -> bool:
     """
@@ -130,9 +133,11 @@ def _is_duplicate(
     word_lower = word.lower()
     return any(
         found_word == word_lower
-        and abs(found_idx - start_idx) <= 4 # allow small position variance to account for minor tokenization differences
+        # allow small position variance to account for minor tokenization differences
+        and abs(found_idx - start_idx) <= 4
         for found_word, found_idx in already_found
     )
+
 
 def postprocess_entities(
     entities: list[MedicationEntity],
@@ -199,17 +204,18 @@ def _build_context_window(
         tuple[str, str]: (pre_window, post_window).
         If the medication is not found, returns (sentence.lower(), "").
     """
-    words_raw   = sentence.lower().split()
-    # Strip sentence-boundary punctuation from each token for comparison, preserving internal characters like hyphens 
+    words_raw = sentence.lower().split()
+    # Strip sentence-boundary punctuation from each token for comparison, preserving internal characters like hyphens
     words_clean = [re.sub(r'^[^\w]+|[^\w]+$', '', w) for w in words_raw]
     med_tokens = [re.sub(r'^[^\w]+|[^\w]+$', '', t)
-        for t in medication_word.lower().split()]
+                  for t in medication_word.lower().split()]
     n = len(med_tokens)
 
     for i in range(len(words_clean) - n + 1):
         if words_clean[i:i + n] == med_tokens:
             pre = " ".join(words_raw[max(0, i - window_size): i])
-            post = " ".join(words_raw[i + n: min(len(words_raw), i + n + window_size)])
+            post = " ".join(
+                words_raw[i + n: min(len(words_raw), i + n + window_size)])
             return pre, post
 
     return sentence.lower(), ""
@@ -244,11 +250,11 @@ def classify_intent(sentence: str, medication_word: str) -> str:
     close_pre = pre.split()[-3:]
 
     # Negation (highest priority)
-    
+
     # --- Broad pre-negation (unambiguous triggers in the pre-window) ---
     if any(t in pre for t in PRE_NEGATION_TRIGGERS):
         return "NEGATED"
-    
+
      # Close-range "no"
     if "no" in close_pre and not any(r in sentence_lower for r in REVISED_SIGNALS):
         return "NEGATED"
@@ -264,7 +270,7 @@ def classify_intent(sentence: str, medication_word: str) -> str:
     # --- Revision: correcting a previously recorded dosage/route ---
     if any(s in sentence_lower for s in REVISED_SIGNALS):
         return "REVISED"
-    
+
     # --- Administered: past-tense / confirmed delivery ---
     if any(s in full_window for s in ADMINISTERED_SIGNALS):
         return "ADMINISTERED"
@@ -283,6 +289,7 @@ def classify_intent(sentence: str, medication_word: str) -> str:
 
     # Default: treat an unqualified medication mention as an order
     return "ORDERED"
+
 
 def _assign_dosage(window_text: str, med_record: MedicationAdministration) -> None:
     """
@@ -310,6 +317,7 @@ def _assign_dosage(window_text: str, med_record: MedicationAdministration) -> No
             med_record.dosage_score = LOW_CONFIDENCE_SCORE
             return
 
+
 def _assign_route(window_text: str, med_record: MedicationAdministration) -> None:
     """
     Assign the first detected administration route from text to a medication record.
@@ -326,6 +334,7 @@ def _assign_route(window_text: str, med_record: MedicationAdministration) -> Non
             med_record.route = token
             med_record.route_score = LOW_CONFIDENCE_SCORE
             return
+
 
 def fallback_dosage_or_route(
     sentence: str,
@@ -371,6 +380,7 @@ def fallback_dosage_or_route(
 
     elif mode == "route":
         _assign_route(window_text, med_record)
+
 
 def get_default_dosage(medication_name: str) -> str | None:
     canonical = ALIAS_TO_CANONICAL.get(medication_name.lower())

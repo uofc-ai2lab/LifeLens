@@ -218,7 +218,7 @@ for _canonical, _info in MEDICATIONS.items():
 del _canonical, _info, _key, _alias
 
 ROUTES: frozenset[str] = frozenset({
-    "infusion", "iv", "intra-venous", "iv push", "ivp", "iv bolus", "ivb", "bolus",
+    "infusion", "iv", "intra-venous", "iv push", "ivp",
     "im", "intramuscular",
     "po", "oral",
     "pr", "rectal",

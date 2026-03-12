@@ -10,6 +10,7 @@ jetson-containers/
 simple_camera.py
 simple_out.py
 data/resource_usage.csv
+data/audio/medX_audit_audio.csv
 src_audio/services/transcription_service/models/
 resnet50_market1501_aicity156.onnx
 

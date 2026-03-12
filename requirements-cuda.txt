@@ -28,6 +28,9 @@ medcat~=1.16.0
 spacy>=3.7.1
 en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0.tar.gz
 
+# Medication Extraction
+rapidfuzz
+
 # LLM
 # google-genai>=1.56.0
 # pydantic>=2.9.0,<3.0
