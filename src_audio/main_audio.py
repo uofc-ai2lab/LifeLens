@@ -6,6 +6,8 @@ import threading
 from datetime import datetime
 from pathlib import Path
 from queue import Queue, Empty
+from typing import Optional
+import signal
 
 from config.audio_settings import AUDIO_CHUNKS_DIR, PROCESSED_AUDIO_DIR
 from src_audio.services.transcription_service.transcription_whispertrt import run_transcription
@@ -99,7 +101,11 @@ def processing_worker(queue: Queue):
     log.info("Processing worker stopped")
 
 
-def main() -> int:
+def main(
+    register_signal_handlers: bool = True,
+    external_stop_event: Optional[threading.Event] = None,
+    enable_enter: bool = True,
+) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dev", action="store_true")
     args = parser.parse_args()
@@ -123,19 +129,33 @@ def main() -> int:
     )
     worker.start()
 
-    stop_event = threading.Event()
+    stop_event = external_stop_event if external_stop_event is not None else threading.Event()
+    
+    if enable_enter:
+        def wait_for_enter():
+            input("\nPress ENTER to stop recording...\n")
+            stop_event.set()
+            log.info("Stop requested")
 
-    def wait_for_enter():
-        input("\nPress ENTER to stop recording...\n")
+        threading.Thread(target=wait_for_enter, daemon=True).start()
+
+    def _handle_stop(signum, frame):
+        log.info(f"Stop signal received ({signum})")
         stop_event.set()
-        log.info("Stop requested")
 
-    threading.Thread(target=wait_for_enter, daemon=True).start()
+    if register_signal_handlers and threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGTERM, _handle_stop)
+        signal.signal(signal.SIGINT, _handle_stop)
+    elif register_signal_handlers:
+        log.info("Signal handler registration skipped (non-main thread)")
 
     log.header("Audio Pipeline Started")
 
     try:
         while True:
+            if stop_event.is_set():
+                break
+
             chunk_written = record_one_chunk(
                 output_dir=AUDIO_CHUNKS_DIR,
                 stop_event=stop_event,
@@ -150,6 +170,7 @@ def main() -> int:
 
     except KeyboardInterrupt:
         log.info("Interrupted")
+        stop_event.set()
 
     finally:
         log.info("Recording stopped, waiting for processing...")

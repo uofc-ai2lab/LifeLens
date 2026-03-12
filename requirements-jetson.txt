@@ -64,3 +64,5 @@ pupil-apriltags>=1.0.4
 
 # Note: install WhisperTRT separately with:
 # cd /path/to/WhisperTRT && pip3 install -e .
+
+evdev
