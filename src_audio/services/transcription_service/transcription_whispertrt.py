@@ -13,6 +13,7 @@ from src_audio.utils.export_to_csv import export_to_csv
 from src_audio.domain.constants import CHUNK_SECONDS
 from config.logger import Logger
 from config.audio_settings import MODEL_CACHE_PATH
+from config.gpu_guard import gpu_exclusive
 
 log = Logger("[audio][transcription]")
 
@@ -33,6 +34,8 @@ _WHISPER_BASE_MODEL_MAP = {
 _SERVICE_DIR = Path(__file__).resolve().parent  # always points to transcription_service/
 _STARTING_TIME_SECONDS = 1
 _CURRENT_RECORDING_KEY = None
+_MIN_FREE_CUDA_GB = float(os.getenv("LIFELENS_MIN_FREE_CUDA_GB", "2.5"))
+_MIN_FREE_SYSTEM_GB = float(os.getenv("LIFELENS_MIN_FREE_SYSTEM_GB", "2.0"))
 
 _RECORDING_FILENAME_PATTERN = re.compile(
     r"^recording_(?P<date>\d{8})_(?P<time>\d{6})_chunk_(?P<chunk_index>\d+)\.[^.]+$"
@@ -127,7 +130,25 @@ def load_fine_tuned_whisper(model_path: str):
     log.info(f"Loading Fine-Tuned Whisper model (FP16 optimized) from: {model_path}")
     try:
         cuda_available = torch.cuda.is_available()
-        dtype = torch.float16 if cuda_available else torch.float32
+        use_cuda = cuda_available
+
+        if cuda_available:
+            try:
+                free_cuda_gb = torch.cuda.mem_get_info()[0] / 1e9
+            except Exception:
+                free_cuda_gb = 0.0
+
+            free_system_gb = psutil.virtual_memory().available / (1024**3)
+
+            if free_cuda_gb < _MIN_FREE_CUDA_GB or free_system_gb < _MIN_FREE_SYSTEM_GB:
+                use_cuda = False
+                log.warning(
+                    f"Insufficient memory headroom for GPU Whisper "
+                    f"(CUDA free {free_cuda_gb:.2f}GB, system free {free_system_gb:.2f}GB). "
+                    f"Using CPU for this pass."
+                )
+
+        dtype = torch.float16 if use_cuda else torch.float32
 
         # Processor always lives in root adapter dir, not inside checkpoint subfolders
         processor_path = str(Path(resolved_model_path).parent) \
@@ -162,7 +183,7 @@ def load_fine_tuned_whisper(model_path: str):
         model.generation_config.task = "transcribe"
 
         # Step 4: Move merged model to GPU after merge is complete
-        if cuda_available:
+        if use_cuda:
             import ctypes
             gc.collect()
             gc.collect()
@@ -188,7 +209,7 @@ def load_fine_tuned_whisper(model_path: str):
             chunk_length_s=30,
             stride_length_s=5,         # reduce chunk overlap to prevent segment duplication
             dtype=dtype,
-            device=0 if cuda_available else -1,
+            device=0 if use_cuda else -1,
             ignore_warning=True,
             generate_kwargs={
                 "language": "en",
@@ -199,7 +220,10 @@ def load_fine_tuned_whisper(model_path: str):
             }
         )
         _WHISPER_PIPE_MODEL_PATH = resolved_model_path
-        log.info("Fine-tuned Whisper pipeline loaded successfully on GPU")
+        if use_cuda:
+            log.info("Fine-tuned Whisper pipeline loaded successfully on GPU")
+        else:
+            log.info("Fine-tuned Whisper pipeline loaded successfully on CPU")
         return _WHISPER_PIPE
 
     except Exception as e:
@@ -350,8 +374,8 @@ def run_transcription(audio_chunk_file, model_path=None):
             f"Failed to parse recording base datetime from filename: {Path(audio_chunk_file).name}. "
             f"Ensure it follows the pattern 'recording_YYYYMMDD_HHMMSS_chunk_N.*'. Stopping transcription."
         )
-        return None
-
+        
+    recording_start_time = parsed_base_time if parsed_base_time else datetime.now()
     effective_chunk_base_time = recording_start_time + timedelta(
         seconds=_STARTING_TIME_SECONDS
     )
@@ -366,31 +390,31 @@ def run_transcription(audio_chunk_file, model_path=None):
         log.error("File does not exist or is invalid. Stopping transcription.")
         return None
 
-    # ==================== STEP 2: LOAD MODEL ====================
-    model = load_fine_tuned_whisper(model_path)
-    model_type = "fine_tuned"
-
-    if model is None:
-        log.warning("Primary Fine-Tuned model failed to load. Switching to Fallback.")
-        model = load_whisper_fallback()
-        model_type = "whisper_fallback"
-
-    if model is None:
-        log.error("CRITICAL: No transcription models could be loaded. Stopping.")
-        return None
-
-    log.info(f"Current audio file: {Path(audio_chunk_file).name}")
-
     total_start = datetime.now()
 
-    # ==================== STEP 3: TRANSCRIBE ====================
-    transcribe_start = datetime.now()
-    try:
-        result = transcribe_audio(audio_chunk_file, model, model_type)
-    except Exception as e:
-        log.error(f"TRANSCRIPTION FAILED after fallback: {e}")
-        return None
-    transcribe_end = datetime.now()
+    # ==================== STEP 2+3: LOAD + TRANSCRIBE (GPU-serialized) ====================
+    with gpu_exclusive("audio:transcription", logger=log):
+        model = load_fine_tuned_whisper(model_path)
+        model_type = "fine_tuned"
+
+        if model is None:
+            log.warning("Primary Fine-Tuned model failed to load. Switching to Fallback.")
+            model = load_whisper_fallback()
+            model_type = "whisper_fallback"
+
+        if model is None:
+            log.error("CRITICAL: No transcription models could be loaded. Stopping.")
+            return None
+
+        log.info(f"Current audio file: {Path(audio_chunk_file).name}")
+
+        transcribe_start = datetime.now()
+        try:
+            result = transcribe_audio(audio_chunk_file, model, model_type)
+        except Exception as e:
+            log.error(f"TRANSCRIPTION FAILED after fallback: {e}")
+            return None
+        transcribe_end = datetime.now()
 
     # ==================== STEP 4: CHECK & NORMALIZE ====================
     verified_segments = verify_transcription_output(result)

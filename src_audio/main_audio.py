@@ -65,6 +65,10 @@ def process_audio_chunk() -> bool:
         log.info(f"Moved to processed dir: {chunk_path}")
 
         transcript_path = run_transcription(str(chunk_path))
+        if transcript_path is None:
+            log.error("Transcription failed; skipping anonymization and extraction for this chunk.")
+            return False
+
         run_anonymization(str(chunk_path), transcript_path)
         run_medication_extraction(str(chunk_path), transcript_path)
         run_intervention_extraction(str(chunk_path), transcript_path)
