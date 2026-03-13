@@ -14,6 +14,7 @@ from config.jetson_startup import run_jetson_startup_tasks
 from config.resource_usage import start_monitoring, stop_monitoring
 from config.audio_settings import USAGE_FILE_PATH
 from config.logger import video_logger as log
+from config.gpu_guard import gpu_exclusive
 from config.video_settings import (
     load_video_pipeline_settings,
     SNAPSHOT_INTERVAL,
@@ -48,46 +49,47 @@ def put_latest(queue: Queue, item):
 
 def process_single_image(settings: Dict[str, Any]) -> bool:
     try:
-        run_detection(
-            model=settings["DETECTION_MODEL"],
-            source=_as_posix(IMAGE_SAVE_DIR),
-            output=_as_posix(settings["DETECTION_OUTPUT"]),
-            classes=settings["CLASSES"],
-            margin=float(settings["MARGIN"]),
-            min_area=int(settings["MIN_AREA"]),
-            device=settings.get("DEVICE"),
-            add_head=bool(settings["ADD_HEAD"]),
-            debug=bool(settings["DEBUG"]),
-            alpha_png=bool(settings["ALPHA_PNG"]),
-            max_images=int(settings["MAX_IMAGES"]),
-            classification_export_dir=None,
-        )
+        with gpu_exclusive("video:detection+classification", logger=log):
+            run_detection(
+                model=settings["DETECTION_MODEL"],
+                source=_as_posix(IMAGE_SAVE_DIR),
+                output=_as_posix(settings["DETECTION_OUTPUT"]),
+                classes=settings["CLASSES"],
+                margin=float(settings["MARGIN"]),
+                min_area=int(settings["MIN_AREA"]),
+                device=settings.get("DEVICE"),
+                add_head=bool(settings["ADD_HEAD"]),
+                debug=bool(settings["DEBUG"]),
+                alpha_png=bool(settings["ALPHA_PNG"]),
+                max_images=int(settings["MAX_IMAGES"]),
+                classification_export_dir=None,
+            )
 
-        log.success("Detection done")
+            log.success("Detection done")
+
+            try:
+                crops_root = Path(settings["CROPS_ROOT"])
+                infer_summary = predict_injuries_on_detection_crops(
+                    crops_root=_as_posix(str(crops_root)),
+                    checkpoint_path=str(settings["INJURY_CHECKPOINT_PATH"]),
+                    out_json_path=str(settings["INJURY_REPORT_JSON"]),
+                    out_csv_path=str(settings["INJURY_REPORT_CSV"]),
+                    image_size=int(settings["INJURY_IMG_SIZE"]),
+                    batch_size=int(settings["INJURY_BATCH_SIZE"]),
+                    num_workers=int(settings["INJURY_NUM_WORKERS"]),
+                    device=None,
+                    filename_delimiter="_",
+                    body_part_label_position=int(settings["BODY_PART_LABEL_POSITION"]),
+                )
+
+                log.success("Classification done")
+
+            except Exception as e:
+                log.error(f"Classification failed: {e}")
 
     except Exception as e:
         log.error(f"Detection failed: {e}")
         return False
-
-    try:
-        crops_root = Path(settings["CROPS_ROOT"])
-        infer_summary = predict_injuries_on_detection_crops(
-            crops_root=_as_posix(str(crops_root)),
-            checkpoint_path=str(settings["INJURY_CHECKPOINT_PATH"]),
-            out_json_path=str(settings["INJURY_REPORT_JSON"]),
-            out_csv_path=str(settings["INJURY_REPORT_CSV"]),
-            image_size=int(settings["INJURY_IMG_SIZE"]),
-            batch_size=int(settings["INJURY_BATCH_SIZE"]),
-            num_workers=int(settings["INJURY_NUM_WORKERS"]),
-            device=None,
-            filename_delimiter="_",
-            body_part_label_position=int(settings["BODY_PART_LABEL_POSITION"]),
-        )
-
-        log.success("Classification done")
-
-    except Exception as e:
-        log.error(f"Classification failed: {e}")
 
     if not body_ranking(settings):
         log.warning("Ranking failed")
