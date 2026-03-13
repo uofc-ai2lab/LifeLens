@@ -310,7 +310,7 @@ def transcribe_audio(audio_file: str, model_obj, model_type: str):
 def run_transcription(audio_chunk_file, model_path=None):
     if model_path is None:
         model_path = str(_SERVICE_DIR / "models/whisper-base-medical-lora/checkpoint-3000")
-    
+
     global _STARTING_TIME_SECONDS
     global _CURRENT_RECORDING_KEY
 
@@ -345,12 +345,12 @@ def run_transcription(audio_chunk_file, model_path=None):
 
         recording_start_time = parsed_base_time
     else:
-        file_stat = os.stat(audio_chunk_file)
-        recording_start_time = datetime.fromtimestamp(file_stat.st_ctime)
-        log.warning(
-            "Filename did not match recording_YYYYMMDD_HHMMSS_chunk_N pattern. "
-            "Using file system creation time as base."
+        # if parsing filename fails log error and stop
+        log.error(
+            f"Failed to parse recording base datetime from filename: {Path(audio_chunk_file).name}. "
+            f"Ensure it follows the pattern 'recording_YYYYMMDD_HHMMSS_chunk_N.*'. Stopping transcription."
         )
+        return None
 
     effective_chunk_base_time = recording_start_time + timedelta(
         seconds=_STARTING_TIME_SECONDS
