@@ -41,6 +41,11 @@ else:
 NTHREADS = int(os.getenv('NTHREADS', '4'))
 QUAD_DECIMATE = float(os.getenv('QUAD_DECIMATE', '2.0'))
 
+# Fernet Image Anonymization Key
+IMAGE_ENC_KEY = os.getenv("IMAGE_ENC_KEY")
+if not IMAGE_ENC_KEY:
+    print("Warning: IMAGE_ENC_KEY is not set. Image anonymization will fail.")
+
 def _env_bool(name: str, default: bool) -> bool:
     raw = os.getenv(name)
     if raw is None:
