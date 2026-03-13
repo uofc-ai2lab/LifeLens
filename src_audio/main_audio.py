@@ -36,7 +36,7 @@ def move_chunk_to_processed(chunk_path: Path) -> Path:
     Move chunk file from AUDIO_CHUNKS_DIR into: PROCESSED_AUDIO_DIR/<chunk_stem>/<chunk_filename>
     Returns new path.
     """
-    chunk_stem = chunk_path.stem  # recording_1323243_chunk_0
+    chunk_stem = chunk_path.stem  # recording_YYYYMMDD_HHMMSS
     dest_dir = PROCESSED_AUDIO_DIR / chunk_stem
     dest_dir.mkdir(parents=True, exist_ok=True)
 

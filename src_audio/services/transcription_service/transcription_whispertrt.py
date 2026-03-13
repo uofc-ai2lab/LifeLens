@@ -38,7 +38,7 @@ _MIN_FREE_CUDA_GB = float(os.getenv("LIFELENS_MIN_FREE_CUDA_GB", "2.5"))
 _MIN_FREE_SYSTEM_GB = float(os.getenv("LIFELENS_MIN_FREE_SYSTEM_GB", "2.0"))
 
 _RECORDING_FILENAME_PATTERN = re.compile(
-    r"^recording_(?P<date>\d{8})_(?P<time>\d{6})_chunk_(?P<chunk_index>\d+)\.[^.]+$"
+    r"^recording_(?P<date>\d{8})_(?P<time>\d{6})\.[^.]+$"
 )
 
 
@@ -84,19 +84,18 @@ def normalize_whisper_segments(segments, base_datetime: datetime = None):
 
 
 def parse_recording_base_datetime(audio_file: str):
-    """Parse base datetime and chunk index from recording_YYYYMMDD_HHMMSS_chunk_N.*"""
+    """Parse base datetime from recording_YYYYMMDD_HHMMSS.*"""
     filename = Path(audio_file).name
     match = _RECORDING_FILENAME_PATTERN.match(filename)
     if not match:
-        return None, None, None
+        return None, None
 
     recording_key = f"{match.group('date')}_{match.group('time')}"
     try:
         base_datetime = datetime.strptime(recording_key, "%Y%m%d_%H%M%S")
-        chunk_index = int(match.group("chunk_index"))
-        return base_datetime, recording_key, chunk_index
+        return base_datetime, recording_key
     except ValueError:
-        return None, None, None
+        return None, None
 
 
 def get_chunk_advance_seconds(audio_file: str) -> float:
@@ -348,7 +347,7 @@ def run_transcription(audio_chunk_file, model_path=None):
             torch.cuda.empty_cache()
         gc.collect()
 
-    parsed_base_time, recording_key, chunk_index = parse_recording_base_datetime(
+    parsed_base_time, recording_key = parse_recording_base_datetime(
         audio_chunk_file
     )
     if parsed_base_time is not None:
@@ -358,24 +357,16 @@ def run_transcription(audio_chunk_file, model_path=None):
             log.info(
                 f"Detected new recording session {recording_key}. Reset global starting offset to 1s."
             )
-
-        expected_min_offset = 1 + (chunk_index * CHUNK_SECONDS)
-        if _STARTING_TIME_SECONDS < expected_min_offset:
-            log.debug(
-                f"Synchronizing global offset with chunk index {chunk_index}: "
-                f"{_STARTING_TIME_SECONDS:.2f}s -> {expected_min_offset:.2f}s"
-            )
-            _STARTING_TIME_SECONDS = float(expected_min_offset)
-
         recording_start_time = parsed_base_time
     else:
         # if parsing filename fails log error and stop
         log.error(
             f"Failed to parse recording base datetime from filename: {Path(audio_chunk_file).name}. "
-            f"Ensure it follows the pattern 'recording_YYYYMMDD_HHMMSS_chunk_N.*'. Stopping transcription."
+            f"Ensure it follows the pattern 'recording_YYYYMMDD_HHMMSS.*'. Stopping transcription."
         )
-        
-    recording_start_time = parsed_base_time if parsed_base_time else datetime.now()
+        return None
+
+    recording_start_time = parsed_base_time
     effective_chunk_base_time = recording_start_time + timedelta(
         seconds=_STARTING_TIME_SECONDS
     )
