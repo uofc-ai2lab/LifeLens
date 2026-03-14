@@ -92,25 +92,6 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
         log.warning("Ranking failed")
 
     try:
-        deidentify_result = run_deidentification(
-            input_dir=_as_posix(IMAGE_SAVE_DIR),
-            output_dir=_as_posix(str(Path(settings["DETECTION_OUTPUT"]) / "deidentified")),
-            enabled=True,
-            threshold=0.2,
-            replacewith="blur",
-            mask_scale=1.3,
-            ellipse=True,
-            draw_scores=False,
-        )
-        if deidentify_result.get("success"):
-            log.success(f"De-identification complete: {deidentify_result['processed_count']} images")
-        else:
-            log.warning(f"De-identification issue: {deidentify_result.get('note', deidentify_result.get('error'))}")
-
-    except Exception as e:
-        log.error(f"De-identification failed: {e}")
-
-    try:
         crops_root = Path(settings["CROPS_ROOT"])
         if crops_root.exists():
             shutil.rmtree(crops_root)
