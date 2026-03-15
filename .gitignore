@@ -1,8 +1,12 @@
 data/data_p3.2/
 data/audio/audio_files/
 data/audio/processed_audio/
+
 data/audio/unused/
 data/video/unused/
+
+**/data/
+
 data/video/output_files/
 data/video/source_files/Images/Wound_dataset/
 /experiments/*

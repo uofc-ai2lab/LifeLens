@@ -36,7 +36,7 @@ def move_chunk_to_processed(chunk_path: Path) -> Path:
     Move chunk file from AUDIO_CHUNKS_DIR into: PROCESSED_AUDIO_DIR/<chunk_stem>/<chunk_filename>
     Returns new path.
     """
-    chunk_stem = chunk_path.stem  # recording_1323243_chunk_0
+    chunk_stem = chunk_path.stem  # recording_YYYYMMDD_HHMMSS
     dest_dir = PROCESSED_AUDIO_DIR / chunk_stem
     dest_dir.mkdir(parents=True, exist_ok=True)
 
@@ -65,6 +65,10 @@ def process_audio_chunk() -> bool:
         log.info(f"Moved to processed dir: {chunk_path}")
 
         transcript_path = run_transcription(str(chunk_path))
+        if transcript_path is None:
+            log.error("Transcription failed; skipping anonymization and extraction for this chunk.")
+            return False
+
         run_anonymization(str(chunk_path), transcript_path)
         run_medication_extraction(str(chunk_path), transcript_path)
         run_intervention_extraction(str(chunk_path), transcript_path)

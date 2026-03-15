@@ -1,0 +1,33 @@
+# --- Core Frameworks ---
+# Matches standard WSL2 CUDA 12.x environments
+torch>=2.1.0
+torchvision
+torchaudio
+
+# --- Hugging Face Stack ---
+transformers>=4.35.0
+datasets>=2.14.0
+tokenizers>=0.14.0
+accelerate>=0.24.0
+
+# --- Fine-Tuning Optimizations (LoRA & Quantization) ---
+# peft: Enables Low-Rank Adaptation (LoRA)
+# bitsandbytes: Required for 8-bit or 4-bit quantization on NVIDIA cards
+peft>=0.6.0
+bitsandbytes>=0.41.0
+
+# --- Audio Processing ---
+# librosa & soundfile: Essential for loading and resampling audio
+librosa
+soundfile
+scipy
+
+# --- Metrics & Evaluation ---
+# jiwer: Standard for Word Error Rate (WER) calculation
+evaluate
+jiwer
+
+# --- Utilities ---
+# tensorboard: For monitoring training progress
+tensorboard
+ipywidgets
