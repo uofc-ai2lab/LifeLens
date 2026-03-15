@@ -61,9 +61,6 @@ def run_anonymize_image(image_path: Path) -> str:
         ValueError: If the encryption key is missing or invalid.
         FileNotFoundError: If the image cannot be read.
     """
-    if not IMAGE_ENC_KEY:
-        raise ValueError("IMAGE_ENC_KEY is not set")
-
     try:
         fernet = Fernet(IMAGE_ENC_KEY.encode())
     except Exception as e:
