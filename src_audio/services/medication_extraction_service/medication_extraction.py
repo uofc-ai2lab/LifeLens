@@ -78,9 +78,9 @@ class MedicationStateTracker:
 
     def _to_seconds(self, timestamp) -> float:
         """
-        Convert HH:MM:SS.mmm string to seconds, or pass through if already numeric.
+        Convert HH:MM:SS string to seconds, or pass through if already numeric.
         Args:
-            timestamp (str | int | float): Time in HH:MM:SS.mmm format or already in seconds.
+            timestamp (str | int | float): Time in HH:MM:SS format or already in seconds.
         Returns:
             float: Time in seconds.
         """
@@ -88,7 +88,7 @@ class MedicationStateTracker:
             return float(timestamp)
         try:
             h, m, s = timestamp.split(":")
-            return int(h) * 3600 + int(m) * 60 + float(s)
+            return int(h) * 3600 + int(m) * 60 + int(s)
         except Exception:
             return 0.0
 
