@@ -1,129 +1,59 @@
-from transformers import AutoTokenizer, AutoModelForTokenClassification
-import torch
+import spacy
 from src_audio.domain.entities import MedicationEntity
-from src_audio.utils.calculate_mean import mean
+from src_audio.domain.constants import NER_CONFIDENCE
 from config.logger import Logger
 
 log = Logger("[audio][medication]")
 
+
 class MedicationExtractor:
+    # we ignore all other entities med7 gives us (FORM, FREQUENCY, DURATION)
+    allowed_entities: frozenset[str] = frozenset({"DRUG", "DOSAGE", "ROUTE"})
+    # med7 puts numeric dose values in STRENGTH, but we want them under DOSAGE
+    map_to_dosage: dict[str, str] = {"STRENGTH": "DOSAGE"}
+    _MODEL_LG = "en_core_med7_lg"
+
     def __init__(self):
-        log.info("Loading biomedical NER model for medication extraction")
-        self.NER_MODEL = "d4data/biomedical-ner-all" # pretrained biomedical NER model
-        self.model = AutoModelForTokenClassification.from_pretrained(self.NER_MODEL)
-        self.tokenizer = AutoTokenizer.from_pretrained(self.NER_MODEL, use_fast=True)
-        self.model.eval()
-        log.success("NER model ready")
+        log.info("Initializing Med7 NER (LG model)")
 
-    def _run_ner(self, text):
+        try:
+            self.nlp = spacy.load(self._MODEL_LG)
+        except Exception as e:
+            log.error(
+                f"Failed to load model. Please ensure you have the '{self._MODEL_LG}' model installed. Error details: {e}")
+            exit(1)
+
+        self.pipe_batch_size = 32
+        log.success(f"Med7 NER ready")
+
+    def extract_entities_from_doc(self, doc) -> list[MedicationEntity]:
         """
-        Run token-level Named Entity Recognition (NER) on input text.
+        Extract medication entities from an already-processed spaCy Doc.
 
-        Tokenizes the text, runs the NER model, and returns:
-        - label probability distributions per token
-        - character offset mappings for each token
-        - word IDs mapping tokens back to original words
+        Separating entity extraction from NLP processing allows the caller
+        to use nlp.pipe() for batched inference and then call this method
+        per doc, rather than calling nlp() once per segment.
 
         Args:
-            text (str): Raw input text (e.g., "Give fentanyl IV now").
+            doc (spacy.tokens.Doc): A Doc produced by this extractor's nlp
+                pipeline (i.e. en_core_med7_lg).
 
         Returns:
-            probs (torch.Tensor): Token-level label probability distributions.
-            offsets (torch.Tensor):Character start/end positions for each token.
-            word_ids (List[Optional[int]]):Token-to-word alignment indices.
+            list[MedicationEntity]: DRUG, DOSAGE, and ROUTE entities sorted
+                by start_idx. Empty list if no relevant entities are found.
         """
-        enc = self.tokenizer(
-            text,
-            return_offsets_mapping=True,
-            return_tensors="pt",
-            truncation=True
-        )
-        offsets = enc.pop("offset_mapping")[0] # offsets map each token back to the original string:
-        word_ids = enc.word_ids() # multiple tokens can belong to the same word -> given the same word_id
-
-        with torch.no_grad():
-            logits = self.model(**enc).logits[0] # each token has a score for every label
-            probs = torch.softmax(logits, dim=-1)
-
-        return probs, offsets, word_ids
-
-    def _group_tokens(self, probs, offsets, word_ids):
-        """
-        Group token-level NER predictions into word-level entity candidates.
-        Combines subword tokens (e.g., "fen", "##tan", "##yl") that belong to the same word into a single entity span. 
-
-        Args:
-            probs (torch.Tensor): Token-level label probability distributions.
-            offsets (torch.Tensor):Character start/end positions for each token.
-            word_ids (List[Optional[int]]):Token-to-word alignment indices.
-
-        Returns:
-            Dict[int, Dict]:
-                Mapping of word_id to grouped entity information:
-                {
-                    word_id: {
-                        "entity": str,        # predicted entity label
-                        "start_idx": int,         # start char index
-                        "end_idx": int,           # end char index
-                        "scores": List[float] # confidence scores per token
-                    }
-                }
-        """
-        
-        word_groups = {}
-
-        for i, word_id in enumerate(word_ids):
-            if word_id is None:
+        entities: list[MedicationEntity] = []
+        for ent in doc.ents:
+            label = self.map_to_dosage.get(ent.label_, ent.label_)
+            if label not in self.allowed_entities:
                 continue
-
-            label_id = probs[i].argmax().item()
-            label = self.model.config.id2label[label_id]
-            score = probs[i, label_id].item()
-
-            if label == "O":
-                continue
-
-            start_idx, end_idx = offsets[i].tolist()
-            
-            # First token of a word → create group
-            # Subsequent tokens → update same group
-            group = word_groups.setdefault(word_id, {
-                "entity": label,
-                "start_idx": start_idx,
-                "end_idx": end_idx,
-                "scores": []
-            })
-            group["end"] = end_idx
-            group["scores"].append(score)
-        
-        return word_groups
-
-    def extract_medication_info_from_ner(self, text):
-        """
-        Extract finalized medication-related entities from input text. 
-        Converts grouped tokens into final usable entities with averaged
-        confidence scores.
-
-        Args:
-            text (str): Raw clinical or conversational text.
-
-        Returns:
-            List[MedicationEntity]:
-                List of extracted entities containing: entity label, text span, start character index, averaged confidence score
-        """
-        probs, offsets, word_ids = self._run_ner(text)
-        word_groups = self._group_tokens(probs, offsets, word_ids)
-
-        entities = []
-        for w in sorted(word_groups):
-            item = word_groups[w]
-            span = text[item["start_idx"]: item["end_idx"]]
             entities.append(
                 MedicationEntity(
-                    entity=item["entity"],
-                    word=span,
-                    start_idx=item["start_idx"], 
-                    score=mean(item["scores"])
-                ))
-            
+                    entity=label,
+                    word=ent.text,
+                    start_idx=ent.start_char,
+                    score=NER_CONFIDENCE,
+                )
+            )
+        entities.sort(key=lambda e: e.start_idx)
         return entities
