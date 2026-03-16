@@ -326,3 +326,9 @@ QUESTIONED_SIGNALS: frozenset[str] = frozenset({
     "did we give", "have we given", "did you give",
     "was given", "did we already", "already gave",
 })
+
+### ------------------------------- TRANSCRIPTION SERVICE ------------------------------- ###
+MODEL_NAME_OR_PATH = "openai/whisper-large-v3"
+TRANSCRIPTION_MODEL_OUTPUT_DIR = "./whisper-large-v3-medical-lora"
+DATASET_NAME = "leduckhai/MultiMed-ST"
+

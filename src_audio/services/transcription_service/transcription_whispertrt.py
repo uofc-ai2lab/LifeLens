@@ -1,73 +1,255 @@
 import os
+import re
+import wave
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
+import torch
+import gc
+import psutil
+from transformers import pipeline, WhisperForConditionalGeneration, WhisperProcessor
+from peft import PeftModel
+
 from src_audio.utils.export_to_csv import export_to_csv
+from src_audio.domain.constants import CHUNK_SECONDS
 from config.logger import Logger
-from config.audio_settings import (
-    IS_JETSON,
-    MODEL_SIZE,
-    MODEL_CACHE_PATH,
-)
+from config.audio_settings import MODEL_CACHE_PATH
+from config.gpu_guard import gpu_exclusive
 
 log = Logger("[audio][transcription]")
-# extra config needed for speaker diarization - unused otherwise
-# from config.audio_settings import USE_OFFLINE_MODELS, PYANNOTE_CACHE_DIR, HUGGING_FACE_TOKEN, DEVICE
-# from download_pyannote import download_pyannote_models
-# from pyannote.audio import Pipeline
 
-def load_whisper_model(model_size: str, model_cache_path: str = None):
-    """Transcribe audio using WhisperTRT or fallback to original Whisper"""
-    log.info(f"Loading {model_size.upper()} model")
-    model = None
-    
-    # Determine if we should use WhisperTRT or original Whisper
-    use_whispertrt = IS_JETSON and model_size in ["tiny.en", "base.en"]
-    
-    if use_whispertrt:
-        try:
-            from whisper_trt import load_trt_model
-            log.info(f"Using WhisperTRT for {model_size} (TensorRT accelerated)")
-            log.info("Note: First run will build TensorRT engine (takes 2-5 minutes)")
-            
-            if model_cache_path:
-                log.debug(f"Using custom cache path: {model_cache_path}")
-                model_file_path = os.path.join(model_cache_path, f"{model_size}.pth")
-                model = load_trt_model(model_size, path=model_file_path)
-            else:
-                log.debug(f"Using default cache: ~/.cache/whisper_trt/")
-                model = load_trt_model(model_size)
-            
-            log.success(f"Model loaded successfully (type: {type(model).__name__})")
-            
-        except ImportError:
-            log.warning(f"WhisperTRT not installed. Falling back to original Whisper...")
-            use_whispertrt = False
-        except Exception as e:
-            log.error(f"Error loading WhisperTRT model: {e}")
-            log.warning(f"Falling back to original Whisper...")
-            use_whispertrt = False
-    
-    if not use_whispertrt:
-        log.info(f"Using original Whisper for {model_size}")
-        log.info("Note: Slower than TensorRT but more memory efficient")
-        
-        try:
-            import whisper
-            
-            # Use download_root parameter if cache path is specified
-            if model_cache_path:
-                model = whisper.load_model(model_size, download_root=model_cache_path)
-            else:
-                model = whisper.load_model(model_size)
-            
-            log.success(f"Model loaded successfully (type: {type(model).__name__})")
-            
-        except Exception as e:
-            log.error(f"Error loading model: {e}")
-            raise
- 
-    return model
- 
+# Persistent global storage
+_WHISPER_PIPE = None  # fine-tuned model (HF Pipeline)
+_WHISPER_FALLBACK = None  # Original OpenAI Whisper
+_WHISPER_PIPE_MODEL_PATH = None
+
+_WHISPER_BASE_MODEL_MAP = {
+    "tiny": "openai/whisper-tiny",
+    "base": "openai/whisper-base",
+    "small": "openai/whisper-small",
+    "medium": "openai/whisper-medium",
+    "large": "openai/whisper-large-v3",
+}
+
+# At the top of transcription_service.py
+_SERVICE_DIR = Path(__file__).resolve().parent  # always points to transcription_service/
+_STARTING_TIME_SECONDS = 1
+_CURRENT_RECORDING_KEY = None
+_MIN_FREE_CUDA_GB = float(os.getenv("LIFELENS_MIN_FREE_CUDA_GB", "2.5"))
+_MIN_FREE_SYSTEM_GB = float(os.getenv("LIFELENS_MIN_FREE_SYSTEM_GB", "2.0"))
+
+_RECORDING_FILENAME_PATTERN = re.compile(
+    r"^recording_(?P<date>\d{8})_(?P<time>\d{6})\.[^.]+$"
+)
+
+
+def normalize_whisper_segments(segments, base_datetime: datetime = None):
+    if base_datetime is None:
+        base_datetime = datetime.now()
+        log.warning("No base_datetime provided. Timestamps will be relative to current execution time.")
+
+    log.debug(f"Normalizing {len(segments)} segments. Sample raw segment: {segments[0] if segments else 'N/A'}")
+
+    normalized = []
+    for i, seg in enumerate(segments):
+        import datetime as dt
+
+        rel_start = (
+            seg.get("start")
+            if seg.get("start") is not None
+            else seg.get("timestamp", [0, 0])[0]
+        )
+        rel_end = (
+            seg.get("end")
+            if seg.get("end") is not None
+            else seg.get("timestamp", [None, None])[1]
+        )
+
+        # 2. Add relative seconds to the base datetime
+        real_start_dt = base_datetime + timedelta(seconds=rel_start)
+        real_end_dt = base_datetime + timedelta(seconds=rel_end)
+
+        # 3. Format as string (e.g., 14:30:05)
+        str_start = real_start_dt.strftime("%H:%M:%S")
+        str_end = real_end_dt.strftime("%H:%M:%S")
+
+        normalized.append(
+            {
+                "start_time": str_start,  # Now real-world time
+                "end_time": str_end,  # Now real-world time
+                "text": seg.get("text", "").strip(),
+                "speaker": "UNKNOWN",
+            }
+        )
+    return normalized
+
+
+def parse_recording_base_datetime(audio_file: str):
+    """Parse base datetime from recording_YYYYMMDD_HHMMSS.*"""
+    filename = Path(audio_file).name
+    match = _RECORDING_FILENAME_PATTERN.match(filename)
+    if not match:
+        return None, None
+
+    recording_key = f"{match.group('date')}_{match.group('time')}"
+    try:
+        base_datetime = datetime.strptime(recording_key, "%Y%m%d_%H%M%S")
+        return base_datetime, recording_key
+    except ValueError:
+        return None, None
+
+
+def get_chunk_advance_seconds(audio_file: str) -> float:
+    """Advance by CHUNK_SECONDS, unless actual duration is shorter (manual stop/final chunk)."""
+    advance_seconds = float(CHUNK_SECONDS)
+    try:
+        with wave.open(str(audio_file), "rb") as wav_file:
+            frame_rate = wav_file.getframerate()
+            frame_count = wav_file.getnframes()
+            if frame_rate > 0:
+                duration_seconds = frame_count / frame_rate
+                if duration_seconds < advance_seconds:
+                    advance_seconds = duration_seconds
+    except Exception as e:
+        log.warning(
+            f"Could not read WAV duration for chunk advance ({Path(audio_file).name}): {e}. "
+            f"Using CHUNK_SECONDS={CHUNK_SECONDS}."
+        )
+
+    return max(advance_seconds, 0.0)
+
+
+def load_fine_tuned_whisper(model_path: str):
+    """Loads the fine-tuned Whisper LoRA model via HF Pipeline."""
+    global _WHISPER_PIPE, _WHISPER_PIPE_MODEL_PATH
+
+    resolved_model_path = str(Path(model_path).resolve())
+    if _WHISPER_PIPE is not None and _WHISPER_PIPE_MODEL_PATH == resolved_model_path:
+        return _WHISPER_PIPE
+
+    log.info(f"Loading Fine-Tuned Whisper model (FP16 optimized) from: {model_path}")
+    try:
+        cuda_available = torch.cuda.is_available()
+        use_cuda = cuda_available
+
+        if cuda_available:
+            try:
+                free_cuda_gb = torch.cuda.mem_get_info()[0] / 1e9
+            except Exception:
+                free_cuda_gb = 0.0
+
+            free_system_gb = psutil.virtual_memory().available / (1024**3)
+
+            if free_cuda_gb < _MIN_FREE_CUDA_GB or free_system_gb < _MIN_FREE_SYSTEM_GB:
+                use_cuda = False
+                log.warning(
+                    f"Insufficient memory headroom for GPU Whisper "
+                    f"(CUDA free {free_cuda_gb:.2f}GB, system free {free_system_gb:.2f}GB). "
+                    f"Using CPU for this pass."
+                )
+
+        dtype = torch.float16 if use_cuda else torch.float32
+
+        # Processor always lives in root adapter dir, not inside checkpoint subfolders
+        processor_path = str(Path(resolved_model_path).parent) \
+            if "checkpoint-" in resolved_model_path else resolved_model_path
+
+        log.info(f"Adapter path:   {resolved_model_path}")
+        log.info(f"Processor path: {processor_path}")
+
+        # Infer base model size from path
+        model_path_lower = resolved_model_path.lower()
+        base_model_name = next(
+            (hf for key, hf in _WHISPER_BASE_MODEL_MAP.items() if key in model_path_lower),
+            _WHISPER_BASE_MODEL_MAP["base"]
+        )
+        log.info(f"Inferred base model: {base_model_name}")
+
+        # Step 1: Load base model — no device_map, keeps accelerate out entirely
+        base_model = WhisperForConditionalGeneration.from_pretrained(
+            base_model_name,
+            torch_dtype=dtype,
+            low_cpu_mem_usage=True,
+        )
+
+        # Step 2: Merge LoRA weights on CPU
+        model = PeftModel.from_pretrained(base_model, resolved_model_path)
+        model = model.merge_and_unload()
+        model.eval()
+
+        # Step 3: Fix generation config to suppress warnings and lock to English
+        model.generation_config.forced_decoder_ids = None
+        model.generation_config.language = "en"
+        model.generation_config.task = "transcribe"
+
+        # Step 4: Move merged model to GPU after merge is complete
+        if use_cuda:
+            import ctypes
+            gc.collect()
+            gc.collect()
+            ctypes.CDLL("libc.so.6").malloc_trim(0)
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+
+            free_mem = torch.cuda.mem_get_info()[0] / 1e9
+            log.info(f"Free CUDA memory before GPU move: {free_mem:.2f}GB")
+
+            model = model.to("cuda", dtype=dtype)
+
+        log.info(f"Model device: {next(model.parameters()).device}")
+
+        processor = WhisperProcessor.from_pretrained(processor_path)
+
+        # Step 5: Build pipeline — device=0 safe since accelerate was never involved
+        _WHISPER_PIPE = pipeline(
+            "automatic-speech-recognition",
+            model=model,
+            feature_extractor=processor.feature_extractor,
+            tokenizer=processor.tokenizer,
+            chunk_length_s=30,
+            stride_length_s=5,         # reduce chunk overlap to prevent segment duplication
+            dtype=dtype,
+            device=0 if use_cuda else -1,
+            ignore_warning=True,
+            generate_kwargs={
+                "language": "en",
+                "task": "transcribe",
+                "no_repeat_ngram_size": 3,   # prevents "so, so, so..." loops
+                "repetition_penalty": 1.05,    # penalises repeated tokens
+                "temperature": 0.0,           # greedy decode, no randomness
+            }
+        )
+        _WHISPER_PIPE_MODEL_PATH = resolved_model_path
+        if use_cuda:
+            log.info("Fine-tuned Whisper pipeline loaded successfully on GPU")
+        else:
+            log.info("Fine-tuned Whisper pipeline loaded successfully on CPU")
+        return _WHISPER_PIPE
+
+    except Exception as e:
+        _WHISPER_PIPE = None
+        _WHISPER_PIPE_MODEL_PATH = None
+        log.error(f"Error loading Fine-Tuned Whisper: {e}")
+        return None
+def load_whisper_fallback(model_size="base"):
+    """Lazy-loads original OpenAI Whisper as a safety net."""
+    global _WHISPER_FALLBACK
+    if _WHISPER_FALLBACK is not None:
+        return _WHISPER_FALLBACK
+
+    log.info(f"Loading Whisper {model_size.upper()} as fallback model")
+    try:
+        import whisper
+        # Use MODEL_CACHE_PATH from your config
+        _WHISPER_FALLBACK = whisper.load_model(
+            model_size, download_root=MODEL_CACHE_PATH
+        )
+        log.success(f"Fallback model {model_size} loaded successfully")
+        return _WHISPER_FALLBACK
+    except Exception as e:
+        log.error(f"Failed to load fallback model: {e}")
+        return None
+
+
 def verify_audio_file_exists(audio_file: str) -> bool:
     log.info(f"Verifying input file: {Path(audio_file).name}")
     
@@ -89,232 +271,173 @@ def verify_transcription_output(result: dict):
 
     if not isinstance(result, dict):
         log.error(f"Result is not a dictionary! Got: {type(result)}")
-        
-    # Check full text
+        return None
+
     full_text = result.get('text', '')
     log.debug(f"Full text length: {len(full_text)} characters")
-    if not full_text.strip:
+    if not full_text.strip():
         log.warning("Transcription text is EMPTY!")
-    
-    # Check segments
+
     segments = result.get('segments', [])
     log.debug(f"Number of segments: {len(segments)}")
+
     if segments:
         log.debug(f"First segment: {segments[0].get('text', '')[:50]}...")
         return segments
     else:
         log.warning("No segments found")
-        return full_text
+        return []
 
-def normalize_whisper_segments(segments):
-    """
-    Convert Whisper segment keys to pipeline-standard keys.
-    """
-    normalized = []
-    for seg in segments:
-        normalized.append({
-            "start_time": seg["start"],
-            "end_time": seg["end"],
-            "text": seg.get("text", ""),
-            "speaker": seg.get("speaker", "UNKNOWN")
-        })
-    return normalized
-           
-def transcribe_audio(audio_file: str, model):
-    log.info("Running transcription")
-    transcribe_start = datetime.now()
+def transcribe_audio(audio_file: str, model_obj, model_type: str):
+    log.info(f"Starting {model_type} transcription pass")
     try:
-        result = model.transcribe(str(audio_file))
-        transcribe_end = datetime.now()
-        log.success(f"Transcription completed in {transcribe_end - transcribe_start}")
+        with torch.no_grad():
+            if model_type == "fine_tuned":
+                # HF Pipeline inference
+                raw_output = model_obj(str(audio_file), return_timestamps=True)
+                result = {
+                    "text": raw_output["text"],
+                    "segments": raw_output.get("chunks", []),
+                }
+            else:
+                # OpenAI Whisper inference
+                result = model_obj.transcribe(str(audio_file))
+
+        # IMPORTANT: Explicitly free VRAM after every successful pass
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
         return result
+
     except Exception as e:
-        log.error(f"Error during transcription: {e}")
-        import traceback
-        traceback.print_exc()
-        raise
+        error_str = str(e).lower()
+        if "out of memory" in error_str:
+            log.error(f"CUDA Out of Memory during {model_type} pass. Clearing VRAM.")
+        else:
+            log.error(f"Error during {model_type} transcription: {e}")
 
-# def _check_models_exist(cache_dir: Path) -> bool:
-#     """
-#     Check if pyannote models are downloaded in the cache directory.
-    
-#     Parameters:
-#         cache_dir: Path to the pyannote models cache directory
-        
-#     Returns:
-#         bool: True if both required models exist, False otherwise
-#     """
-#     required_models = [
-#         "models--pyannote--speaker-diarization-3.1",
-#         "models--pyannote--segmentation-3.0",
-#     ]
-    
-#     for model in required_models:
-#         model_path = cache_dir / model
-#         if not model_path.exists():
-#             return False
-    
-#     return True
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
 
-# commented out for now to get no import erros if "from pyannote.audio import Pipeline" is not found - diarization can be added later
-# async def assign_speakers(device: str, audio_file: str, result: dict):
-#     """
-#     Assign speakers using pyannote diarization.
-    
-#     Uses offline models if USE_OFFLINE_MODELS=1, otherwise uses online models
-#     with Hugging Face authentication. Automatically downloads models if they
-#     don't exist locally when offline mode is enabled.
-    
-#     Parameters:
-#         device: Computing device ('cpu' or 'cuda')
-#         audio_file: Path to the audio file for diarization
-#         result: Transcription result dictionary containing segments
-        
-#     Returns:
-#         dict: Updated result with speaker assignments added to segments
-        
-#     Raises:
-#         ValueError: If online mode is used but HUGGING_FACE_TOKEN is not set
-#     """
-#     print_formatting("heading", "RUNNING DIARIZATION")
-#     diarize_start = datetime.now()
+        # Fallback recursive logic
+        if model_type == "fine_tuned":
+            log.warning("Falling back to original Whisper due to error.")
+            fallback = load_whisper_fallback()
+            if fallback:
+                return transcribe_audio(audio_file, fallback, "whisper_fallback")
 
-#     # Determine if using offline models
-#     use_offline = USE_OFFLINE_MODELS == 1
-    
-#     if use_offline:
-#         print(bcolors.OKBLUE + "Using offline pyannote models for diarization.\n" + bcolors.ENDC)
-        
-#         # Set cache directory from settings or use default
-#         cache_dir = Path(PYANNOTE_CACHE_DIR or "./pyannote_models")
-        
-#         # Check if models exist, download if not
-#         if not _check_models_exist(cache_dir):
-#             print(bcolors.WARNING + "Pyannote models not found locally. Downloading...\n" + bcolors.ENDC)
-#             download_pyannote_models()
-        
-#         # Enable offline mode for Hugging Face Hub
-#         os.environ['HF_HUB_OFFLINE'] = '1'
-        
-#         # Load pipeline from cache
-#         diarize_model = Pipeline.from_pretrained(
-#             "pyannote/speaker-diarization-3.1",
-#             cache_dir=str(cache_dir)
-#         )
-#     else:
-#         print(bcolors.OKBLUE + "Using online pyannote models for diarization.\n" + bcolors.ENDC)
-        
-#         # Validate token for online usage
-#         if not HUGGING_FACE_TOKEN:
-#             raise ValueError(
-#                 "HUGGING_FACE_TOKEN not set. Either:\n"
-#                 "1. Set HUGGING_FACE_TOKEN in your .env file, or\n"
-#                 "2. Set USE_OFFLINE_MODELS=1 to use cached models"
-#             )
-        
-#         # Load pipeline with authentication
-#         diarize_model = Pipeline.from_pretrained(
-#             "pyannote/speaker-diarization-3.1",
-#             use_auth_token=HUGGING_FACE_TOKEN
-#         )
+        raise e
 
-#     # Move model to GPU if available
-#     if device == "cuda":
-#         diarize_model.to(torch.device("cuda"))
 
-#     # Run diarization on audio file
-#     diarization = diarize_model(audio_file)
+def run_transcription(audio_chunk_file, model_path=None):
+    if model_path is None:
+        model_path = str(_SERVICE_DIR / "models/whisper-base-medical-lora/checkpoint-3000")
 
-#     # Convert pyannote output to segment format
-#     diarize_segments = []
-#     for turn, _, speaker in diarization.itertracks(yield_label=True):
-#         diarize_segments.append({
-#             'start': turn.start,
-#             'end': turn.end,
-#             'speaker': speaker
-#         })
+    global _STARTING_TIME_SECONDS
+    global _CURRENT_RECORDING_KEY
 
-#     # Extract segments from transcription result
-#     if 'segments' in result and result['segments']:
-#         segments = result['segments']
-#     else:
-#         # Fallback: create single segment from full text
-#         segments = [{'start': 0.0, 'end': 0.0, 'text': result.get('text', '')}]
+    log.info(f"Resolved model path: {model_path}") 
 
-#     # Assign speakers to transcription segments based on temporal overlap
-#     for seg in segments:
-#         seg_start = seg.get("start", 0.0)
-#         seg_end = seg.get("end", 0.0)
-#         seg_mid = (seg_start + seg_end) / 2
-#         seg["speaker"] = "UNKNOWN"
+    # Memory Check
+    available_gb = psutil.virtual_memory().available / (1024**3)
+    if available_gb < 1.5:
+        log.warning(f"Low memory detected ({available_gb:.2f}GB). Forcing cache flush.")
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
 
-#         # Find diarization segment containing the midpoint
-#         for diar in diarize_segments:
-#             if diar["start"] <= seg_mid <= diar["end"]:
-#                 seg["speaker"] = diar["speaker"]
-#                 break
+    parsed_base_time, recording_key = parse_recording_base_datetime(
+        audio_chunk_file
+    )
+    if parsed_base_time is not None:
+        if _CURRENT_RECORDING_KEY != recording_key:
+            _CURRENT_RECORDING_KEY = recording_key
+            _STARTING_TIME_SECONDS = 1
+            log.info(
+                f"Detected new recording session {recording_key}. Reset global starting offset to 1s."
+            )
+        recording_start_time = parsed_base_time
+    else:
+        # if parsing filename fails log error and stop
+        log.error(
+            f"Failed to parse recording base datetime from filename: {Path(audio_chunk_file).name}. "
+            f"Ensure it follows the pattern 'recording_YYYYMMDD_HHMMSS.*'. Stopping transcription."
+        )
+        return None
 
-#     # Update result with speaker-assigned segments
-#     result['segments'] = segments
+    recording_start_time = parsed_base_time
+    effective_chunk_base_time = recording_start_time + timedelta(
+        seconds=_STARTING_TIME_SECONDS
+    )
+    log.info(
+        f"Recording anchored at: {recording_start_time.strftime('%Y-%m-%d %H:%M:%S')} | "
+        f"chunk base offset: {_STARTING_TIME_SECONDS:.2f}s | "
+        f"effective base: {effective_chunk_base_time.strftime('%Y-%m-%d %H:%M:%S')}"
+    )
 
-#     diarize_end = datetime.now()
-#     print(bcolors.OKGREEN + f"✓ Diarization completed, took {diarize_end - diarize_start}.\n" + bcolors.ENDC)
-
-#     return result
-
-def run_transcription(audio_chunk_file):
-    log.header("Starting Transcription...")
-    
-    """Main runner function for WhisperTRT (or Whisper) transcription """
-    # ==================== STEP 1: LOAD MODEL ====================
-    model = load_whisper_model(MODEL_SIZE, MODEL_CACHE_PATH)
-
-    log.info(f"Current audio file: {Path(audio_chunk_file).name}")
-    
-    # ==================== STEP 2: CHECK INPUT FILE ====================
+    # ==================== STEP 1: CHECK INPUT ====================
     if verify_audio_file_exists(audio_chunk_file) is False:
-        log.error(f"File does not exist. Stopping transcription")
-        return
+        log.error("File does not exist or is invalid. Stopping transcription.")
+        return None
 
-    # Track total time
     total_start = datetime.now()
 
-    # ==================== STEP 3: TRANSCRIBE ====================
-    transcribe_start = datetime.now()
-    result = transcribe_audio(audio_chunk_file, model)
+    # ==================== STEP 2+3: LOAD + TRANSCRIBE (GPU-serialized) ====================
+    with gpu_exclusive("audio:transcription", logger=log):
+        model = load_fine_tuned_whisper(model_path)
+        model_type = "fine_tuned"
 
-    # ==================== STEP 3.1: Diarize ====================
-    # print_formatting("heading","STEP 3.1: Diarizing with pyannote...")
-    # diarize_start = datetime.now()
-    # result = await assign_speakers(device, audio_file, result, use_offline_models, hugging_face_token)
-    # diarize_end = datetime.now()
+        if model is None:
+            log.warning("Primary Fine-Tuned model failed to load. Switching to Fallback.")
+            model = load_whisper_fallback()
+            model_type = "whisper_fallback"
 
-    # ==================== STEP 4: CHECK OUTPUT ====================
-    verified_result = verify_transcription_output(result)
-    transcribe_end = datetime.now()
+        if model is None:
+            log.error("CRITICAL: No transcription models could be loaded. Stopping.")
+            return None
 
-    # Check if transcription failed
-    if verified_result is None:
-        log.error("TRANSCRIPTION FAILED - STOPPING PIPELINE")
-        return
+        log.info(f"Current audio file: {Path(audio_chunk_file).name}")
 
-    normalized_result = normalize_whisper_segments(verified_result)
+        transcribe_start = datetime.now()
+        try:
+            result = transcribe_audio(audio_chunk_file, model, model_type)
+        except Exception as e:
+            log.error(f"TRANSCRIPTION FAILED after fallback: {e}")
+            return None
+        transcribe_end = datetime.now()
+
+    # ==================== STEP 4: CHECK & NORMALIZE ====================
+    verified_segments = verify_transcription_output(result)
+    if verified_segments is None:
+        log.error("TRANSCRIPTION VERIFICATION FAILED - STOPPING PIPELINE")
+        return None
+
+    normalized_result = normalize_whisper_segments(
+        verified_segments,
+        base_datetime=effective_chunk_base_time,
+    )
+
+    advance_seconds = get_chunk_advance_seconds(audio_chunk_file)
+    _STARTING_TIME_SECONDS += advance_seconds
+    log.debug(
+        f"Updated global starting offset by {advance_seconds:.2f}s. "
+        f"Next chunk offset: {_STARTING_TIME_SECONDS:.2f}s"
+    )
 
     # ==================== STEP 5: EXPORT ====================
     export_start = datetime.now()
-    columns=["start_time", "end_time", "text", "speaker"]
-    log.info("Exporting results")
-    
+    log.info("Exporting results to CSV")
+
     transcript_path = export_to_csv(
         data=normalized_result,
         audio_chunk_path=Path(audio_chunk_file),
         service="transcript",
-        columns=columns,
+        columns=["start_time", "end_time", "text", "speaker"],
     )
-
     export_end = datetime.now()
 
-    # Print timing summary
+    # Timing Summary
     time_for_transcription = transcribe_end - transcribe_start
     time_for_export = export_end - export_start
     time_total = export_end - total_start
@@ -322,6 +445,6 @@ def run_transcription(audio_chunk_file):
     log.info(f"Total time: {time_total.seconds // 60}m {time_total.seconds % 60}s")
     log.debug(f"  Transcription: {time_for_transcription.seconds // 60}m {time_for_transcription.seconds % 60}s")
     log.debug(f"  Export: {time_for_export.seconds // 60}m {time_for_export.seconds % 60}s")
-    log.success("Transcription completed successfully!")
-    
+    log.success("Transcription completed successfully")
+
     return transcript_path
