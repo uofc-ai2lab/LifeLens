@@ -46,11 +46,9 @@ onnxruntime==1.15.0
 tqdm>=4.65.0
 scikit-image==0.19.3; python_version < "3.11"
 scikit-image>=0.22.0,<0.24; python_version >= "3.11"
-imageio>=2.25
-imageio-ffmpeg>=0.4.6
 ultralytics
 timm
-deface
+cryptography
 
 # detect AprilTag Marker
 pupil-apriltags>=1.0.4

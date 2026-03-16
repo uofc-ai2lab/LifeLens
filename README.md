@@ -199,6 +199,9 @@ Dataset Assets (Priv_personpart):
    - `VIDEO_FRAME_RATE` (default: `20`)
    - `VIDEO_FLIP_METHOD` (default: `0`)
 
+   Image anonymization Fernet Key should also be set. Please ask Kameel Kasumu (Github: kameelkas) for the proper key to set.
+   - `IMAGE_ENC_KEY`
+
 **Keep env.template updated with any new variables your services require.**
 
 # Audio Processing Pipeline

@@ -29,7 +29,6 @@ from src_video.services.camera_capture_service.gstreamer_video_pipeline import (
 from src_video.services.detection_service.detect_body_parts import run_detection
 from src_video.services.body_ranking.body_injury_ranking import body_ranking
 from src_video.services.classification_service.infer_injuries_on_crops import predict_injuries_on_detection_crops
-from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
 
 def _as_posix(path: str) -> str:
@@ -93,25 +92,6 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
 
     if not body_ranking(settings):
         log.warning("Ranking failed")
-
-    try:
-        deidentify_result = run_deidentification(
-            input_dir=_as_posix(IMAGE_SAVE_DIR),
-            output_dir=_as_posix(str(Path(settings["DETECTION_OUTPUT"]) / "deidentified")),
-            enabled=True,
-            threshold=0.2,
-            replacewith="blur",
-            mask_scale=1.3,
-            ellipse=True,
-            draw_scores=False,
-        )
-        if deidentify_result.get("success"):
-            log.success(f"De-identification complete: {deidentify_result['processed_count']} images")
-        else:
-            log.warning(f"De-identification issue: {deidentify_result.get('note', deidentify_result.get('error'))}")
-
-    except Exception as e:
-        log.error(f"De-identification failed: {e}")
 
     try:
         crops_root = Path(settings["CROPS_ROOT"])
