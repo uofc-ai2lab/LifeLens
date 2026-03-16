@@ -359,14 +359,15 @@ def run_transcription(audio_chunk_file, model_path=None):
             )
         recording_start_time = parsed_base_time
     else:
-        # if parsing filename fails log error and stop
+        # if parsing filename fails, log error and fall back to current time
         log.error(
             f"Failed to parse recording base datetime from filename: {Path(audio_chunk_file).name}. "
-            f"Ensure it follows the pattern 'recording_YYYYMMDD_HHMMSS.*'. Stopping transcription."
+            f"Ensure it follows the pattern 'recording_YYYYMMDD_HHMMSS.*'. Using current time as base."
         )
-        return None
+        recording_start_time = datetime.now()
+        _CURRENT_RECORDING_KEY = None
+        _STARTING_TIME_SECONDS = 1
 
-    recording_start_time = parsed_base_time
     effective_chunk_base_time = recording_start_time + timedelta(
         seconds=_STARTING_TIME_SECONDS
     )
