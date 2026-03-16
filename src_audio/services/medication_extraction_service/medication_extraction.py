@@ -183,6 +183,7 @@ def extract_med_admins_with_confidence(
     segments: list[dict],
     tracker: MedicationStateTracker,
     audit_log: list[dict],
+    chunk_path: str,
 ) -> list[MedicationAdministration]:
     """
     Extract confirmed medication administrations from transcript segments.
@@ -207,6 +208,7 @@ def extract_med_admins_with_confidence(
         segments (list[dict]): Transcript segments with entities and timestamps.
         tracker (MedicationStateTracker): Cross-chunk state.
         audit_log (list[dict]): Collects skipped non-administered events.
+        chunk_path (str): Current audio chunk path for audit context.
 
     Returns:
         list[MedicationAdministration]: Unique confirmed medications for
@@ -219,6 +221,8 @@ def extract_med_admins_with_confidence(
     actionable_intents: frozenset[str] = frozenset(
         {"ADMINISTERED", "ORDERED", "REVISED"}
     )
+
+    audio_chunk_file = Path(chunk_path).name
 
     # Within-chunk record store: canonical_name → MedicationAdministration
     chunk_records: dict[str, MedicationAdministration] = {}
@@ -241,6 +245,7 @@ def extract_med_admins_with_confidence(
             if intent not in actionable_intents:
                 audit_log.append(
                     {
+                        "audio_chunk_file": audio_chunk_file,
                         "start_time": segment["start_time"],
                         "end_time": segment["end_time"],
                         "intent": intent,
@@ -274,6 +279,7 @@ def extract_med_admins_with_confidence(
             if canonical in chunk_records or tracker.is_known(canonical, record.start_time):
                 audit_log.append(
                     {
+                        "audio_chunk_file": audio_chunk_file,
                         "start_time": segment["start_time"],
                         "end_time": segment["end_time"],
                         "intent": f"{intent} AND SUPRESSED AS DUPLICATE",
@@ -442,7 +448,7 @@ def run_medication_extraction(
         )
 
     confirmed_admins = extract_med_admins_with_confidence(
-        transcript_data, tracker, audit_log
+        transcript_data, tracker, audit_log, chunk_path
     )
 
     rows = prepare_medication_rows(confirmed_admins)

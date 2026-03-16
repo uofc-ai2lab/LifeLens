@@ -277,6 +277,7 @@ MED_COLUMNS: list[str] = [
 ]
 
 AUDIT_COLUMNS: list[str] = [
+    "audio_chunk_file",
     "start_time",
     "end_time",
     "intent",
