@@ -122,6 +122,9 @@ nlpPipeline/data_p3.2
 # NVIDIA ResNet model
 resnet50_market1501_aicity156.onnx
 
+# YOLO Detector Model
+yolov8n.onnx
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

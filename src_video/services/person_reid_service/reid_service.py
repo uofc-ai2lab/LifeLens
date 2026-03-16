@@ -1,71 +1,5 @@
 from __future__ import annotations
 
-"""
-reid_service.py  —  Multi-person body ReID using YOLO ONNX + ResNet50
-======================================================================
-No pycuda / MobileFaceNet / YuNet required.
-
-Detector
---------
-YOLOv8n (person class only) exported to ONNX.
-Export command (one-time, on any machine with ultralytics installed):
-
-    pip install ultralytics
-    python -c "
-    from ultralytics import YOLO
-    model = YOLO('yolov8n.pt')
-    model.export(format='onnx', imgsz=640, opset=12, simplify=True)
-    # outputs yolov8n.onnx — copy to your reid service directory
-    "
-
-The ONNX file runs with onnxruntime-gpu (already in your environment).
-No ultralytics needed at inference time — pure ORT + NumPy.
-
-Architecture
-------------
-PRIMARY PATH  — per-person body crop matching
-  1. YOLO detects all persons in the frame (class 0).
-  2. Each person bbox is cropped from the frame.
-  3. ResNet50 embeds each crop → 2048-dim vector.
-  4. Cosine similarity computed per-person vs enrolled reference.
-  5. Snapshot triggered ONLY if at least one person exceeds threshold.
-     If persons detected but none match → return None.
-
-FALLBACK PATH — center body crop
-  Used ONLY when YOLO detects zero persons in the frame.
-  Higher threshold, LOW confidence flag.
-
-Key improvements vs. current_reid_service.py
----------------------------------------------
-1. Per-person bbox loop replaces the single full-frame crop.
-2. "Persons detected but no match" returns None immediately.
-   A stranger in frame cannot trigger a snapshot.
-3. YOLO produces tight, person-only bboxes — no body expand heuristics.
-4. Enrollment averages ENROLL_N_FRAMES crops for a stable reference.
-5. Threshold raised to 0.72 (body crops need higher bar than original 0.65).
-
-Threshold guidance
-------------------
-Body-crop cosine similarity is sensitive to clothing and lighting.
-Recommended starting points:
-  > 0.76  →  high confidence same person
-  0.72–0.76 → probable match
-  < 0.72  →  treat as different person
-
-To calibrate: enable debug logging, walk in front of the camera alone,
-note your similarity scores, then add a second person and note theirs.
-Pick a threshold in the gap.
-
-False positive mitigations
---------------------------
-- YOLO gives per-person isolation: a stranger is never blended with you.
-- Raised threshold (0.72 vs 0.65).
-- Enrollment averages 8 frames, not 5.
-- Body fallback (no detections) uses a stricter threshold (0.77).
-- SNAPSHOT_ON_LOW_CONFIDENCE in main_video.py skips fallback snapshots.
-- PERSON_MIN_AREA_PX filters tiny/distant detections.
-"""
-
 import time
 import threading
 from dataclasses import dataclass, field
@@ -79,45 +13,34 @@ from config.logger import Logger
 
 log = Logger("[video][reid]")
 
-# ═══════════════════════════════════════════════════════════════════════════
-# MODEL PATHS
-# ═══════════════════════════════════════════════════════════════════════════
+# ==================== MODEL PATHS ====================
 
 _DIR = Path(__file__).parent
 _DEFAULT_YOLO_PATH = str(_DIR / "yolov8n.onnx")
 _DEFAULT_REID_PATH = str(_DIR / "resnet50_market1501_aicity156.onnx")
 
-# ═══════════════════════════════════════════════════════════════════════════
-# CONFIGURATION
-# ═══════════════════════════════════════════════════════════════════════════
+# ==================== CONSTANTS ====================
+from src_video.domain.constants import (
+    # Person Detector
+    YOLO_INPUT_SIZE,
+    YOLO_CONF_THRESH,
+    YOLO_NMS_IOU_THRESH,
+    YOLO_PERSON_CLASS,
+    PERSON_MIN_AREA_PX,
+    # ReID Embedder
+    REID_INPUT_SIZE,
+    BODY_SIMILARITY_THRESH,
+    BODY_HIGH_CONF_THRESH,
+    BODY_FALLBACK_THRESH,
+    # Embedding Enrollment
+    ENROLL_N_FRAMES,
+    REID_COOLDOWN_S,
+)
 
-# ── YOLO person detector ──────────────────────────────────────────────────
-YOLO_INPUT_SIZE       = 640          # square input; YOLOv8n default
-YOLO_CONF_THRESH      = 0.45         # minimum detection confidence
-YOLO_NMS_IOU_THRESH   = 0.45         # NMS IoU threshold
-YOLO_PERSON_CLASS     = 0            # COCO class 0 = person
-PERSON_MIN_AREA_PX    = 3000         # ignore detections smaller than this
-                                     # (pixels²) — filters out distant bystanders
-                                     # tune based on your camera distance
-
-# ── ResNet50 body ReID ────────────────────────────────────────────────────
-REID_INPUT_SIZE = (128, 256)          # (W, H) Market1501 canonical
 REID_MEAN       = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 REID_STD        = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
-# ── Matching thresholds ───────────────────────────────────────────────────
-BODY_SIMILARITY_THRESH      = 0.72   # primary path — YOLO bbox → body crop
-BODY_HIGH_CONF_THRESH       = 0.76   # above this → high confidence
-BODY_FALLBACK_THRESH        = 0.77   # fallback path (no YOLO detections)
-
-# ── Enrollment ────────────────────────────────────────────────────────────
-ENROLL_N_FRAMES  = 8
-REID_COOLDOWN_S  = 5.0
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# DOMAIN ENTITIES
-# ═══════════════════════════════════════════════════════════════════════════
+# ==================== DOMAIN ENTITIES ====================
 
 @dataclass
 class ReIDEvent:
@@ -208,7 +131,14 @@ class YOLOPersonDetector:
 
         try:
             import onnxruntime as ort
-            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+            cuda_provider_options ={
+                "device_id": 0,
+                "arena_extend_strategy": "kSameAsRequested",
+                "gpu_mem_limit": 512 * 1024 * 1024,  # 512 MB cap per session
+                "cudnn_conv_algo_search": "HEURISTIC",
+                "do_copy_in_default_stream": True,
+            }
+            providers = [("CUDAExecutionProvider", cuda_provider_options), "CPUExecutionProvider"]
             opts = ort.SessionOptions()
             opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
             opts.intra_op_num_threads = 2
@@ -372,7 +302,7 @@ def extract_center_body_crop(
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# RESNET50 EMBEDDER  (unchanged model)
+# RESNET50 EMBEDDER  
 # ═══════════════════════════════════════════════════════════════════════════
 
 class ResNet50ReIDEmbedder:
@@ -394,7 +324,14 @@ class ResNet50ReIDEmbedder:
 
         try:
             import onnxruntime as ort
-            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+            cuda_provider_options ={
+                "device_id": 0,
+                "arena_extend_strategy": "kSameAsRequested",
+                "gpu_mem_limit": 512 * 1024 * 1024,  # 512 MB cap per session
+                "cudnn_conv_algo_search": "HEURISTIC",
+                "do_copy_in_default_stream": True,
+            }
+            providers = [("CUDAExecutionProvider", cuda_provider_options), "CPUExecutionProvider"]            
             opts = ort.SessionOptions()
             opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
             opts.intra_op_num_threads = 2
@@ -621,6 +558,9 @@ class ReIDService:
         now = time.time()
         if (now - self._last_reid) < self._cooldown:
             return None
+
+        if self._last_event is not None:
+            self._last_event.frame = None  # release reference to last event's frame for GC
 
         self._last_reid = now
         event = ReIDEvent(
