@@ -26,8 +26,8 @@ SNAPSHOT_INTERVAL = int(os.getenv('SNAPSHOT_INTERVAL', '2'))  # seconds between 
 YOLO_MODEL_PATH = "src_video/services/person_reid_service/yolov8n.onnx"
 EMBEDDER_ONNX_PATH = "src_video/services/person_reid_service/resnet50_market1501_aicity156.onnx"
 REID_USE_TRT = False
-REID_BODY_THRESHOLD = 0.75
-REID_THRESHOLD = 0.75
+REID_BODY_THRESHOLD = 0.80
+REID_THRESHOLD = 0.80
 
 IMAGE_SAVE_DIR = VIDEO_DIR / "saved_imgs"
 os.makedirs(IMAGE_SAVE_DIR, exist_ok=True)

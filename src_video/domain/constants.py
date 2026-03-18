@@ -93,9 +93,9 @@ PERSON_MIN_AREA_PX    = 3000
 REID_INPUT_SIZE = (128, 256)          
 
 # ── REID Matching thresholds ───────────────────────────────────────────────────
-BODY_SIMILARITY_THRESH      = 0.72   # primary path — YOLO bbox → body crop
-BODY_HIGH_CONF_THRESH       = 0.76   # above this → high confidence
-BODY_FALLBACK_THRESH        = 0.77   # fallback path (no YOLO detections)
+BODY_SIMILARITY_THRESH      = 0.80   # primary path — YOLO bbox → body crop
+BODY_HIGH_CONF_THRESH       = 0.86   # above this → high confidence
+BODY_FALLBACK_THRESH        = 0.87   # fallback path (no YOLO detections)
 
 # ── Enrollment ────────────────────────────────────────────────────────────
 ENROLL_N_FRAMES  = 8

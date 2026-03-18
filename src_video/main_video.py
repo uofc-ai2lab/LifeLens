@@ -183,7 +183,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
     body_thresh = float(
         settings.get(
             "REID_BODY_THRESHOLD",
-            settings.get("REID_THRESHOLD", 0.75),
+            settings.get("REID_THRESHOLD", 0.80),
         )
     )
 
@@ -269,6 +269,11 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
     finally:
         video_pipeline.cleanup()
         cv2.destroyAllWindows()
+
+    log.info("Releasing ReID service...")
+    del reid
+    import gc
+    gc.collect()
 
     log.header("Camera closed — starting post-camera pipeline")
     run_post_camera_pipeline(settings, snapshot_count)
