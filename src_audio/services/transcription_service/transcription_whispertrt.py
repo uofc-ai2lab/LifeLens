@@ -32,6 +32,9 @@ _WHISPER_BASE_MODEL_MAP = {
 
 # At the top of transcription_service.py
 _SERVICE_DIR = Path(__file__).resolve().parent  # always points to transcription_service/
+_DEFAULT_LORA_MODEL_PATH = str(
+    _SERVICE_DIR / "models/whisper-base-medical-lora/checkpoint-3000"
+)
 _STARTING_TIME_SECONDS = 1
 _CURRENT_RECORDING_KEY = None
 _MIN_FREE_CUDA_GB = float(os.getenv("LIFELENS_MIN_FREE_CUDA_GB", "2.5"))
@@ -332,7 +335,7 @@ def transcribe_audio(audio_file: str, model_obj, model_type: str):
 
 def run_transcription(audio_chunk_file, model_path=None):
     if model_path is None:
-        model_path = str(_SERVICE_DIR / "models/whisper-base-medical-lora/checkpoint-3000")
+        model_path = _DEFAULT_LORA_MODEL_PATH
 
     global _STARTING_TIME_SECONDS
     global _CURRENT_RECORDING_KEY

@@ -21,6 +21,7 @@ from config.audio_settings import USAGE_FILE_PATH
 from config.resource_usage import start_monitoring, stop_monitoring
 from config.logger import audio_logger as log
 from src_audio.utils.export_to_csv import export_to_csv
+from src_audio.services.audio_model_initializer import initialize_audio_models
 
 def put_latest(queue: Queue, item):
     """Drop old signal if queue is full, keep newest."""
@@ -138,6 +139,8 @@ def main(
         return 0
     
     log.header("Audio Pipeline Starting")
+    # Eagerly load all heavy models once per run, before first chunk
+    initialize_audio_models()
     audio_queue = Queue(maxsize=2)
 
     worker = threading.Thread(

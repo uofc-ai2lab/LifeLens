@@ -20,6 +20,15 @@ from config.logger import Logger
 
 log = Logger("[audio][medication]")
 
+GLOBAL_MEDICATION_EXTRACTOR: MedicationExtractor | None = None
+
+
+def get_medication_extractor() -> MedicationExtractor:
+    global GLOBAL_MEDICATION_EXTRACTOR
+    if GLOBAL_MEDICATION_EXTRACTOR is None:
+        GLOBAL_MEDICATION_EXTRACTOR = MedicationExtractor()
+    return GLOBAL_MEDICATION_EXTRACTOR
+
 
 def _resolve_canonical_name(word: str) -> str:
     """
@@ -423,7 +432,7 @@ def run_medication_extraction(
     if audit_log is None:
         audit_log = []
     initial_audit_count: int = len(audit_log)
-    extractor = MedicationExtractor()
+    extractor = get_medication_extractor()
     transcript_data = []
 
     df = load_csv_file(transcript_path)
