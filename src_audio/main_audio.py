@@ -3,11 +3,13 @@ from __future__ import annotations
 import argparse
 import time
 import threading
+import os
 from datetime import datetime
 from pathlib import Path
 from queue import Queue, Empty
 from typing import Optional
 import signal
+import psutil
 
 from config.audio_settings import AUDIO_CHUNKS_DIR, PROCESSED_AUDIO_DIR
 from src_audio.domain.constants import AUDIT_COLUMNS
@@ -54,6 +56,17 @@ def process_audio_chunk() -> bool:
     Processes whatever is currently in AUDIO_CHUNKS_DIR.
     """
     try:
+        # Prevent heavy NLP/transcription work when system memory is already high.
+        # This avoids Argus/NvMap OOM spirals under sustained load.
+        mem_limit = float(os.getenv("LIFELENS_AUDIO_PROCESS_MEM_MAX_PCT", "82"))
+        mem_now = psutil.virtual_memory().percent
+        if mem_now >= mem_limit:
+            log.warning(
+                f"Skipping chunk processing: system memory {mem_now:.1f}% "
+                f">= limit {mem_limit:.1f}%"
+            )
+            return False
+
         inbox = Path(AUDIO_CHUNKS_DIR)
         files = sorted([p for p in inbox.glob("*") if p.is_file()])
         if not files:

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import csv
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import torch
@@ -140,6 +141,8 @@ def _run_inference_on_crops(
 
 def _aggregate_predictions_by_part(
     predictions: List[CropPrediction],
+    use_max_non_no_injury: bool = False,
+    no_injury_label: str = "no_injury",
 ) -> List[Dict[str, Any]]:
     """Aggregate predictions by (image_id, body_part) using voting and average probability."""
     aggregation_by_image_and_part: Dict[Tuple[str, str], Dict[str, Any]] = {}
@@ -155,14 +158,27 @@ def _aggregate_predictions_by_part(
     for (image_id, body_part), entry in sorted(aggregation_by_image_and_part.items()):
         counts: Dict[str, int] = entry["counts"]
         probabilities: Dict[str, List[float]] = entry["probabilities"]
-        best_injury = sorted(
-            counts.keys(),
-            key=lambda name: (
-                counts[name],
-                sum(probabilities[name]) / max(1, len(probabilities[name])),
-            ),
-            reverse=True,
-        )[0]
+        best_injury = ""
+        if use_max_non_no_injury:
+            non_no_injury_classes = [
+                name for name in counts.keys() if name.lower() != no_injury_label.lower()
+            ]
+            if non_no_injury_classes:
+                best_injury = max(
+                    non_no_injury_classes,
+                    key=lambda name: max(probabilities.get(name, [0.0])),
+                )
+
+        if not best_injury:
+            best_injury = sorted(
+                counts.keys(),
+                key=lambda name: (
+                    counts[name],
+                    sum(probabilities[name]) / max(1, len(probabilities[name])),
+                ),
+                reverse=True,
+            )[0]
+
         per_part_summary.append(
             {
                 "image_id": image_id,
@@ -222,16 +238,31 @@ def predict_injuries_on_detection_crops(
     device: Optional[torch.device] = None,
     filename_delimiter: str = "_",
     body_part_label_position: int = -2,
+    use_max_non_no_injury_aggregation: bool = False,
+    no_injury_label: str = "no_injury",
 ) -> Dict[str, Any]:
     """Run injury classifier on detection crops and write reports."""
     log.header("Starting Injury Classification...")
+
+    checkpoint_file = Path(checkpoint_path).expanduser()
+    if not checkpoint_file.exists():
+        raise FileNotFoundError(f"Injury checkpoint not found: {checkpoint_file.resolve()}")
+
+    checkpoint_resolved = str(checkpoint_file.resolve())
+    checkpoint_stats = checkpoint_file.stat()
+    checkpoint_size_mb = checkpoint_stats.st_size / (1024 * 1024)
+    checkpoint_mtime = datetime.fromtimestamp(checkpoint_stats.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+    log.info(
+        f"Using injury checkpoint: {checkpoint_resolved} "
+        f"({checkpoint_size_mb:.2f} MB, mtime={checkpoint_mtime})"
+    )
     
     crop_paths = _collect_crop_paths(crops_root)
 
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model, injury_class_names = load_model_from_checkpoint(checkpoint_path, device)
+    model, injury_class_names = load_model_from_checkpoint(checkpoint_resolved, device)
 
     dataset = _CropsDataset(crop_paths, image_size=image_size)
     data_loader = DataLoader(
@@ -252,12 +283,16 @@ def predict_injuries_on_detection_crops(
         body_part_label_position=body_part_label_position,
     )
 
-    per_part_summary = _aggregate_predictions_by_part(predictions)
+    per_part_summary = _aggregate_predictions_by_part(
+        predictions,
+        use_max_non_no_injury=use_max_non_no_injury_aggregation,
+        no_injury_label=no_injury_label,
+    )
 
     _save_reports(
         out_json_path=out_json_path,
         out_csv_path=out_csv_path,
-        checkpoint_path=checkpoint_path,
+        checkpoint_path=checkpoint_resolved,
         crops_root=crops_root,
         injury_class_names=injury_class_names,
         predictions=predictions,

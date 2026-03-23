@@ -42,6 +42,7 @@ def blink_led(times: int = 3, on_s: float = 0.15, off_s: float = 0.15):
 # ---------------- process control ----------------
 proc = None
 proc_lock = threading.Lock()
+is_stopping = False
 last = 0.0
 
 
@@ -53,19 +54,55 @@ def _watch_process(p: subprocess.Popen):
         print(f"PROCESS_WATCHER_FAILED: {e}")
         return
 
-    global proc
+    global proc, is_stopping
     with proc_lock:
         if proc is p:
             proc = None
+            is_stopping = False
             set_led(False)
             print(f"STOPPED (exit={exit_code})")
 
+
+def _request_stop_async(current_proc: subprocess.Popen | None):
+    """Send STOP to child and wait in background so button loop stays responsive."""
+    global proc, is_stopping
+
+    try:
+        if current_proc is not None and current_proc.stdin is not None:
+            current_proc.stdin.write("STOP\n")
+            current_proc.stdin.flush()
+            print("STOPPING... waiting for graceful shutdown")
+        else:
+            print("STOPPING... process has no stdin")
+    except Exception as e:
+        print(f"STOP_COMMAND_FAILED: {e}")
+
+    try:
+        if current_proc is not None:
+            current_proc.wait()
+    except Exception as e:
+        print(f"WAIT_FAILED: {e}")
+    finally:
+        with proc_lock:
+            if proc is current_proc:
+                proc = None
+            is_stopping = False
+        set_led(False)
+        print("STOPPED")
+
 def toggle():
-    global proc, proc_log
+    global proc, proc_log, is_stopping
 
     with proc_lock:
         # Process is considered running only if the child exists and hasn't exited
         is_running = proc is not None and proc.poll() is None
+        stopping_now = is_stopping
+
+    if stopping_now:
+        # Quick acknowledgement pattern for repeated stop presses.
+        blink_led(times=1, on_s=0.08, off_s=0.08)
+        print("STOP_ALREADY_IN_PROGRESS")
+        return
     
     if not is_running:
         set_led(True)
@@ -102,32 +139,19 @@ def toggle():
         print(f"STARTED pid={new_proc.pid} (logs: {LOG_FILE})")
     else:
         # --- STOP: quick blink animation to acknowledge button press ---
-        # LED ends ON (still running) while main gracefully shuts down.
+        # LED ends ON while graceful shutdown is in progress.
         blink_led(times=3, on_s=0.12, off_s=0.12)
         set_led(True)
         with proc_lock:
             current_proc = proc
-        
-        try:
-            if current_proc is not None and current_proc.stdin is not None:
-                current_proc.stdin.write("STOP\n")
-                current_proc.stdin.flush()
-        except Exception as e:
-            print(f"STOP_COMMAND_FAILED: {e}")
+            is_stopping = True
 
-        try:
-            # Block until the program has fully exited so a new
-            # start cannot occur while it is still shutting down.
-            if current_proc is not None:
-                current_proc.wait()
-        except Exception as e:
-            print(f"WAIT_FAILED: {e}")
-
-        with proc_lock:
-            if proc is current_proc:
-                proc = None
-        set_led(False)
-        print("STOPPED")
+        # Non-blocking stop request; keeps button read loop responsive.
+        threading.Thread(
+            target=_request_stop_async,
+            args=(current_proc,),
+            daemon=True,
+        ).start()
 
 print("Listening for power button...")
 print(f"Logging to: {LOG_FILE}")

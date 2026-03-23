@@ -156,6 +156,32 @@ def _expand_bbox_with_margin(
     return x1, y1, x2, y2
 
 
+def _scale_bbox_from_center(
+    bbox: tuple[int, int, int, int],
+    scale: float,
+    image_shape: tuple[int, int],
+) -> tuple[int, int, int, int]:
+    """Scale bbox around center (scale < 1.0 shrinks), clipped to image bounds."""
+    x1, y1, x2, y2 = bbox
+    if x2 <= x1 or y2 <= y1:
+        return 0, 0, 0, 0
+
+    width = x2 - x1 + 1
+    height = y2 - y1 + 1
+    cx = x1 + width * 0.5
+    cy = y1 + height * 0.5
+
+    new_w = max(2, int(round(width * scale)))
+    new_h = max(2, int(round(height * scale)))
+
+    new_x1 = int(round(cx - new_w * 0.5))
+    new_y1 = int(round(cy - new_h * 0.5))
+    new_x2 = new_x1 + new_w - 1
+    new_y2 = new_y1 + new_h - 1
+
+    return _clip_bbox((new_x1, new_y1, new_x2, new_y2), image_shape=image_shape)
+
+
 def _resize_mask_to_image(mask_bin: np.ndarray, image_shape: tuple[int, int]) -> np.ndarray:
     """Resize a binary mask to the given (H,W) using nearest-neighbor."""
     H, W = image_shape
@@ -287,6 +313,9 @@ def process_image(
     save_annotated: bool = True,
     debug: bool = False,
     debug_print: bool = False,
+    face_multicrop: bool = False,
+    face_multicrop_parts: Optional[List[str]] = None,
+    face_multicrop_scales: Optional[List[float]] = None,
 ):
     image_pil = Image.open(image_path)
     if auto_orient:
@@ -323,6 +352,15 @@ def process_image(
     log.info(f"Processing {image_path.name}: {len(results)} result(s)")
     vis_boxes: List[tuple[int, int, int, int]] = []
     vis_labels: List[str] = []
+
+    multicrop_parts = {
+        p.strip().lower()
+        for p in (face_multicrop_parts or ["face"])
+        if isinstance(p, str) and p.strip()
+    }
+    multicrop_scales = [
+        float(s) for s in (face_multicrop_scales or [0.85, 0.70]) if 0.0 < float(s) < 1.0
+    ]
 
     crops_root = output_dir / "crops" / image_path.stem
     ensure_dir(crops_root)
@@ -414,6 +452,40 @@ def process_image(
                         if debug_print:
                             log.debug(f"classification export failed for {filename}: {e}")
 
+                if face_multicrop and (cls_name.lower() in multicrop_parts):
+                    seen_bboxes = {bbox}
+                    for scale in multicrop_scales:
+                        scaled_bbox = _scale_bbox_from_center(
+                            bbox,
+                            scale=scale,
+                            image_shape=image_np.shape[:2],
+                        )
+                        if (
+                            scaled_bbox[2] <= scaled_bbox[0]
+                            or scaled_bbox[3] <= scaled_bbox[1]
+                            or scaled_bbox in seen_bboxes
+                        ):
+                            continue
+                        seen_bboxes.add(scaled_bbox)
+
+                        scale_tag = int(round(scale * 100.0))
+                        scale_token = f"{idx}mc{scale_tag}"
+                        mc_filename = f"{image_path.stem}_{export_cls_name}_{scale_token}.jpg"
+                        mc_saved = save_crop(image_np, scaled_bbox, crops_root / mc_filename)
+                        if not mc_saved:
+                            continue
+
+                        vis_boxes.append(scaled_bbox)
+                        vis_labels.append(f"{export_cls_name}_mc{scale_tag}")
+                        if classification_export_dir is not None:
+                            cls_dir = classification_export_dir / export_cls_name
+                            ensure_dir(cls_dir)
+                            try:
+                                Image.open(crops_root / mc_filename).save(cls_dir / mc_filename)
+                            except Exception as e:
+                                if debug_print:
+                                    log.debug(f"classification export failed for {mc_filename}: {e}")
+
     if add_head:
         head_components: List[np.ndarray] = []
         head_components.extend(composite_parts["hair"])
@@ -472,6 +544,9 @@ def iterate_source(
     save_annotated: bool = True,
     debug: bool = False,
     debug_print: bool = False,
+    face_multicrop: bool = False,
+    face_multicrop_parts: Optional[List[str]] = None,
+    face_multicrop_scales: Optional[List[float]] = None,
 ):
     if source.is_file():
         process_image(
@@ -491,6 +566,9 @@ def iterate_source(
             save_annotated=save_annotated,
             debug=debug,
             debug_print=debug_print,
+            face_multicrop=face_multicrop,
+            face_multicrop_parts=face_multicrop_parts,
+            face_multicrop_scales=face_multicrop_scales,
         )
         return
 
@@ -518,6 +596,9 @@ def iterate_source(
             save_annotated=save_annotated,
             debug=debug,
             debug_print=debug_print,
+            face_multicrop=face_multicrop,
+            face_multicrop_parts=face_multicrop_parts,
+            face_multicrop_scales=face_multicrop_scales,
         )
 
 
@@ -533,10 +614,13 @@ def run_detection(
     debug: bool = False,
     alpha_png: bool = False,
     max_images: int = 200,
-    auto_orient: bool = True,
+    auto_orient: bool = False,
     rotate_degrees: int = 0,
     auto_rotate_subject: bool = True,
     classification_export_dir: Optional[str] = None,
+    face_multicrop: bool = False,
+    face_multicrop_parts: Optional[List[str]] = None,
+    face_multicrop_scales: Optional[List[float]] = None,
 ) -> Dict[str, Any]:
     """Run YOLO segmentation + crop extraction.
 
@@ -584,6 +668,9 @@ def run_detection(
         save_annotated=True,
         debug=debug,
         debug_print=debug,
+        face_multicrop=face_multicrop,
+        face_multicrop_parts=face_multicrop_parts,
+        face_multicrop_scales=face_multicrop_scales,
     )
 
     summary: Dict[str, Any] = {
@@ -595,6 +682,9 @@ def run_detection(
         "auto_orient": auto_orient,
         "rotate_degrees": rotate_degrees,
         "auto_rotate_subject": auto_rotate_subject,
+        "face_multicrop": face_multicrop,
+        "face_multicrop_parts": face_multicrop_parts,
+        "face_multicrop_scales": face_multicrop_scales,
     }
     log.success(f"Done. Outputs in {output_path}")
     return summary

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 import threading
+import gc
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Callable
@@ -152,6 +153,12 @@ class YOLOPersonDetector:
     @property
     def available(self) -> bool:
         return self._session is not None and not self._failed
+
+    def close(self) -> None:
+        """Release ONNX runtime resources deterministically."""
+        self._session = None
+        self._inp_name = None
+        self._failed = True
 
     # ── Pre/post-processing ───────────────────────────────────────────────
 
@@ -346,6 +353,12 @@ class ResNet50ReIDEmbedder:
     def available(self) -> bool:
         return self._session is not None and not self._failed
 
+    def close(self) -> None:
+        """Release ONNX runtime resources deterministically."""
+        self._session = None
+        self._inp_name = None
+        self._failed = True
+
     def embed(self, crop_bgr: np.ndarray) -> np.ndarray:
         if not self.available or crop_bgr is None or crop_bgr.size == 0:
             return np.zeros(2048, dtype=np.float32)
@@ -419,7 +432,18 @@ class ReIDService:
 
     # ── Enrollment ──────────────────────────────────────────────────────────
 
-    def enroll_from_frame(self, frame_bgr: np.ndarray) -> bool:
+    def enroll_from_frame(self, frame_bgr: np.ndarray, prefer_center_crop: bool = False) -> bool:
+        # AprilTag-guided enrollment can use a center crop to avoid running YOLO
+        # repeatedly during startup and reduce transient memory pressure.
+        if prefer_center_crop:
+            crop, _ = extract_center_body_crop(frame_bgr)
+            if crop.size == 0:
+                return False
+
+            emb = self._embedder.embed(crop)
+            with self._lock:
+                return self._state.add_candidate(emb)
+
         persons = self._detector.detect(frame_bgr)
 
         if persons:
@@ -452,6 +476,25 @@ class ReIDService:
             self._state.reset()
         self._last_persons = []
         self._last_event   = None
+
+    def close(self) -> None:
+        """Best-effort cleanup for detector/embedder sessions and cached state."""
+        with self._lock:
+            self._state.reset()
+        self._last_persons = []
+        self._last_event = None
+
+        try:
+            self._detector.close()
+        except Exception:
+            pass
+
+        try:
+            self._embedder.close()
+        except Exception:
+            pass
+
+        gc.collect()
 
     # ── Per-frame tracking ────────────────────────────────────────────────────
 
@@ -559,15 +602,12 @@ class ReIDService:
         if (now - self._last_reid) < self._cooldown:
             return None
 
-        if self._last_event is not None:
-            self._last_event.frame = None  # release reference to last event's frame for GC
-
         self._last_reid = now
         event = ReIDEvent(
             timestamp  = now,
             similarity = similarity,
             bbox       = bbox,
-            frame      = frame_bgr.copy(),
+            frame      = None,
             match_type = match_type,
             confidence = confidence,
         )
@@ -577,7 +617,16 @@ class ReIDService:
             f"confidence={confidence} bbox={bbox}"
         )
         if self._callback:
-            self._callback(event)
+            callback_event = ReIDEvent(
+                timestamp  = now,
+                similarity = similarity,
+                bbox       = bbox,
+                frame      = frame_bgr,
+                match_type = match_type,
+                confidence = confidence,
+            )
+            self._callback(callback_event)
+            callback_event.frame = None
         return event
 
     # ── Debug overlay ─────────────────────────────────────────────────────────

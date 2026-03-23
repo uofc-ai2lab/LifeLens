@@ -31,6 +31,8 @@ from src_video.services.body_ranking.body_injury_ranking import body_ranking
 from src_video.services.classification_service.infer_injuries_on_crops import predict_injuries_on_detection_crops
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
 
+APRILTAG_DETECT_EVERY_N_FRAMES = 3
+
 def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")
 
@@ -61,6 +63,7 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
                 debug=bool(settings["DEBUG"]),
                 alpha_png=bool(settings["ALPHA_PNG"]),
                 max_images=int(settings["MAX_IMAGES"]),
+                auto_rotate_subject=bool(settings.get("AUTO_ROTATE_SUBJECT", False)),
                 classification_export_dir=None,
             )
 
@@ -96,7 +99,7 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
     try:
         crops_root = Path(settings["CROPS_ROOT"])
         if crops_root.exists():
-            shutil.rmtree(crops_root)
+            # shutil.rmtree(crops_root)  # Keep crops for debugging/inspection
             crops_root.mkdir(parents=True, exist_ok=True)
 
     except Exception as e:
@@ -200,6 +203,7 @@ def main(
     frame_count = 0
     start_time = time.time()
     fps = 0.0
+    loop_count = 0
 
     processing = False
     log.header("Video Pipeline Started")
@@ -220,6 +224,8 @@ def main(
                 log.error("Empty frame received")
                 continue
 
+            loop_count += 1
+
             # FPS
             frame_count += 1
             elapsed = time.time() - start_time
@@ -229,8 +235,14 @@ def main(
                 frame_count = 0
                 start_time = time.time()
 
-            # Marker detection
-            detected = detect_apriltags(frame)
+            # Marker detection (throttled to reduce detector churn)
+            detected = False
+            if loop_count % APRILTAG_DETECT_EVERY_N_FRAMES == 0:
+                detected = detect_apriltags(
+                    frame,
+                    show_visualization=False,
+                    print_info=False,
+                )
             now = time.time()
 
             # Capture
@@ -288,7 +300,7 @@ if __name__ == "__main__":
         log.info("Running startup tasks...")
         run_jetson_startup_tasks()
         start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
-        video_pipeline = GStreamerVideoPipeline(flip_method=0)
+        video_pipeline = GStreamerVideoPipeline()
         if not video_pipeline.start():
             log.error("Failed to initialize camera")
             raise SystemExit(1)

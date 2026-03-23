@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 import threading, asyncio
 import shutil
+import gc
 import cv2
 import numpy as np
 import argparse
@@ -14,6 +15,7 @@ from config.jetson_startup import run_jetson_startup_tasks
 from config.resource_usage import start_monitoring, stop_monitoring
 from config.audio_settings import USAGE_FILE_PATH
 from config.logger import video_logger as log
+from config.gpu_guard import gpu_exclusive
 from config.video_settings import (
     load_video_pipeline_settings,
     SNAPSHOT_INTERVAL,
@@ -39,8 +41,119 @@ from src_video.services.person_reid_service.reid_service import (
 # Recommended: keep False unless YOLO frequently misses the enrolled person.
 SNAPSHOT_ON_LOW_CONFIDENCE = False
 
+# Run AprilTag detection every N frames while enrolling to reduce continuous
+# detector pressure and memory churn on long camera sessions.
+APRILTAG_DETECT_EVERY_N_FRAMES = 3
+
+# After first AprilTag hit, pause AprilTag calls and collect enrollment samples
+# directly to avoid running both heavy paths repeatedly.
+ENROLL_SAMPLE_EVERY_N_FRAMES = 2
+ENROLLMENT_TIMEOUT_S = 12.0
+
 def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")
+
+
+def _is_cuda_detection_failure(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    markers = (
+        "cudacachingallocator",
+        "cuda",
+        "nvml",
+        "out of memory",
+        "nvmamemallocinternaltagged",
+        "cudnn",
+    )
+    return any(marker in msg for marker in markers)
+
+
+def _clear_cuda_cache_if_available() -> None:
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        # Best-effort cleanup only.
+        pass
+
+
+def _run_detection_with_cpu_fallback(settings: Dict[str, Any]) -> None:
+    detection_kwargs = dict(
+        model=settings["DETECTION_MODEL"],
+        source=_as_posix(IMAGE_SAVE_DIR),
+        output=_as_posix(settings["DETECTION_OUTPUT"]),
+        classes=settings["CLASSES"],
+        margin=float(settings["MARGIN"]),
+        min_area=int(settings["MIN_AREA"]),
+        device=settings.get("DEVICE"),
+        add_head=bool(settings["ADD_HEAD"]),
+        debug=bool(settings["DEBUG"]),
+        alpha_png=bool(settings["ALPHA_PNG"]),
+        max_images=int(settings["MAX_IMAGES"]),
+        auto_rotate_subject=bool(settings.get("AUTO_ROTATE_SUBJECT", False)),
+        classification_export_dir=None,
+        face_multicrop=bool(settings.get("FACE_MULTICROP", False)),
+        face_multicrop_parts=settings.get("FACE_MULTICROP_PARTS", ["face"]),
+        face_multicrop_scales=settings.get("FACE_MULTICROP_SCALES", [0.85, 0.70]),
+    )
+
+    try:
+        run_detection(**detection_kwargs)
+        return
+    except Exception as e:
+        if not _is_cuda_detection_failure(e):
+            raise
+
+        log.warning(
+            f"Detection hit CUDA/NVML runtime failure ({e}). "
+            f"Retrying once on CPU..."
+        )
+        gc.collect()
+        _clear_cuda_cache_if_available()
+
+    detection_kwargs["device"] = "cpu"
+    run_detection(**detection_kwargs)
+    log.success("Detection retry on CPU completed")
+
+
+def _run_classification_with_cpu_fallback(settings: Dict[str, Any]) -> None:
+    classification_kwargs = dict(
+        crops_root=_as_posix(str(Path(settings["CROPS_ROOT"]))),
+        checkpoint_path=str(settings["INJURY_CHECKPOINT_PATH"]),
+        out_json_path=str(settings["INJURY_REPORT_JSON"]),
+        out_csv_path=str(settings["INJURY_REPORT_CSV"]),
+        image_size=int(settings["INJURY_IMG_SIZE"]),
+        batch_size=int(settings["INJURY_BATCH_SIZE"]),
+        num_workers=int(settings["INJURY_NUM_WORKERS"]),
+        device=None,
+        filename_delimiter="_",
+        body_part_label_position=int(settings["BODY_PART_LABEL_POSITION"]),
+        use_max_non_no_injury_aggregation=bool(
+            settings.get("INJURY_AGG_MAX_NON_NO_INJURY", False)
+        ) and bool(settings.get("FACE_MULTICROP", False)),
+        no_injury_label=str(settings.get("NO_INJURY_LABEL", "no_injury")),
+    )
+
+    try:
+        predict_injuries_on_detection_crops(**classification_kwargs)
+        return
+    except Exception as e:
+        if not _is_cuda_detection_failure(e):
+            raise
+
+        log.warning(
+            f"Classification hit CUDA/NVML runtime failure ({e}). "
+            f"Retrying once on CPU..."
+        )
+        gc.collect()
+        _clear_cuda_cache_if_available()
+
+    import torch
+
+    classification_kwargs["device"] = torch.device("cpu")
+    predict_injuries_on_detection_crops(**classification_kwargs)
+    log.success("Classification retry on CPU completed")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -55,42 +168,18 @@ def run_post_camera_pipeline(settings: Dict[str, Any], snapshot_count: int) -> b
     log.header(f"Post-camera pipeline starting ({snapshot_count} snapshots)")
 
     try:
-        run_detection(
-            model=settings["DETECTION_MODEL"],
-            source=_as_posix(IMAGE_SAVE_DIR),
-            output=_as_posix(settings["DETECTION_OUTPUT"]),
-            classes=settings["CLASSES"],
-            margin=float(settings["MARGIN"]),
-            min_area=int(settings["MIN_AREA"]),
-            device=settings.get("DEVICE"),
-            add_head=bool(settings["ADD_HEAD"]),
-            debug=bool(settings["DEBUG"]),
-            alpha_png=bool(settings["ALPHA_PNG"]),
-            max_images=int(settings["MAX_IMAGES"]),
-            classification_export_dir=None,
-        )
-        log.success("Detection done")
+        with gpu_exclusive("video:detection+classification", logger=log):
+            _run_detection_with_cpu_fallback(settings)
+            log.success("Detection done")
+
+            try:
+                _run_classification_with_cpu_fallback(settings)
+                log.success("Classification done")
+            except Exception as e:
+                log.error(f"Classification failed: {e}")
     except Exception as e:
         log.error(f"Detection failed: {e}")
         return False
-
-    try:
-        crops_root = Path(settings["CROPS_ROOT"])
-        predict_injuries_on_detection_crops(
-            crops_root=_as_posix(str(crops_root)),
-            checkpoint_path=str(settings["INJURY_CHECKPOINT_PATH"]),
-            out_json_path=str(settings["INJURY_REPORT_JSON"]),
-            out_csv_path=str(settings["INJURY_REPORT_CSV"]),
-            image_size=int(settings["INJURY_IMG_SIZE"]),
-            batch_size=int(settings["INJURY_BATCH_SIZE"]),
-            num_workers=int(settings["INJURY_NUM_WORKERS"]),
-            device=None,
-            filename_delimiter="_",
-            body_part_label_position=int(settings["BODY_PART_LABEL_POSITION"]),
-        )
-        log.success("Classification done")
-    except Exception as e:
-        log.error(f"Classification failed: {e}")
 
     if not body_ranking(settings):
         log.warning("Ranking failed")
@@ -124,8 +213,11 @@ def run_post_camera_pipeline(settings: Dict[str, Any], snapshot_count: int) -> b
     try:
         crops_root = Path(settings["CROPS_ROOT"])
         if crops_root.exists():
-            shutil.rmtree(crops_root)
-            crops_root.mkdir(parents=True, exist_ok=True)
+            if bool(settings.get("KEEP_CROPS", True)):
+                log.info(f"Keeping crops for debugging: {crops_root}")
+            else:
+                shutil.rmtree(crops_root)
+                log.info(f"Removed crops directory: {crops_root}")
     except Exception as e:
         log.warning(f"Cleanup failed: {e}")
 
@@ -137,7 +229,7 @@ def run_post_camera_pipeline(settings: Dict[str, Any], snapshot_count: int) -> b
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════
 
-def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
+def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_event: Optional[threading.Event] = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dev", action="store_true")
     args = parser.parse_args()
@@ -210,17 +302,27 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
     start_time  = time.time()
     fps         = 0.0
     enrolled    = False
+    loop_count  = 0
+    marker_locked = False
+    enroll_started_at: Optional[float] = None
 
     log.header("Camera session started  —  press Q / ESC to end")
 
     try:
         while True:
+            # Check for external stop event (e.g., power button)
+            if external_stop_event is not None and external_stop_event.is_set():
+                log.info("External stop requested")
+                break
+
             ok, frame = video_pipeline.read_frame()
             if not ok or frame is None:
                 log.error("Camera read failed")
                 break
             if frame.size == 0:
                 continue
+
+            loop_count += 1
 
             frame_count += 1
             elapsed = time.time() - start_time
@@ -229,18 +331,37 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
                 frame_count = 0
                 start_time  = time.time()
 
-            detected = detect_apriltags(frame)
-            now      = time.time()
+            detected = False
+            if not enrolled and not marker_locked and (loop_count % APRILTAG_DETECT_EVERY_N_FRAMES == 0):
+                detected = detect_apriltags(
+                    frame,
+                    show_visualization=False,
+                    print_info=False,
+                )
+
+            if detected and not marker_locked:
+                marker_locked = True
+                enroll_started_at = time.time()
+                log.info("AprilTag acquired — starting enrollment")
 
             # ── Enrollment ────────────────────────────────────────────────
-            if detected and not enrolled:
+            if marker_locked and not enrolled and (loop_count % ENROLL_SAMPLE_EVERY_N_FRAMES == 0):
                 if reid.enroll_from_frame(frame):
                     enrolled = True
+                    marker_locked = False
+                    enroll_started_at = None
                     log.success("Primary person enrolled — ReID tracking active")
 
                     if capture_frame_from_pipeline(frame, IMAGE_SAVE_DIR):
                         snapshot_count += 1
                         log.info(f"Enrollment snapshot saved ({snapshot_count} total)")
+
+            if marker_locked and not enrolled and enroll_started_at is not None:
+                if (time.time() - enroll_started_at) > ENROLLMENT_TIMEOUT_S:
+                    marker_locked = False
+                    enroll_started_at = None
+                    reid.reset_enrollment()
+                    log.warning("Enrollment timed out — waiting for AprilTag reacquire")
 
             # ── Tracking ──────────────────────────────────────────────────
             # process_frame() runs YOLO internally each call.
@@ -260,6 +381,8 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None) -> int:
             if key == ord('r'):
                 reid.reset_enrollment()
                 enrolled       = False
+                marker_locked  = False
+                enroll_started_at = None
                 snapshot_count = 0
                 log.info("Enrollment reset — snapshots cleared")
 
@@ -292,7 +415,7 @@ if __name__ == "__main__":
         log.info("Running startup tasks...")
         run_jetson_startup_tasks()
         start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
-        video_pipeline = GStreamerVideoPipeline(flip_method=0)
+        video_pipeline = GStreamerVideoPipeline()
         if not video_pipeline.start():
             log.error("Failed to initialize camera")
             raise SystemExit(1)
