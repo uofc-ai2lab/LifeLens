@@ -46,7 +46,7 @@ def has_intervention_keyword(text_norm):
     return False
 
 
-def run_intervention_extraction(chunk_path: str, transcript_path: str):
+def run_intervention_extraction(chunk_path: str, transcript_path: str) -> Path: 
     """Main extraction pipeline for interventions only"""
     log.header("Starting Intervention Extraction...")
 
@@ -127,3 +127,4 @@ def run_intervention_extraction(chunk_path: str, transcript_path: str):
     )
     log.info(f"{len(extracted_interventions)} interventions found")
     log.success("Intervention extraction completed successfully!")
+    return inter_path

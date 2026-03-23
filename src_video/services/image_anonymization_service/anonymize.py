@@ -1,13 +1,12 @@
 import cv2
 import numpy as np
-import base64
 from pathlib import Path
 from cryptography.fernet import Fernet
 from config.logger import Logger
 from config.video_settings import IMAGE_ENC_KEY
 log = Logger("[video][anonymization]")
 
-def encrypt_image(image: np.ndarray, fernet: Fernet, suffix: str = ".jpg") -> str:
+def encrypt_image(image: np.ndarray, fernet: Fernet, suffix: str = ".jpg") -> bytes:
     """Encode an image array and encrypt it with a Fernet key.
 
     Args:
@@ -48,14 +47,14 @@ def encrypt_image(image: np.ndarray, fernet: Fernet, suffix: str = ".jpg") -> st
         raise RuntimeError("Encryption failed") from e
 
 
-def run_anonymize_image(image_path: Path) -> str:
+def run_anonymize_image(image_path: Path) -> bytes:
     """Runs image anonymization on the specified file.
 
     Args:
         image_path: Path to the input image file.
 
     Returns:
-        str: Encrypted bytes of the encoded image.
+        bytes: Encrypted bytes of the encoded image.
 
     Raises:
         ValueError: If the encryption key is missing or invalid.

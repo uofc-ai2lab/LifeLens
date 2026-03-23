@@ -6,6 +6,10 @@ from src_video.domain.entities import create_body_parts
 from src_video.domain.constants import BODY_PART_SIDE_SUFFIX_RE, format_sideable_part_label
 from config.logger import Logger
 import time
+import os
+from src_video.services.image_anonymization_service.anonymize import run_anonymize_image
+from data_transfer.sender_global import get
+from config.video_settings import IMAGE_SAVE_DIR
 
 log = Logger("[video][ranking]")
 
@@ -111,12 +115,19 @@ def body_ranking(settings: Dict[str, Any]) -> bool:
                         "pred_time": now,
                     }
                     updated_count += 1
+
+                    # Send image to server
+                    _send_images_to_server(Path(IMAGE_SAVE_DIR / f"captured_img_{image_id}.jpg"), image_id)
                     return
 
                 if float(injury_prob) > float(injuries[injury_pred].get("accuracy", 0.0)):
                     injuries[injury_pred]["image_id"] = image_id
                     injuries[injury_pred]["accuracy"] = float(injury_prob)
                     updated_count += 1
+
+                    # Send image to server
+                    _send_images_to_server(Path(IMAGE_SAVE_DIR / f"captured_img_{image_id}.jpg"), image_id)
+
 
             # Update normalized key
             _update_part(body_part)
@@ -126,6 +137,12 @@ def body_ranking(settings: Dict[str, Any]) -> bool:
         # Save JSON
         with open(template_json, "w", encoding="utf-8") as f:
             json.dump(best_results, f, indent=2)
+        
+        # Send JSON to server
+        data_sender = get()
+        data_sender.send_batch(
+            pipeline="video",
+            files=[(best_results, "visual_output.json", "visual")])
 
         # Save CSV
         with open(output_csv, "w", newline="", encoding="utf-8") as f:
@@ -165,3 +182,30 @@ def body_ranking(settings: Dict[str, Any]) -> bool:
     except Exception as e:
         log.error(f"Body ranking failed: {e}")
         return False
+    
+# Helper to do entire image sending process
+def _send_images_to_server(image_path: Path, image_id: Any) -> None:
+    if not os.path.exists(image_path):
+        log.error(f"Image file not found for sending: {image_path}")
+        return
+    
+    try:
+        image_bytes = run_anonymize_image(image_path)
+    except Exception as e:
+        log.error(f"Failed to anonymize image: {e}")
+        log.info("Falling back to original image.")
+
+        try:
+            image_bytes = image_path.read_bytes()
+        except Exception as e:
+            log.error(f"Failed to read original image: {e}")
+            return
+
+    try:
+        data_sender = get()
+        data_sender.send_image_bytes(
+            pipeline="video",
+            files=[(image_bytes, f"{image_id}", "image")]
+        )
+    except Exception as e:
+        log.error(f"Failed to send image for ranking: {e}")

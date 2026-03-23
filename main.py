@@ -10,6 +10,8 @@ from config.jetson_startup import run_jetson_startup_tasks
 from config.logger import root_logger as log
 from config.audio_settings import USAGE_FILE_PATH
 from config.resource_usage import start_monitoring, stop_monitoring
+from data_transfer.sender_global import init
+from data_transfer.domain.constants import DEVICE_ID
 """
 Dual GStreamer Pipeline Architecture
 =====================================
@@ -124,6 +126,12 @@ def main():
     
     start_time = time.time()
 
+    # Instantiate MQTT singleton object for data transfer and start connection.
+    log.info(f"Initializing MQTT data transfer with device ID: {DEVICE_ID}")
+    data_sender = init(DEVICE_ID)
+    data_sender.connect()
+    data_sender.start_session()
+
     # Synchronization events
     video_ready = threading.Event()
     video_failed = threading.Event()
@@ -176,6 +184,10 @@ def main():
     
     elapsed = time.time() - start_time
     log.success(f"All pipelines completed in {elapsed:.2f}s")
+    
+    # Properly end MQTT session and disconnect
+    data_sender.end_session()
+    data_sender.disconnect()
 
 
 if __name__ == "__main__":
