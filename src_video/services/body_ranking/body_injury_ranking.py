@@ -117,7 +117,7 @@ def body_ranking(settings: Dict[str, Any]) -> bool:
                     updated_count += 1
 
                     # Send image to server
-                    _send_images_to_server(Path(IMAGE_SAVE_DIR / f"captured_img_{image_id}.jpg"), image_id)
+                    _send_images_to_server(Path(IMAGE_SAVE_DIR / f"{image_id}.jpg"), image_id)
                     return
 
                 if float(injury_prob) > float(injuries[injury_pred].get("accuracy", 0.0)):
@@ -126,7 +126,7 @@ def body_ranking(settings: Dict[str, Any]) -> bool:
                     updated_count += 1
 
                     # Send image to server
-                    _send_images_to_server(Path(IMAGE_SAVE_DIR / f"captured_img_{image_id}.jpg"), image_id)
+                    _send_images_to_server(Path(IMAGE_SAVE_DIR / f"{image_id}.jpg"), image_id)
 
 
             # Update normalized key
@@ -142,7 +142,7 @@ def body_ranking(settings: Dict[str, Any]) -> bool:
         data_sender = get()
         data_sender.send_batch(
             pipeline="video",
-            files=[(best_results, "visual_output.json", "visual")])
+            files=[(str(template_json), "visual")])
 
         # Save CSV
         with open(output_csv, "w", newline="", encoding="utf-8") as f:

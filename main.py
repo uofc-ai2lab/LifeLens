@@ -131,6 +131,7 @@ def main():
     data_sender = init(DEVICE_ID)
     data_sender.connect()
     data_sender.start_session()
+    data_sender.start_heartbeat()  
 
     # Synchronization events
     video_ready = threading.Event()
@@ -180,14 +181,14 @@ def main():
     if audio_thread.is_alive():
         audio_thread.join()
     
+    # Properly end MQTT session and disconnect
+    data_sender.end_session()
+    data_sender.disconnect()
+
     stop_monitoring()
     
     elapsed = time.time() - start_time
     log.success(f"All pipelines completed in {elapsed:.2f}s")
-    
-    # Properly end MQTT session and disconnect
-    data_sender.end_session()
-    data_sender.disconnect()
 
 
 if __name__ == "__main__":

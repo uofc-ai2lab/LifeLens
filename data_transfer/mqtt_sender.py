@@ -1,14 +1,21 @@
 import base64
 import json
 import threading
+import time
 from pathlib import Path
 from typing import List, Tuple, Optional
 from config.data_transfer_settings import BROKER, PORT, USERNAME, PASSWORD
-from data_transfer.domain.constants import CONNECT_TIMEOUT, PUBLISH_TIMEOUT, QOS, VALID_PIPELINES
+from data_transfer.domain.constants import (
+    CONNECT_TIMEOUT,
+    PUBLISH_TIMEOUT,
+    QOS,
+    VALID_PIPELINES,
+)
 from config.logger import Logger
 import paho.mqtt.client as mqtt
 
 log = Logger("[data-transfer]")
+
 
 class MQTTSender:
     """MQTT client for sending batched pipeline data."""
@@ -37,10 +44,10 @@ class MQTTSender:
             self._client.loop_start()
 
             if not self._connected_event.wait(CONNECT_TIMEOUT):
-                log.error("Timed out connecting to broker at %s:%s", BROKER, PORT)
+                log.error(f"Timed out connecting to broker at {BROKER}:{PORT}")
                 return False
 
-            log.info("Connected to broker at %s:%s", BROKER, PORT)
+            log.info(f"Connected to broker at {BROKER}:{PORT}")
             return True
 
         except Exception:
@@ -66,7 +73,7 @@ class MQTTSender:
         payload = json.dumps({"device_id": self.device_id})
 
         self._client.publish(topic, payload, qos=QOS)
-        log.info("Session started → %s", topic)
+        log.info(f"Session started → {topic}")
 
     def end_session(self):
         """Notify server that the current session has ended."""
@@ -78,7 +85,7 @@ class MQTTSender:
         payload = json.dumps({"device_id": self.device_id})
 
         self._client.publish(topic, payload, qos=QOS)
-        log.info("Session ended → %s", topic)
+        log.info(f"Session ended → {topic}")
 
     # Data sending functions
     def send_batch(self, pipeline: str, files: List[Tuple[str, str]]):
@@ -150,20 +157,46 @@ class MQTTSender:
         """Internal helper to publish a batch payload."""
         topic = f"lab/ingest/{pipeline}/{self.device_id}"
 
-        payload = json.dumps({
-            "device_id": self.device_id,
-            "files": encoded_files,
-        })
+        payload = json.dumps(
+            {
+                "device_id": self.device_id,
+                "files": encoded_files,
+            }
+        )
 
         result = self._client.publish(topic, payload, qos=QOS)
         result.wait_for_publish(timeout=PUBLISH_TIMEOUT)
 
         log.info(
-            "Batch sent → %s (%d file(s): %s)",
-            topic,
-            len(encoded_files),
-            [f["data_type"] for f in encoded_files],
+            f"Batch sent → {topic} ({len(encoded_files)} file(s): {[f['data_type'] for f in encoded_files]})",
         )
+
+    # Heartbeat management (So Server knows we're alive/helps for terminating connection on server side if something goes wrong here.)
+    def start_heartbeat(self, interval: int = 15):
+        """Start sending heartbeat messages every `interval` seconds.
+        
+        Args:
+            interval: Seconds between heartbeats (default: 15)
+
+        Returns:
+            None
+        """
+        def _heartbeat_loop():
+            while self._connected_event.is_set():
+                try:
+                    topic = f"lab/heartbeat/{self.device_id}"
+                    payload = json.dumps({"device_id": self.device_id})
+
+                    self._client.publish(topic, payload, qos=QOS)
+                    log.debug(f"Heartbeat → {topic}")
+
+                except Exception:
+                    log.error("Failed to send heartbeat")
+
+                finally:
+                    time.sleep(interval)
+
+        threading.Thread(target=_heartbeat_loop, daemon=True).start()
 
     # Helper functions
     def _encode_file(self, file_path: str, data_type: str) -> Optional[dict]:
@@ -171,7 +204,7 @@ class MQTTSender:
         path = Path(file_path)
 
         if not path.exists():
-            log.error("File not found: %s", file_path)
+            log.error(f"File not found: {file_path}")
             return None
 
         try:
@@ -185,7 +218,7 @@ class MQTTSender:
             }
 
         except Exception:
-            log.error("Failed to encode file: %s", file_path)
+            log.error(f"Failed to encode file: {file_path}")
             return None
 
     # Custom MQTT callbacks to help with debugging
@@ -195,11 +228,11 @@ class MQTTSender:
             log.info("Broker connection confirmed")
         else:
             self._connected_event.clear()
-            log.error("Connection refused, rc=%s", rc)
+            log.error(f"Connection refused, rc={rc}")
 
     def _on_disconnect(self, client, userdata, rc):
         self._connected_event.clear()
         if rc != 0:
-            log.warning("Unexpected disconnect (rc=%s), retrying", rc)
+            log.warning(f"Unexpected disconnect (rc={rc}), retrying")
         else:
             log.info("Clean disconnect")
