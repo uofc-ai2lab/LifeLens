@@ -55,6 +55,7 @@ def body_ranking(settings: Dict[str, Any]) -> bool:
     prediction_json = Path(settings.get("INJURY_REPORT_JSON", classification_output / "injury_predictions.json"))
     template_json = classification_output / "visual_output.json"
     output_csv = classification_output / "visual_output.csv"
+    sent_images = set()  # To avoid resending the same image multiple times in one run
 
     try:
         if not prediction_json.exists():
@@ -117,7 +118,9 @@ def body_ranking(settings: Dict[str, Any]) -> bool:
                     updated_count += 1
 
                     # Send image to server
-                    _send_images_to_server(Path(IMAGE_SAVE_DIR / f"{image_id}.jpg"), image_id)
+                    if image_id and image_id not in sent_images:
+                        sent_images.add(image_id)
+                        _send_images_to_server(Path(IMAGE_SAVE_DIR / f"{image_id}.jpg"), image_id)
                     return
 
                 if float(injury_prob) > float(injuries[injury_pred].get("accuracy", 0.0)):
@@ -126,7 +129,9 @@ def body_ranking(settings: Dict[str, Any]) -> bool:
                     updated_count += 1
 
                     # Send image to server
-                    _send_images_to_server(Path(IMAGE_SAVE_DIR / f"{image_id}.jpg"), image_id)
+                    if image_id and image_id not in sent_images:
+                        sent_images.add(image_id)
+                        _send_images_to_server(Path(IMAGE_SAVE_DIR / f"{image_id}.jpg"), image_id)
 
 
             # Update normalized key
@@ -193,13 +198,8 @@ def _send_images_to_server(image_path: Path, image_id: Any) -> None:
         image_bytes = run_anonymize_image(image_path)
     except Exception as e:
         log.error(f"Failed to anonymize image: {e}")
-        log.info("Falling back to original image.")
-
-        try:
-            image_bytes = image_path.read_bytes()
-        except Exception as e:
-            log.error(f"Failed to read original image: {e}")
-            return
+        log.warning("Skipping image because anonymization failed.")
+        return  
 
     try:
         data_sender = get()

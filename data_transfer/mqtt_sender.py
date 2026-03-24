@@ -129,7 +129,7 @@ class MQTTSender:
 
         Args:
             pipeline: "video"
-            files: List of (bytes_data, filename, data_type)
+            files: List of (bytes_b64, filename, data_type)
         """
         if not self._connected_event.is_set():
             log.warning("Cannot send batch — not connected")
@@ -168,19 +168,20 @@ class MQTTSender:
         result.wait_for_publish(timeout=PUBLISH_TIMEOUT)
 
         log.info(
-            f"Batch sent → {topic} ({len(encoded_files)} file(s): {[f['data_type'] for f in encoded_files]})",
+            f"Batch sent → {topic} ({len(encoded_files)} file(s): {[(f['data_type'], f['filename']) for f in encoded_files]})",
         )
 
     # Heartbeat management (So Server knows we're alive/helps for terminating connection on server side if something goes wrong here.)
     def start_heartbeat(self, interval: int = 15):
         """Start sending heartbeat messages every `interval` seconds.
-        
+
         Args:
             interval: Seconds between heartbeats (default: 15)
 
         Returns:
             None
         """
+
         def _heartbeat_loop():
             while self._connected_event.is_set():
                 try:
