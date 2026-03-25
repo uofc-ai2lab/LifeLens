@@ -19,6 +19,7 @@ from config.video_settings import (
     load_video_pipeline_settings,
     SNAPSHOT_INTERVAL,
     IMAGE_SAVE_DIR,
+    PROCESSED_IMAGE_DIR,
 )
 
 from src_video.services.camera_capture_service.gstreamer_video_pipeline import (
@@ -45,6 +46,27 @@ def put_latest(queue: Queue, item):
         except Empty:
             pass
     queue.put(item)
+
+
+def move_images_to_processed() -> None:
+    """Move all images from IMAGE_SAVE_DIR into PROCESSED_IMAGE_DIR."""
+    inbox_dir = Path(IMAGE_SAVE_DIR)
+    processed_dir = Path(PROCESSED_IMAGE_DIR)
+    processed_dir.mkdir(parents=True, exist_ok=True)
+
+    moved = 0
+    try:
+        for path in inbox_dir.glob("*"):
+            if not path.is_file():
+                continue
+            dest = processed_dir / path.name
+            path.replace(dest)
+            moved += 1
+    except Exception as e:
+        log.warning(f"Failed moving images to processed dir: {e}")
+    else:
+        if moved:
+            log.info(f"Moved {moved} image(s) to processed dir: {processed_dir}")
 
 def process_single_image(settings: Dict[str, Any]) -> bool:
     try:
@@ -101,6 +123,10 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
 
     except Exception as e:
         log.warning(f"Cleanup failed: {e}")
+
+    # After successful processing, move source images to processed folder so they
+    # are not picked up again on subsequent runs.
+    move_images_to_processed()
 
     log.info("Image processed")
     return True
