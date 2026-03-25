@@ -37,6 +37,18 @@ def put_latest(queue: Queue, item):
 medication_tracker = MedicationStateTracker()
 audit_log = []
 
+
+def _clear_cuda_cache_if_available() -> None:
+    """Best-effort CUDA cache cleanup for audio models."""
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        # Best-effort only; ignore any issues here.
+        pass
+
 def move_chunk_to_processed(chunk_path: Path) -> Path:
     """
     Move chunk file from AUDIO_CHUNKS_DIR into: PROCESSED_AUDIO_DIR/<chunk_stem>/<chunk_filename>
@@ -84,16 +96,19 @@ def process_audio_chunk() -> bool:
         transcript_path = run_transcription(str(chunk_path))
         if transcript_path is None:
             log.error("Transcription failed; skipping anonymization and extraction for this chunk.")
+            _clear_cuda_cache_if_available()
             return False
 
         run_anonymization(str(chunk_path), transcript_path)
         run_medication_extraction(str(chunk_path), transcript_path, medication_tracker, audit_log)
         run_intervention_extraction(str(chunk_path), transcript_path)
         log.success(f"{chunk_path.name} processed")
+        _clear_cuda_cache_if_available()
         return True
 
     except Exception as e:
         log.error(f"Processing failed: {e}")
+        _clear_cuda_cache_if_available()
         return False
 
 
