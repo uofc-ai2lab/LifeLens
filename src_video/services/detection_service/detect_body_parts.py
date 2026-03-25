@@ -72,6 +72,67 @@ def _compute_body_midline_x(results, image_width: int) -> float:
     return float(image_width) * 0.5
 
 
+def _compute_body_midline_y(results, image_height: int) -> float:
+    """Estimate vertical waist-level midline using torso/outfit detections.
+
+    Heuristic: weighted average of center-y for torso/outfit detections.
+    Falls back to image midpoint if no anchor parts are found.
+    """
+    Y_ANCHOR_PARTS = {"torso", "outfit"}
+    weighted_sum = 0.0
+    weight = 0.0
+
+    for result in results:
+        if getattr(result, "boxes", None) is None or getattr(result.boxes, "cls", None) is None:
+            continue
+        names_map = getattr(result, "names", {})
+        try:
+            cls_ids = result.boxes.cls.cpu().numpy().astype(int)
+            xyxy_boxes = result.boxes.xyxy.cpu().numpy()
+        except Exception:
+            continue
+
+        for idx, cls_id in enumerate(cls_ids):
+            if idx >= len(xyxy_boxes):
+                continue
+            cls_name = names_map.get(int(cls_id), str(cls_id))
+            if cls_name not in Y_ANCHOR_PARTS:
+                continue
+            x1, y1, x2, y2 = xyxy_boxes[idx].tolist()
+            bbox = (int(round(x1)), int(round(y1)), int(round(x2)), int(round(y2)))
+            area = _bbox_area(bbox)
+            if area <= 1.0:
+                continue
+            center_y = (float(y1) + float(y2)) * 0.5
+            weighted_sum += center_y * area
+            weight += area
+
+    if weight > 0.0:
+        return float(weighted_sum / weight)
+    return float(image_height) * 0.5
+
+
+def _remap_limb_label_by_position(
+    cls_name: str,
+    bbox: tuple[int, int, int, int],
+    midline_y: float,
+) -> str:
+    """Remap limb labels that contradict their vertical position in the image.
+
+    The body-part model is trained on standard standing poses and frequently
+    misclassifies raised arms as legs (positional bias). If a detection labeled
+    'leg' has its bounding-box center above the estimated waist midline, it is
+    almost certainly an arm — remap it.
+    """
+    if cls_name != "leg":
+        return cls_name
+    _, y1, _, y2 = bbox
+    center_y = (float(y1) + float(y2)) * 0.5
+    if center_y < midline_y:
+        return "arm"
+    return cls_name
+
+
 def _label_with_side(cls_name: str, bbox: tuple[int, int, int, int], midline_x: float) -> str:
     """Return a label like 'arm1' / 'arm2' for side-able parts.
 
@@ -235,11 +296,12 @@ def choose_best_rotation(model, image_np: np.ndarray, device: Optional[str], can
     best_score = -1.0
     for deg in candidate_degrees:
         rotated = rotate_image_np(image_np, deg)
-        predict_kwargs = {"source": rotated, "verbose": False}
+        predict_kwargs = {"source": rotated, "verbose": False, "conf": 0.15}
         if device is not None:
             predict_kwargs["device"] = device
         results = model.predict(**predict_kwargs)
         score = _prediction_score(results)
+        del results
         if score > best_score:
             best_score = score
             best_deg = deg
@@ -339,7 +401,7 @@ def process_image(
         image_np = rotate_image_np(image_np, best_deg)
 
     # Key for crop/annotated alignment: run YOLO on the same pixels we're cropping.
-    predict_kwargs = {"source": image_np, "verbose": False}
+    predict_kwargs = {"source": image_np, "verbose": False, "conf": 0.15}
     if device is not None:
         predict_kwargs["device"] = device
     results = model.predict(**predict_kwargs)
@@ -348,6 +410,11 @@ def process_image(
         midline_x = _compute_body_midline_x(results, image_width=int(image_np.shape[1]))
     except Exception:
         midline_x = float(image_np.shape[1]) * 0.5
+
+    try:
+        midline_y = _compute_body_midline_y(results, image_height=int(image_np.shape[0]))
+    except Exception:
+        midline_y = float(image_np.shape[0]) * 0.5
 
     log.info(f"Processing {image_path.name}: {len(results)} result(s)")
     vis_boxes: List[tuple[int, int, int, int]] = []
@@ -427,6 +494,7 @@ def process_image(
             if (bbox[2] <= bbox[0] or bbox[3] <= bbox[1]) and mask_bin is not None:
                 bbox = mask_to_bbox(mask_bin, margin=margin, image_shape=image_np.shape[:2])
 
+            cls_name = _remap_limb_label_by_position(cls_name, bbox, midline_y)
             export_cls_name = cls_name
             if midline_x is not None:
                 export_cls_name = _label_with_side(cls_name, bbox, midline_x)

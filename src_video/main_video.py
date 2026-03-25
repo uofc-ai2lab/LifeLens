@@ -138,10 +138,6 @@ def _run_classification_with_cpu_fallback(settings: Dict[str, Any]) -> None:
         device=None,
         filename_delimiter="_",
         body_part_label_position=int(settings["BODY_PART_LABEL_POSITION"]),
-        use_max_non_no_injury_aggregation=bool(
-            settings.get("INJURY_AGG_MAX_NON_NO_INJURY", False)
-        ) and bool(settings.get("FACE_MULTICROP", False)),
-        no_injury_label=str(settings.get("NO_INJURY_LABEL", "no_injury")),
     )
 
     try:
@@ -278,7 +274,16 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
     if DEV_MODE:
         log.header("DEV Mode")
         start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
-        run_post_camera_pipeline(settings, snapshot_count=1)
+        exts = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
+        try:
+            snapshot_count = sum(
+                1
+                for p in Path(IMAGE_SAVE_DIR).rglob("*")
+                if p.is_file() and p.suffix.lower() in exts
+            )
+        except Exception:
+            snapshot_count = 0
+        run_post_camera_pipeline(settings, snapshot_count=snapshot_count)
         stop_monitoring()
         return 0
 
