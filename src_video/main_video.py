@@ -1,28 +1,25 @@
 from __future__ import annotations
 
 import time
-import threading, asyncio
+import threading
 import shutil
-import gc
 import cv2
-import numpy as np
 import argparse
 from pathlib import Path
 from typing import Dict, Any, Optional
-from queue import Queue, Empty
-
 from config.jetson_startup import run_jetson_startup_tasks
 from config.resource_usage import start_monitoring, stop_monitoring
 from config.audio_settings import USAGE_FILE_PATH
 from config.logger import video_logger as log
 from config.gpu_guard import gpu_exclusive
-from config.memory_cleanup import cleanup_memory, clear_jtop_cache
+from config.memory_cleanup import cleanup_memory, aggressive_cleanup
 from config.video_settings import (
     load_video_pipeline_settings,
     SNAPSHOT_INTERVAL,
     IMAGE_SAVE_DIR,
     PROCESSED_IMAGE_DIR,
 )
+from queue import Queue, Empty
 
 from src_video.services.camera_capture_service.gstreamer_video_pipeline import (
     GStreamerVideoPipeline,
@@ -32,7 +29,6 @@ from src_video.services.camera_capture_service.gstreamer_video_pipeline import (
 from src_video.services.detection_service.detect_body_parts import run_detection
 from src_video.services.body_ranking.body_injury_ranking import body_ranking
 from src_video.services.classification_service.infer_injuries_on_crops import predict_injuries_on_detection_crops
-# from src_video.services.deidentification_service.deidentify import run_deidentification
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
 from src_video.services.person_reid_service.reid_service import (
     build_reid_service,
@@ -52,10 +48,12 @@ APRILTAG_DETECT_EVERY_N_FRAMES = 3
 ENROLL_SAMPLE_EVERY_N_FRAMES = 2
 ENROLLMENT_TIMEOUT_S = 12.0
 
+REID_ENABLED = 0
+
 def _as_posix(path: str) -> str:
     return str(path).replace("\\", "/")
 
-
+ 
 def _is_cuda_detection_failure(exc: Exception) -> bool:
     msg = str(exc).lower()
     markers = (
@@ -82,7 +80,7 @@ def _clear_cuda_cache_if_available() -> None:
 
     # Also trim host heap where possible.
     cleanup_memory()
-    clear_jtop_cache()
+    aggressive_cleanup()
 
 
 def _run_detection_with_cpu_fallback(settings: Dict[str, Any]) -> None:
@@ -123,7 +121,7 @@ def _run_detection_with_cpu_fallback(settings: Dict[str, Any]) -> None:
             log.success("Detection retry on CPU completed")
     finally:
         # Always clear jtop cache after detection completes (success or failure).
-        clear_jtop_cache()
+        aggressive_cleanup()
 
 
 def _run_classification_with_cpu_fallback(settings: Dict[str, Any]) -> None:
@@ -160,7 +158,7 @@ def _run_classification_with_cpu_fallback(settings: Dict[str, Any]) -> None:
             log.success("Classification retry on CPU completed")
     finally:
         # Always clear jtop cache after classification completes (success or failure).
-        clear_jtop_cache()
+        aggressive_cleanup()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -194,7 +192,7 @@ def run_post_camera_pipeline(settings: Dict[str, Any], snapshot_count: int) -> b
         return False
 
     log.header(f"Post-camera pipeline starting ({snapshot_count} snapshots)")
-    clear_jtop_cache()
+    aggressive_cleanup()
     
     try:
         with gpu_exclusive("video:detection+classification", logger=log):
@@ -359,6 +357,33 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
                         show_visualization=False,
                         print_info=False,
                     )
+
+                if detected and not marker_locked:
+                    marker_locked = True
+                    enroll_started_at = time.time()
+                    log.info("AprilTag acquired — starting enrollment")
+
+                if reid is not None and marker_locked and not enrolled and (loop_count % ENROLL_SAMPLE_EVERY_N_FRAMES == 0):
+                    if reid.enroll_from_frame(frame):
+                        enrolled = True
+                        marker_locked = False
+                        enroll_started_at = None
+                        log.success("Primary person enrolled — ReID tracking active")
+
+                        if capture_frame_from_pipeline(frame, IMAGE_SAVE_DIR):
+                            snapshot_count += 1
+                            log.info(f"Enrollment snapshot saved ({snapshot_count} total)")
+
+                if reid is not None and marker_locked and not enrolled and enroll_started_at is not None:
+                    if (time.time() - enroll_started_at) > ENROLLMENT_TIMEOUT_S:
+                        marker_locked = False
+                        enroll_started_at = None
+                        reid.reset_enrollment()
+                        log.warning("Enrollment timed out — waiting for AprilTag reacquire")
+
+                if reid is not None and enrolled:
+                    reid.process_frame(frame)
+
             else:
                 detected = detect_apriltags(
                     frame,
@@ -366,47 +391,18 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
                     print_info=False,
                 )
 
-            if detected and not marker_locked:
-                if REID_ENABLED and reid is not None:
-                    marker_locked = True
-                    enroll_started_at = time.time()
-                    log.info("AprilTag acquired — starting enrollment")
-                else:
+                if detected:
                     now = time.time()
-                    if (now - last_snap) >= SNAPSHOT_INTERVAL and capture_frame_from_pipeline(frame, IMAGE_SAVE_DIR):
-                        snapshot_count += 1
-                        log.info(f"Snapshot saved ({snapshot_count} total) [ReID disabled]")
-                        last_snap = now
-
-            # ── Enrollment ────────────────────────────────────────────────
-            if REID_ENABLED and reid is not None and marker_locked and not enrolled and (loop_count % ENROLL_SAMPLE_EVERY_N_FRAMES == 0):
-                if reid.enroll_from_frame(frame):
-                    enrolled = True
-                    marker_locked = False
-                    enroll_started_at = None
-                    log.success("Primary person enrolled — ReID tracking active")
-
-                    if capture_frame_from_pipeline(frame, IMAGE_SAVE_DIR):
-                        snapshot_count += 1
-                        log.info(f"Enrollment snapshot saved ({snapshot_count} total)")
-
-            if REID_ENABLED and marker_locked and not enrolled and enroll_started_at is not None:
-                if (time.time() - enroll_started_at) > ENROLLMENT_TIMEOUT_S:
-                    marker_locked = False
-                    enroll_started_at = None
-                    reid.reset_enrollment()
-                    log.warning("Enrollment timed out — waiting for AprilTag reacquire")
-
-            # ── Tracking ──────────────────────────────────────────────────
-            # process_frame() runs YOLO internally each call.
-            # Alternatively, pass person_bboxes from run_detection if you
-            # want to reuse detections across the pipeline.
-            if REID_ENABLED and reid is not None and enrolled:
-                reid.process_frame(frame)
+                    if (now - last_snap) >= SNAPSHOT_INTERVAL:
+                        if capture_frame_from_pipeline(frame, IMAGE_SAVE_DIR):
+                            snapshot_count += 1
+                            last_snap = now
+                            log.info(f"Snapshot saved ({snapshot_count} total) [AprilTag mode]")
 
             if REID_ENABLED and reid is not None:
                 reid.draw_debug(frame, person_bboxes=None)
-            draw_overlay(frame, fps, processing=enrolled)
+
+            draw_overlay(frame, fps, processing=enrolled if REID_ENABLED else detected)
             cv2.imshow(window, frame)
 
             key = cv2.waitKey(1) & 0xFF
@@ -416,12 +412,11 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
             if key == ord('r'):
                 if REID_ENABLED and reid is not None:
                     reid.reset_enrollment()
-                enrolled       = False
-                marker_locked  = False
-                enroll_started_at = None
+                    enrolled = False
+                    marker_locked = False
+                    enroll_started_at = None
                 snapshot_count = 0
                 log.info("Enrollment reset — snapshots cleared")
-
     except KeyboardInterrupt:
         log.info("Interrupted")
 
@@ -432,7 +427,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
     log.info("Releasing ReID service...")
     if reid is not None:
         cleanup_memory(reid)
-    clear_jtop_cache()
+    aggressive_cleanup()
 
     log.header("Camera closed — starting post-camera pipeline")
     run_post_camera_pipeline(settings, snapshot_count)

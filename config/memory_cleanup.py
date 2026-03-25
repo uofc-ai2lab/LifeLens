@@ -1,6 +1,7 @@
-import gc
-import ctypes
 from jtop import jtop
+import gc
+import torch
+import ctypes
 
 try:
     libc = ctypes.CDLL("libc.so.6")
@@ -32,13 +33,18 @@ def cleanup_memory(*objs):
         # Some libc builds may not support malloc_trim; ignore gracefully.
         pass
 
-def clear_jtop_cache():
+
+
+def aggressive_cleanup():
+    gc.collect()
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+
     try:
         with jtop() as jetson:
             if jetson.ok():
                 jetson.memory.clear_cache()
-                print("Cache cleared successfully.")
-            else:
-                print("Could not connect to jtop.")
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"jtop cache clear failed: {e}")
