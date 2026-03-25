@@ -24,7 +24,9 @@ VIDEO_OUTPUT_DIR = VIDEO_DIR / "output_files"
 SNAPSHOT_INTERVAL = int(os.getenv('SNAPSHOT_INTERVAL', '2'))  # seconds between snapshots
 
 IMAGE_SAVE_DIR = VIDEO_DIR / "saved_imgs"
+PROCESSED_IMAGE_DIR = VIDEO_DIR / "processed_images"
 os.makedirs(IMAGE_SAVE_DIR, exist_ok=True)
+os.makedirs(PROCESSED_IMAGE_DIR, exist_ok=True)
 
 # Tag Detection Settings
 TAG_SIZE = float(os.getenv('TAG_SIZE', '0.025'))  # Tag size in meters

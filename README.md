@@ -370,7 +370,7 @@ python -m power_toggle
 
 This does the following:
 1. Waits for a button press. On the first press, it starts the full system (`python -m main` runs in the background) and turns the LED on.
-2. Saves all output logs under the data directory.
+2. Saves all output logs under the data directory (the filename should be `lifelens_power_toggle_{SESSION_TS}.log`).
 3. On the second button press, it cleanly shuts down the camera and microphone (no new audio/image files are created); the LED briefly blinks to indicate shutdown.
 4. After the program fully exits, the LED turns off.
 5. While the system is shutting down, additional button presses are ignored until the shutdown is complete.

@@ -6,6 +6,15 @@ from pathlib import Path
 
 log = Logger("[audio][anonymization]")
 
+_GLOBAL_TRANSCRIPT_ANONYMIZER = None
+
+
+def get_transcript_anonymizer() -> TranscriptAnonymizer:
+    global _GLOBAL_TRANSCRIPT_ANONYMIZER
+    if _GLOBAL_TRANSCRIPT_ANONYMIZER is None:
+        _GLOBAL_TRANSCRIPT_ANONYMIZER = TranscriptAnonymizer()
+    return _GLOBAL_TRANSCRIPT_ANONYMIZER
+
 def run_anonymization(chunk_path: str, transcript_path: str) -> None:
     """
     Run the full transcript anonymization pipeline:
@@ -20,7 +29,7 @@ def run_anonymization(chunk_path: str, transcript_path: str) -> None:
         None
     """
     log.header("Starting Anonymization...")
-    anonymizer = TranscriptAnonymizer()
+    anonymizer = get_transcript_anonymizer()
     df = load_csv_file(transcript_path)
     log.info(f"Processing {len(df)} segments")
     
