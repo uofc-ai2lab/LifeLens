@@ -21,6 +21,7 @@ from src_audio.services.recording_audio_service.gstreamer_audio_pipeline import 
 from config.jetson_startup import run_jetson_startup_tasks
 from config.audio_settings import USAGE_FILE_PATH
 from config.resource_usage import start_monitoring, stop_monitoring
+from config.memory_cleanup import cleanup_memory
 from config.logger import audio_logger as log
 from src_audio.utils.export_to_csv import export_to_csv
 
@@ -39,15 +40,18 @@ audit_log = []
 
 
 def _clear_cuda_cache_if_available() -> None:
-    """Best-effort CUDA cache cleanup for audio models."""
+    """Best-effort CUDA + heap cleanup for audio models."""
     try:
         import torch
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
     except Exception:
-        # Best-effort only; ignore any issues here.
+        # Best-effort only; ignore CUDA issues here.
         pass
+
+    # Also trim host heap where possible.
+    cleanup_memory()
 
 def move_chunk_to_processed(chunk_path: Path) -> Path:
     """

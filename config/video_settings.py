@@ -144,7 +144,7 @@ def load_video_pipeline_settings() -> dict:
         "ALPHA_PNG": _env_bool("PIPELINE_ALPHA_PNG", False),
         "MIN_AREA": _env_int("PIPELINE_MIN_AREA", 250),
         "MARGIN": _env_float("PIPELINE_MARGIN", 0.00),
-        "KEEP_CROPS": _env_bool("PIPELINE_KEEP_CROPS", True),
+        "KEEP_CROPS": _env_bool("PIPELINE_KEEP_CROPS", False),
         "FACE_MULTICROP": _env_bool("PIPELINE_FACE_MULTICROP", True),
         "FACE_MULTICROP_PARTS": _env_list(
             "PIPELINE_FACE_MULTICROP_PARTS",

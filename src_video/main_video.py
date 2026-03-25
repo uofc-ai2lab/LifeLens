@@ -16,6 +16,7 @@ from config.resource_usage import start_monitoring, stop_monitoring
 from config.audio_settings import USAGE_FILE_PATH
 from config.logger import video_logger as log
 from config.gpu_guard import gpu_exclusive
+from config.memory_cleanup import cleanup_memory
 from config.video_settings import (
     load_video_pipeline_settings,
     SNAPSHOT_INTERVAL,
@@ -69,14 +70,18 @@ def _is_cuda_detection_failure(exc: Exception) -> bool:
 
 
 def _clear_cuda_cache_if_available() -> None:
+    """Best-effort CUDA + heap cleanup for video models."""
     try:
         import torch
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
     except Exception:
-        # Best-effort cleanup only.
+        # Best-effort CUDA cleanup only.
         pass
+
+    # Also trim host heap where possible.
+    cleanup_memory()
 
 
 def _run_detection_with_cpu_fallback(settings: Dict[str, Any]) -> None:
@@ -110,7 +115,6 @@ def _run_detection_with_cpu_fallback(settings: Dict[str, Any]) -> None:
             f"Detection hit CUDA/NVML runtime failure ({e}). "
             f"Retrying once on CPU..."
         )
-        gc.collect()
         _clear_cuda_cache_if_available()
 
     detection_kwargs["device"] = "cpu"
@@ -147,7 +151,6 @@ def _run_classification_with_cpu_fallback(settings: Dict[str, Any]) -> None:
             f"Classification hit CUDA/NVML runtime failure ({e}). "
             f"Retrying once on CPU..."
         )
-        gc.collect()
         _clear_cuda_cache_if_available()
 
     import torch
@@ -416,9 +419,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
         cv2.destroyAllWindows()
 
     log.info("Releasing ReID service...")
-    del reid
-    import gc
-    gc.collect()
+    cleanup_memory(reid)
 
     log.header("Camera closed — starting post-camera pipeline")
     run_post_camera_pipeline(settings, snapshot_count)
