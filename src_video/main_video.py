@@ -198,7 +198,8 @@ def run_post_camera_pipeline(settings: Dict[str, Any], snapshot_count: int) -> b
         return False
 
     log.header(f"Post-camera pipeline starting ({snapshot_count} snapshots)")
-
+    clear_jtop_cache()
+    
     try:
         with gpu_exclusive("video:detection+classification", logger=log):
             _run_detection_with_cpu_fallback(settings)
