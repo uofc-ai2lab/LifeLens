@@ -179,4 +179,12 @@ def load_video_pipeline_settings() -> dict:
         "BODY_PART_LABEL_POSITION": _env_int("PIPELINE_BODY_PART_LABEL_POSITION", -2),
         "INJURY_AGG_MAX_NON_NO_INJURY": _env_bool("PIPELINE_INJURY_AGG_MAX_NON_NO_INJURY", True),
         "NO_INJURY_LABEL": os.getenv("PIPELINE_NO_INJURY_LABEL", "no_injury"),
+        # ReID / person tracking configuration
+        # Enable with: VIDEO_ENABLE_REID=1 (or true/yes/on)
+        "REID_ENABLED": _env_bool("VIDEO_ENABLE_REID", False),
+        "YOLO_MODEL_PATH": YOLO_MODEL_PATH,
+        "EMBEDDER_ONNX_PATH": EMBEDDER_ONNX_PATH,
+        "REID_USE_TRT": _env_bool("VIDEO_REID_USE_TRT", REID_USE_TRT),
+        "REID_BODY_THRESHOLD": _env_float("VIDEO_REID_BODY_THRESHOLD", REID_BODY_THRESHOLD),
+        "REID_THRESHOLD": _env_float("VIDEO_REID_THRESHOLD", REID_THRESHOLD),
     }

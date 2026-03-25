@@ -269,6 +269,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
 
     settings = load_video_pipeline_settings()
     DEV_MODE  = args.dev
+    REID_ENABLED = bool(settings.get("REID_ENABLED", False))
 
     if video_pipeline is None and not DEV_MODE:
         log.error("VIDEO pipeline failed to initialize camera")
@@ -304,7 +305,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
             snapshot_count += 1
             log.info(f"Snapshot saved ({snapshot_count} total)")
 
-    # ── Build ReID service ────────────────────────────────────────────────
+    # ── Build ReID service (optional) ─────────────────────────────────────
     body_thresh = float(
         settings.get(
             "REID_BODY_THRESHOLD",
@@ -312,20 +313,24 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
         )
     )
 
-    reid = build_reid_service(
-        yolo_path         = settings.get(
-            "YOLO_MODEL_PATH",
-            "src_video/services/person_reid_service/yolov8n.onnx",
-        ),
-        embedder_path     = settings.get(
-            "EMBEDDER_ONNX_PATH",
-            "src_video/services/person_reid_service/resnet50_market1501_aicity156.onnx",
-        ),
-        use_trt           = bool(settings.get("REID_USE_TRT", False)),
-        similarity_thresh = body_thresh,
-        on_reid_callback  = _on_reid,
-    )
-    log.success("ReID service ready")
+    if REID_ENABLED:
+        reid = build_reid_service(
+            yolo_path         = settings.get(
+                "YOLO_MODEL_PATH",
+                "src_video/services/person_reid_service/yolov8n.onnx",
+            ),
+            embedder_path     = settings.get(
+                "EMBEDDER_ONNX_PATH",
+                "src_video/services/person_reid_service/resnet50_market1501_aicity156.onnx",
+            ),
+            use_trt           = bool(settings.get("REID_USE_TRT", False)),
+            similarity_thresh = body_thresh,
+            on_reid_callback  = _on_reid,
+        )
+        log.success("ReID service ready")
+    else:
+        reid = None
+        log.info("ReID disabled (set VIDEO_ENABLE_REID=1 to enable)")
 
     window = "CSI Camera"
     cv2.namedWindow(window, cv2.WINDOW_NORMAL)
@@ -373,12 +378,18 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
                 )
 
             if detected and not marker_locked:
-                marker_locked = True
-                enroll_started_at = time.time()
-                log.info("AprilTag acquired — starting enrollment")
+                if REID_ENABLED and reid is not None:
+                    marker_locked = True
+                    enroll_started_at = time.time()
+                    log.info("AprilTag acquired — starting enrollment")
+                else:
+                    # ReID disabled: treat AprilTag hit as a direct snapshot trigger.
+                    if capture_frame_from_pipeline(frame, IMAGE_SAVE_DIR):
+                        snapshot_count += 1
+                        log.info(f"Snapshot saved ({snapshot_count} total) [ReID disabled]")
 
             # ── Enrollment ────────────────────────────────────────────────
-            if marker_locked and not enrolled and (loop_count % ENROLL_SAMPLE_EVERY_N_FRAMES == 0):
+            if REID_ENABLED and reid is not None and marker_locked and not enrolled and (loop_count % ENROLL_SAMPLE_EVERY_N_FRAMES == 0):
                 if reid.enroll_from_frame(frame):
                     enrolled = True
                     marker_locked = False
@@ -389,7 +400,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
                         snapshot_count += 1
                         log.info(f"Enrollment snapshot saved ({snapshot_count} total)")
 
-            if marker_locked and not enrolled and enroll_started_at is not None:
+            if REID_ENABLED and marker_locked and not enrolled and enroll_started_at is not None:
                 if (time.time() - enroll_started_at) > ENROLLMENT_TIMEOUT_S:
                     marker_locked = False
                     enroll_started_at = None
@@ -400,10 +411,11 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
             # process_frame() runs YOLO internally each call.
             # Alternatively, pass person_bboxes from run_detection if you
             # want to reuse detections across the pipeline.
-            if enrolled:
+            if REID_ENABLED and reid is not None and enrolled:
                 reid.process_frame(frame)
 
-            reid.draw_debug(frame, person_bboxes=None)
+            if REID_ENABLED and reid is not None:
+                reid.draw_debug(frame, person_bboxes=None)
             draw_overlay(frame, fps, processing=enrolled)
             cv2.imshow(window, frame)
 
@@ -412,7 +424,8 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
                 log.info("Camera session ended by user")
                 break
             if key == ord('r'):
-                reid.reset_enrollment()
+                if REID_ENABLED and reid is not None:
+                    reid.reset_enrollment()
                 enrolled       = False
                 marker_locked  = False
                 enroll_started_at = None
@@ -427,7 +440,8 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
         cv2.destroyAllWindows()
 
     log.info("Releasing ReID service...")
-    cleanup_memory(reid)
+    if reid is not None:
+        cleanup_memory(reid)
     clear_jtop_cache()
 
     log.header("Camera closed — starting post-camera pipeline")
