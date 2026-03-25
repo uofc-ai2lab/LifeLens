@@ -20,6 +20,7 @@ from config.video_settings import (
     load_video_pipeline_settings,
     SNAPSHOT_INTERVAL,
     IMAGE_SAVE_DIR,
+    PROCESSED_IMAGE_DIR,
 )
 
 from src_video.services.camera_capture_service.gstreamer_video_pipeline import (
@@ -159,6 +160,27 @@ def _run_classification_with_cpu_fallback(settings: Dict[str, Any]) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 # POST-CAMERA PIPELINE  (unchanged)
 # ═══════════════════════════════════════════════════════════════════════════
+
+def move_images_to_processed() -> None:
+    """Move all images from IMAGE_SAVE_DIR into PROCESSED_IMAGE_DIR."""
+    inbox_dir = Path(IMAGE_SAVE_DIR)
+    processed_dir = Path(PROCESSED_IMAGE_DIR)
+    processed_dir.mkdir(parents=True, exist_ok=True)
+
+    moved = 0
+    try:
+        for path in inbox_dir.glob("*"):
+            if not path.is_file():
+                continue
+            dest = processed_dir / path.name
+            path.replace(dest)
+            moved += 1
+    except Exception as e:
+        log.warning(f"Failed moving images to processed dir: {e}")
+    else:
+        if moved:
+            log.info(f"Moved {moved} image(s) to processed dir: {processed_dir}")
+
 
 def run_post_camera_pipeline(settings: Dict[str, Any], snapshot_count: int) -> bool:
     if snapshot_count == 0:
@@ -401,6 +423,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
     log.header("Camera closed — starting post-camera pipeline")
     run_post_camera_pipeline(settings, snapshot_count)
 
+    move_images_to_processed()
     return 0
 
 

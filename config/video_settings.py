@@ -32,6 +32,9 @@ REID_THRESHOLD = 0.80
 IMAGE_SAVE_DIR = VIDEO_DIR / "saved_imgs"
 os.makedirs(IMAGE_SAVE_DIR, exist_ok=True)
 
+PROCESSED_IMAGE_DIR = VIDEO_DIR / "processed_images"
+os.makedirs(PROCESSED_IMAGE_DIR, exist_ok=True)
+
 # Tag Detection Settings
 TAG_SIZE = float(os.getenv('TAG_SIZE', '0.025'))  # Tag size in meters
 TAG_FAMILY = os.getenv('TAG_FAMILY', 'tag16h5')
