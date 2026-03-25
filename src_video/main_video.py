@@ -215,30 +215,6 @@ def run_post_camera_pipeline(settings: Dict[str, Any], snapshot_count: int) -> b
     else:
         log.success("Ranking done")
 
-    # try:
-    #     deidentify_result = run_deidentification(
-    #         input_dir=_as_posix(IMAGE_SAVE_DIR),
-    #         output_dir=_as_posix(str(Path(settings["DETECTION_OUTPUT"]) / "deidentified")),
-    #         enabled=True,
-    #         threshold=0.2,
-    #         replacewith="blur",
-    #         mask_scale=1.3,
-    #         ellipse=True,
-    #         draw_scores=False,
-    #     )
-    #     if deidentify_result.get("success"):
-    #         log.success(
-    #             f"De-identification complete: "
-    #             f"{deidentify_result['processed_count']} images"
-    #         )
-    #     else:
-    #         log.warning(
-    #             f"De-identification issue: "
-    #             f"{deidentify_result.get('note', deidentify_result.get('error'))}"
-    #         )
-    # except Exception as e:
-    #     log.error(f"De-identification failed: {e}")
-
     try:
         crops_root = Path(settings["CROPS_ROOT"])
         if crops_root.exists():
@@ -346,6 +322,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
     fps         = 0.0
     enrolled    = False
     loop_count  = 0
+    last_snap   = 0.0
     marker_locked = False
     enroll_started_at: Optional[float] = None
 
@@ -375,7 +352,14 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
                 start_time  = time.time()
 
             detected = False
-            if not enrolled and not marker_locked and (loop_count % APRILTAG_DETECT_EVERY_N_FRAMES == 0):
+            if REID_ENABLED:
+                if not enrolled and not marker_locked and (loop_count % APRILTAG_DETECT_EVERY_N_FRAMES == 0):
+                    detected = detect_apriltags(
+                        frame,
+                        show_visualization=False,
+                        print_info=False,
+                    )
+            else:
                 detected = detect_apriltags(
                     frame,
                     show_visualization=False,
@@ -388,10 +372,11 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
                     enroll_started_at = time.time()
                     log.info("AprilTag acquired — starting enrollment")
                 else:
-                    # ReID disabled: treat AprilTag hit as a direct snapshot trigger.
-                    if capture_frame_from_pipeline(frame, IMAGE_SAVE_DIR):
+                    now = time.time()
+                    if (now - last_snap) >= SNAPSHOT_INTERVAL and capture_frame_from_pipeline(frame, IMAGE_SAVE_DIR):
                         snapshot_count += 1
                         log.info(f"Snapshot saved ({snapshot_count} total) [ReID disabled]")
+                        last_snap = now
 
             # ── Enrollment ────────────────────────────────────────────────
             if REID_ENABLED and reid is not None and marker_locked and not enrolled and (loop_count % ENROLL_SAMPLE_EVERY_N_FRAMES == 0):
