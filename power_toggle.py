@@ -46,6 +46,26 @@ is_stopping = False
 last = 0.0
 
 
+def _tee_output(p: subprocess.Popen):
+    """Read child's stdout and write to both log file and our stdout."""
+    global proc_log
+    try:
+        assert p.stdout is not None
+        for line in p.stdout:
+            # Already opened line-buffered
+            try:
+                proc_log.write(line)
+            except Exception:
+                pass
+            try:
+                sys.stdout.write(line)
+                sys.stdout.flush()
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"OUTPUT_TEE_FAILED: {e}")
+
+
 def _watch_process(p: subprocess.Popen):
     """Turn LED off if the managed process exits on its own."""
     try:
@@ -111,9 +131,10 @@ def toggle():
                 CMD,
                 cwd=PROJECT_ROOT,
                 stdin=subprocess.PIPE,
-                stdout=proc_log,
+                stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                bufsize=1,
             )
         except Exception as e:
             set_led(False)
@@ -133,6 +154,9 @@ def toggle():
                 if proc is new_proc:
                     proc = None
             return
+
+        # Start tee thread to mirror child output to both log file and terminal
+        threading.Thread(target=_tee_output, args=(new_proc,), daemon=True).start()
 
         threading.Thread(target=_watch_process, args=(new_proc,), daemon=True).start()
         set_led(True)
