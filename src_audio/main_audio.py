@@ -21,7 +21,7 @@ from src_audio.services.recording_audio_service.gstreamer_audio_pipeline import 
 from config.jetson_startup import run_jetson_startup_tasks
 from config.audio_settings import USAGE_FILE_PATH
 from config.resource_usage import start_monitoring, stop_monitoring
-from config.memory_cleanup import cleanup_memory
+from config.memory_cleanup import cleanup_memory, clear_jtop_cache
 from config.logger import audio_logger as log
 from src_audio.utils.export_to_csv import export_to_csv
 
@@ -52,6 +52,7 @@ def _clear_cuda_cache_if_available() -> None:
 
     # Also trim host heap where possible.
     cleanup_memory()
+    clear_jtop_cache()
 
 def move_chunk_to_processed(chunk_path: Path) -> Path:
     """
@@ -98,14 +99,20 @@ def process_audio_chunk() -> bool:
         log.info(f"Moved to processed dir: {chunk_path}")
 
         transcript_path = run_transcription(str(chunk_path))
+        clear_jtop_cache()
         if transcript_path is None:
             log.error("Transcription failed; skipping anonymization and extraction for this chunk.")
             _clear_cuda_cache_if_available()
             return False
 
         run_anonymization(str(chunk_path), transcript_path)
+        clear_jtop_cache()
+
         run_medication_extraction(str(chunk_path), transcript_path, medication_tracker, audit_log)
+        clear_jtop_cache()
+
         run_intervention_extraction(str(chunk_path), transcript_path)
+        clear_jtop_cache()
         log.success(f"{chunk_path.name} processed")
         _clear_cuda_cache_if_available()
         return True

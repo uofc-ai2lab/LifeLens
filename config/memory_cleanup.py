@@ -1,5 +1,6 @@
 import gc
 import ctypes
+from jtop import jtop
 
 try:
     libc = ctypes.CDLL("libc.so.6")
@@ -30,3 +31,14 @@ def cleanup_memory(*objs):
     except Exception:
         # Some libc builds may not support malloc_trim; ignore gracefully.
         pass
+
+def clear_jtop_cache():
+    try:
+        with jtop() as jetson:
+            if jetson.ok():
+                jetson.clear_cache()
+                print("Cache cleared successfully.")
+            else:
+                print("Could not connect to jtop.")
+    except Exception as e:
+        print(f"Error: {e}")

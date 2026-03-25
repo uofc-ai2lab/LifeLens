@@ -16,7 +16,7 @@ from config.resource_usage import start_monitoring, stop_monitoring
 from config.audio_settings import USAGE_FILE_PATH
 from config.logger import video_logger as log
 from config.gpu_guard import gpu_exclusive
-from config.memory_cleanup import cleanup_memory
+from config.memory_cleanup import cleanup_memory, clear_jtop_cache
 from config.video_settings import (
     load_video_pipeline_settings,
     SNAPSHOT_INTERVAL,
@@ -82,6 +82,7 @@ def _clear_cuda_cache_if_available() -> None:
 
     # Also trim host heap where possible.
     cleanup_memory()
+    clear_jtop_cache()
 
 
 def _run_detection_with_cpu_fallback(settings: Dict[str, Any]) -> None:
@@ -105,21 +106,24 @@ def _run_detection_with_cpu_fallback(settings: Dict[str, Any]) -> None:
     )
 
     try:
-        run_detection(**detection_kwargs)
-        return
-    except Exception as e:
-        if not _is_cuda_detection_failure(e):
-            raise
+        try:
+            run_detection(**detection_kwargs)
+        except Exception as e:
+            if not _is_cuda_detection_failure(e):
+                raise
 
-        log.warning(
-            f"Detection hit CUDA/NVML runtime failure ({e}). "
-            f"Retrying once on CPU..."
-        )
-        _clear_cuda_cache_if_available()
+            log.warning(
+                f"Detection hit CUDA/NVML runtime failure ({e}). "
+                f"Retrying once on CPU..."
+            )
+            _clear_cuda_cache_if_available()
 
-    detection_kwargs["device"] = "cpu"
-    run_detection(**detection_kwargs)
-    log.success("Detection retry on CPU completed")
+            detection_kwargs["device"] = "cpu"
+            run_detection(**detection_kwargs)
+            log.success("Detection retry on CPU completed")
+    finally:
+        # Always clear jtop cache after detection completes (success or failure).
+        clear_jtop_cache()
 
 
 def _run_classification_with_cpu_fallback(settings: Dict[str, Any]) -> None:
@@ -141,23 +145,26 @@ def _run_classification_with_cpu_fallback(settings: Dict[str, Any]) -> None:
     )
 
     try:
-        predict_injuries_on_detection_crops(**classification_kwargs)
-        return
-    except Exception as e:
-        if not _is_cuda_detection_failure(e):
-            raise
+        try:
+            predict_injuries_on_detection_crops(**classification_kwargs)
+        except Exception as e:
+            if not _is_cuda_detection_failure(e):
+                raise
 
-        log.warning(
-            f"Classification hit CUDA/NVML runtime failure ({e}). "
-            f"Retrying once on CPU..."
-        )
-        _clear_cuda_cache_if_available()
+            log.warning(
+                f"Classification hit CUDA/NVML runtime failure ({e}). "
+                f"Retrying once on CPU..."
+            )
+            _clear_cuda_cache_if_available()
 
-    import torch
+            import torch
 
-    classification_kwargs["device"] = torch.device("cpu")
-    predict_injuries_on_detection_crops(**classification_kwargs)
-    log.success("Classification retry on CPU completed")
+            classification_kwargs["device"] = torch.device("cpu")
+            predict_injuries_on_detection_crops(**classification_kwargs)
+            log.success("Classification retry on CPU completed")
+    finally:
+        # Always clear jtop cache after classification completes (success or failure).
+        clear_jtop_cache()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -420,6 +427,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
 
     log.info("Releasing ReID service...")
     cleanup_memory(reid)
+    clear_jtop_cache()
 
     log.header("Camera closed — starting post-camera pipeline")
     run_post_camera_pipeline(settings, snapshot_count)
