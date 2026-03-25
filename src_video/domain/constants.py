@@ -81,7 +81,7 @@ CAPTURE_HEIGHT = _env_int("VIDEO_CAPTURE_HEIGHT", 1080)
 DISPLAY_WIDTH = _env_int("VIDEO_DISPLAY_WIDTH", 960)
 DISPLAY_HEIGHT = _env_int("VIDEO_DISPLAY_HEIGHT", 540)
 FRAME_RATE = _env_int("VIDEO_FRAME_RATE", 20)
-FLIP_METHOD = _env_int("VIDEO_FLIP_METHOD", 4)  # 0=none, 1=counterclockwise, 2=180, 3=clockwise, 4=horizontal mirror, 5=upper-right diagonal, 6=vertical flip, 7=upper-left diagonal
+FLIP_METHOD = _env_int("VIDEO_FLIP_METHOD", 2)  # 0=none, 1=counterclockwise, 2=180, 3=clockwise, 4=horizontal mirror, 5=upper-right diagonal, 6=vertical flip, 7=upper-left diagonal
 # GStreamer videobalance brightness in [-1.0, 1.0]. Positive values brighten.
 CAMERA_BRIGHTNESS = _env_float("VIDEO_BRIGHTNESS", 0.12)
 
