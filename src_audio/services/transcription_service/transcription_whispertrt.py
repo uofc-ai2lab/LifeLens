@@ -142,6 +142,24 @@ def get_chunk_advance_seconds(audio_file: str) -> float:
     return max(advance_seconds, 0.0)
 
 
+def unload_whisper_model() -> None:
+    """Release Whisper from memory. Call before heavy inference on memory-constrained systems."""
+    global _WHISPER_PIPE, _WHISPER_FALLBACK, _WHISPER_PIPE_MODEL_PATH
+    _WHISPER_PIPE = None
+    _WHISPER_FALLBACK = None
+    _WHISPER_PIPE_MODEL_PATH = None
+    try:
+        import ctypes
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        libc = ctypes.CDLL("libc.so.6")
+        libc.malloc_trim(0)
+    except Exception:
+        pass
+    log.info("Whisper model unloaded from memory")
+
+
 def load_fine_tuned_whisper(model_path: str):
     """Loads the fine-tuned Whisper LoRA model via HF Pipeline."""
     global _WHISPER_PIPE, _WHISPER_PIPE_MODEL_PATH

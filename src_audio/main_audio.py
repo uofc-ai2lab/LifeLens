@@ -140,7 +140,10 @@ def processing_worker(queue: Queue):
             break
 
         try:
-            process_audio_chunk()
+            # Drain all pending chunks, not just one — prevents accumulation
+            # when the memory gate previously caused skips.
+            while process_audio_chunk():
+                pass
         except Exception as e:
             log.error(f"Worker error: {e}")
         finally:

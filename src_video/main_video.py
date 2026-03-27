@@ -32,7 +32,7 @@ from src_video.services.camera_capture_service.gstreamer_video_pipeline import (
 from src_video.services.detection_service.detect_body_parts import run_detection
 from src_video.services.body_ranking.body_injury_ranking import body_ranking
 from src_video.services.classification_service.infer_injuries_on_crops import predict_injuries_on_detection_crops
-# from src_video.services.deidentification_service.deidentify import run_deidentification
+from src_audio.services.transcription_service.transcription_whispertrt import unload_whisper_model
 from src_video.services.detect_marker_service.detect_marker import detect_apriltags
 from src_video.services.person_reid_service.reid_service import (
     build_reid_service,
@@ -195,11 +195,21 @@ def run_post_camera_pipeline(settings: Dict[str, Any], snapshot_count: int) -> b
 
     log.header(f"Post-camera pipeline starting ({snapshot_count} snapshots)")
     clear_jtop_cache()
-    
+
+    # Unload Whisper before loading detection model — both are large and on Jetson
+    # unified RAM they cannot comfortably coexist with the 71M-param YOLO model.
+    try:
+        unload_whisper_model()
+    except Exception as e:
+        log.warning(f"Could not unload Whisper before post-camera pipeline: {e}")
+
     try:
         with gpu_exclusive("video:detection+classification", logger=log):
             _run_detection_with_cpu_fallback(settings)
             log.success("Detection done")
+
+            # Flush CUDA allocations and trim heap between the two heavy models.
+            _clear_cuda_cache_if_available()
 
             try:
                 _run_classification_with_cpu_fallback(settings)
