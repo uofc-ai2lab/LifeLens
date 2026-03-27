@@ -36,7 +36,7 @@ def clear_jtop_cache():
     try:
         with jtop() as jetson:
             if jetson.ok():
-                jetson.memory.clear_cache()
+                jetson.clear_cache()
                 print("Cache cleared successfully.")
             else:
                 print("Could not connect to jtop.")
