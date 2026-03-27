@@ -1,8 +1,81 @@
 {
   "model_name": "swin_tiny_patch4_window7_224",
-  "best_val_accuracy": 0.4166666666666667,
-  "roc_auc": NaN,
-  "pr_auc": 0.46419753086419746,
-  "precision_macro": 0.4583333333333333,
-  "recall_macro": 0.3333333333333333
+  "best_val_accuracy": 0.8392857142857143,
+  "roc_auc": 0.9815989350088605,
+  "pr_auc": 0.8665533312883776,
+  "precision_macro": 0.7854229104229105,
+  "recall_macro": 0.8209036796536797,
+  "f1_macro": 0.7865605551027546,
+  "precision_micro": 0.8392857142857143,
+  "recall_micro": 0.8392857142857143,
+  "f1_micro": 0.8392857142857143,
+  "precision_weighted": 0.8479645354645354,
+  "recall_weighted": 0.8392857142857143,
+  "f1_weighted": 0.8380994259465213,
+  "per_class": [
+    {
+      "class_name": "Abrasions",
+      "class_index": 0,
+      "precision": 0.8181818181818182,
+      "recall": 0.75,
+      "f1": 0.782608695652174,
+      "support": 12
+    },
+    {
+      "class_name": "Bruises",
+      "class_index": 1,
+      "precision": 0.8461538461538461,
+      "recall": 0.88,
+      "f1": 0.8627450980392157,
+      "support": 25
+    },
+    {
+      "class_name": "Burns",
+      "class_index": 2,
+      "precision": 0.7142857142857143,
+      "recall": 0.7142857142857143,
+      "f1": 0.7142857142857143,
+      "support": 7
+    },
+    {
+      "class_name": "Cut",
+      "class_index": 3,
+      "precision": 0.8,
+      "recall": 0.5,
+      "f1": 0.6153846153846154,
+      "support": 8
+    },
+    {
+      "class_name": "Ingrown_nails",
+      "class_index": 4,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "support": 3
+    },
+    {
+      "class_name": "Laceration",
+      "class_index": 5,
+      "precision": 0.9,
+      "recall": 0.8181818181818182,
+      "f1": 0.8571428571428571,
+      "support": 11
+    },
+    {
+      "class_name": "Stab_wound",
+      "class_index": 6,
+      "precision": 0.8,
+      "recall": 1.0,
+      "f1": 0.8888888888888888,
+      "support": 4
+    },
+    {
+      "class_name": "no_injury",
+      "class_index": 7,
+      "precision": 0.9047619047619048,
+      "recall": 0.9047619047619048,
+      "f1": 0.9047619047619048,
+      "support": 42
+    }
+  ]
 }

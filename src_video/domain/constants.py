@@ -64,14 +64,26 @@ def _env_int(name: str, default: int) -> int:
 		return default
 
 
+def _env_float(name: str, default: float) -> float:
+	raw = os.getenv(name)
+	if raw is None or raw.strip() == "":
+		return default
+	try:
+		return float(raw)
+	except ValueError:
+		return default
+
+
 # Camera Settings (needed - passed to gstreamer_pipeline)
 # Low-memory defaults for Jetson stability. Override via env if needed.
-CAPTURE_WIDTH = _env_int("VIDEO_CAPTURE_WIDTH", 1280)
-CAPTURE_HEIGHT = _env_int("VIDEO_CAPTURE_HEIGHT", 720)
-DISPLAY_WIDTH = _env_int("VIDEO_DISPLAY_WIDTH", 640)
-DISPLAY_HEIGHT = _env_int("VIDEO_DISPLAY_HEIGHT", 360)
+CAPTURE_WIDTH = _env_int("VIDEO_CAPTURE_WIDTH", 1920)
+CAPTURE_HEIGHT = _env_int("VIDEO_CAPTURE_HEIGHT", 1080)
+DISPLAY_WIDTH = _env_int("VIDEO_DISPLAY_WIDTH", 960)
+DISPLAY_HEIGHT = _env_int("VIDEO_DISPLAY_HEIGHT", 540)
 FRAME_RATE = _env_int("VIDEO_FRAME_RATE", 20)
-FLIP_METHOD = _env_int("VIDEO_FLIP_METHOD", 0)  # 0=none, 1=counterclockwise, 2=180, 3=clockwise, 4=horizontal flip, 5=vertical flip, 6=upper right diag, 7=upper left diag
+FLIP_METHOD = _env_int("VIDEO_FLIP_METHOD", 2)  # 0=none, 1=counterclockwise, 2=180, 3=clockwise, 4=horizontal mirror, 5=upper-right diagonal, 6=vertical flip, 7=upper-left diagonal
+# GStreamer videobalance brightness in [-1.0, 1.0]. Positive values brighten.
+CAMERA_BRIGHTNESS = _env_float("VIDEO_BRIGHTNESS", 0.12)
 
 # Camera Calibration - NEEDED FOR ACCURATE DISTANCE
 # we don't need this to be super accurate for our use case, so these are approximate values
@@ -81,3 +93,22 @@ CAMERA_CX=960.0
 CAMERA_CY=540.0
 
 CAMERA_PARAMS = (CAMERA_FX, CAMERA_FY, CAMERA_CX, CAMERA_CY)
+
+# ── YOLO person detector ──────────────────────────────────────────────────
+YOLO_INPUT_SIZE       = 640          
+YOLO_CONF_THRESH      = 0.45         
+YOLO_NMS_IOU_THRESH   = 0.45         
+YOLO_PERSON_CLASS     = 0            
+PERSON_MIN_AREA_PX    = 3000         
+                                     
+# ── ResNet50 body ReID ────────────────────────────────────────────────────
+REID_INPUT_SIZE = (128, 256)          
+
+# ── REID Matching thresholds ───────────────────────────────────────────────────
+BODY_SIMILARITY_THRESH      = 0.80   # primary path — YOLO bbox → body crop
+BODY_HIGH_CONF_THRESH       = 0.86   # above this → high confidence
+BODY_FALLBACK_THRESH        = 0.87   # fallback path (no YOLO detections)
+
+# ── Enrollment ────────────────────────────────────────────────────────────
+ENROLL_N_FRAMES  = 8
+REID_COOLDOWN_S  = 5.0

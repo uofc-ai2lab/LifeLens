@@ -8,7 +8,6 @@ import numpy as np
 import sys
 import os
 from pupil_apriltags import Detector
-from src_video.domain.entities import AprilTagDetection
 from config.logger import Logger
 from config.video_settings import (
     # tag settings
@@ -65,7 +64,12 @@ log.success("AprilTag detector initialized successfully")
 
 # ==================== DETECTION FUNCTIONS ====================
 
-def detect_apriltags(source, show_visualization=True, print_info=True):
+def detect_apriltags(
+    source,
+    show_visualization: bool = True,
+    print_info: bool = True,
+    estimate_pose: bool = False,
+):
     """
     Detect AprilTags in a frame
     
@@ -91,23 +95,14 @@ def detect_apriltags(source, show_visualization=True, print_info=True):
     # Convert to grayscale
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     
-    # Detect tags - suppress stderr warnings from C++ library
-    stderr_fd = sys.stderr.fileno()
-    old_stderr = os.dup(stderr_fd)
-    devnull = os.open(os.devnull, os.O_WRONLY)
-    os.dup2(devnull, stderr_fd)
-    
-    try:
-        tags = at_detector.detect(
-            gray,
-            estimate_tag_pose=True,
-            camera_params=CAMERA_PARAMS,
-            tag_size=TAG_SIZE
-        )
-    finally:
-        os.dup2(old_stderr, stderr_fd)
-        os.close(old_stderr)
-        os.close(devnull)
+    detect_kwargs = {
+        "estimate_tag_pose": bool(estimate_pose),
+    }
+    if estimate_pose:
+        detect_kwargs["camera_params"] = CAMERA_PARAMS
+        detect_kwargs["tag_size"] = TAG_SIZE
+
+    tags = at_detector.detect(gray, **detect_kwargs)
 
     tags = [tag for tag in tags if tag.decision_margin > MIN_DECISION_MARGIN]
     
@@ -118,15 +113,12 @@ def detect_apriltags(source, show_visualization=True, print_info=True):
     if TARGET_TAG_IDS is not None:
         tags = [tag for tag in tags if tag.tag_id in TARGET_TAG_IDS]
 
-    DETECTED_TAG = detect_tags(tags)
+    detected_tag = bool(tags)
 
-    # Print detection information
-    if tags and print_info:
-        # if we are here then we have detected tag!
-        DETECTED_TAG = True
+    if detected_tag and print_info:
         print_tag_info(tags)
-    
-    return DETECTED_TAG
+
+    return detected_tag
 
 def draw_detections(frame, tags):
     """Draw detection visualizations on frame"""
@@ -192,27 +184,3 @@ def print_tag_info(tags):
         log.info(f"  Decision margin: {tag.decision_margin:.2f}")
         log.info(f"  Hamming distance: {tag.hamming}")
         log.info("--------------------------------------------------")
-
-
-
-def detect_tags(tags):
-    # take photos, pause detection, call next service
-        detect_tags: list[AprilTagDetection] = []
-        for tag in tags:
-            detect_tags.append(
-                AprilTagDetection(
-                    tag_id=tag.tag_id,
-                    center_x=tag.center[0],
-                    center_y=tag.center[1],
-                    corners=[(corner[0], corner[1]) for corner in tag.corners],
-                    distance=(
-                        np.linalg.norm(tag.pose_t)
-                        if tag.pose_t is not None
-                        else -1
-                    ),
-                    decision_margin=tag.decision_margin,
-                )
-            )
-
-        for dt in detect_tags:
-            dt.print_info()

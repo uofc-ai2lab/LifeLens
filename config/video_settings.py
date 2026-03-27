@@ -23,8 +23,17 @@ VIDEO_OUTPUT_DIR = VIDEO_DIR / "output_files"
 
 SNAPSHOT_INTERVAL = int(os.getenv('SNAPSHOT_INTERVAL', '2'))  # seconds between snapshots
 
+YOLO_MODEL_PATH = "src_video/services/person_reid_service/yolov8n.onnx"
+EMBEDDER_ONNX_PATH = "src_video/services/person_reid_service/resnet50_market1501_aicity156.onnx"
+REID_USE_TRT = False
+REID_BODY_THRESHOLD = 0.80
+REID_THRESHOLD = 0.80
+
 IMAGE_SAVE_DIR = VIDEO_DIR / "saved_imgs"
 os.makedirs(IMAGE_SAVE_DIR, exist_ok=True)
+
+PROCESSED_IMAGE_DIR = VIDEO_DIR / "processed_images"
+os.makedirs(PROCESSED_IMAGE_DIR, exist_ok=True)
 
 # Tag Detection Settings
 TAG_SIZE = float(os.getenv('TAG_SIZE', '0.025'))  # Tag size in meters
@@ -85,6 +94,22 @@ def _env_list(name: str, default: list[str]) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def _env_float_list(name: str, default: list[float]) -> list[float]:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    values: list[float] = []
+    for item in raw.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            values.append(float(item))
+        except ValueError:
+            continue
+    return values if values else default
+
+
 def load_video_pipeline_settings() -> dict:
     pipeline_root = os.getenv("PIPELINE_ROOT", str(VIDEO_OUTPUT_DIR)).replace("\\", "/")
     detection_output = os.getenv("PIPELINE_DETECTION_OUTPUT", f"{pipeline_root}/DetectionOutput")
@@ -118,11 +143,19 @@ def load_video_pipeline_settings() -> dict:
         "ADD_HEAD": _env_bool("PIPELINE_ADD_HEAD", True),
         "ALPHA_PNG": _env_bool("PIPELINE_ALPHA_PNG", False),
         "MIN_AREA": _env_int("PIPELINE_MIN_AREA", 250),
-        "MARGIN": _env_float("PIPELINE_MARGIN", 0.10),
+        "MARGIN": _env_float("PIPELINE_MARGIN", 0.00),
+        "KEEP_CROPS": _env_bool("PIPELINE_KEEP_CROPS", False),
+        "FACE_MULTICROP": _env_bool("PIPELINE_FACE_MULTICROP", True),
+        "FACE_MULTICROP_PARTS": _env_list(
+            "PIPELINE_FACE_MULTICROP_PARTS",
+            ["face", "head", "neck", "arm", "hand", "leg", "foot", "torso"],
+        ),
+        "FACE_MULTICROP_SCALES": _env_float_list("PIPELINE_FACE_MULTICROP_SCALES", [0.85, 0.70]),
         "CLASSES": _env_list(
             "PIPELINE_CLASSES",
             ["face", "arm", "hand", "leg", "foot", "neck", "torso", "head"],
         ),
+        "AUTO_ROTATE_SUBJECT": _env_bool("PIPELINE_AUTO_ROTATE_SUBJECT", False),
         "DEVICE": os.getenv("PIPELINE_DEVICE", None),
         "DEBUG": _env_bool("PIPELINE_DEBUG", False),
         "INJURY_CHECKPOINT_PATH": os.getenv(
@@ -143,5 +176,7 @@ def load_video_pipeline_settings() -> dict:
         # Crop filename parsing
         # Crops are named like: <origstem>_<body_part>_<idx>.jpg
         # This controls which token is interpreted as body-part label.
-        "BODY_PART_LABEL_POSITION": _env_int("PIPELINE_BODY_PART_LABEL_POSITION", -2)
+        "BODY_PART_LABEL_POSITION": _env_int("PIPELINE_BODY_PART_LABEL_POSITION", -2),
+        "INJURY_AGG_MAX_NON_NO_INJURY": _env_bool("PIPELINE_INJURY_AGG_MAX_NON_NO_INJURY", True),
+        "NO_INJURY_LABEL": os.getenv("PIPELINE_NO_INJURY_LABEL", "no_injury"),
     }

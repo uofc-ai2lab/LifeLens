@@ -2,6 +2,7 @@ import asyncio
 import sys
 import threading
 import time
+import os
 
 from src_audio.main_audio import main as audio_main
 from src_video.main_video import main as video_main
@@ -85,7 +86,7 @@ def run_video_pipeline(
     video_pipeline = None
     try:
         # Initialize GStreamer video pipeline
-        video_pipeline = GStreamerVideoPipeline(flip_method=0)
+        video_pipeline = GStreamerVideoPipeline()
         if not video_pipeline.start():
             video_failed.set()
             log.error("VIDEO pipeline failed to initialize camera")
@@ -121,6 +122,14 @@ def main():
     log.info("Running startup tasks...")
     run_jetson_startup_tasks()
     start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
+
+    disable_audio = os.getenv("LIFELENS_DISABLE_AUDIO", "0").strip().lower() in {
+        "1", "true", "yes", "on"
+    }
+    try:
+        startup_settle_s = float(os.getenv("LIFELENS_AUDIO_START_DELAY", "2.0"))
+    except ValueError:
+        startup_settle_s = 2.0
     
     start_time = time.time()
 
@@ -139,13 +148,15 @@ def main():
         daemon=False,
     )
 
-    # Start audio thread (will wait for video ready)
-    audio_thread = threading.Thread(
-        target=run_audio_pipeline,
-        name="AudioThread_GStreamer",
-        args=(stop_event,),
-        daemon=False,
-    )
+    audio_thread = None
+    if not disable_audio:
+        # Start audio thread (will wait for video ready)
+        audio_thread = threading.Thread(
+            target=run_audio_pipeline,
+            name="AudioThread_GStreamer",
+            args=(stop_event,),
+            daemon=False,
+        )
 
     # Start video first; only start audio once camera is confirmed ready
     log.info("Initializing GStreamer pipelines...")
@@ -160,16 +171,18 @@ def main():
     if video_failed.is_set():
         log.error("VIDEO pipeline failed to initialize. Aborting audio pipeline.")
     else:
-        log.success("VIDEO pipeline ready. Starting AUDIO pipeline...")
-        startup_settle_s = 2.0
-        log.info(f"Settling {startup_settle_s:.1f}s before AUDIO startup to reduce memory pressure")
-        time.sleep(startup_settle_s)
-        audio_thread.start()
+        if disable_audio:
+            log.warning("AUDIO pipeline disabled via LIFELENS_DISABLE_AUDIO")
+        else:
+            log.success("VIDEO pipeline ready. Starting AUDIO pipeline...")
+            log.info(f"Settling {startup_settle_s:.1f}s before AUDIO startup to reduce memory pressure")
+            time.sleep(startup_settle_s)
+            audio_thread.start()
     
     # Wait for both threads to complete
     log.info("Both pipelines started, waiting for completion")
     video_thread.join()
-    if audio_thread.is_alive():
+    if audio_thread is not None and audio_thread.is_alive():
         audio_thread.join()
     
     stop_monitoring()

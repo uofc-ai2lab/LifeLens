@@ -72,6 +72,67 @@ def _compute_body_midline_x(results, image_width: int) -> float:
     return float(image_width) * 0.5
 
 
+def _compute_body_midline_y(results, image_height: int) -> float:
+    """Estimate vertical waist-level midline using torso/outfit detections.
+
+    Heuristic: weighted average of center-y for torso/outfit detections.
+    Falls back to image midpoint if no anchor parts are found.
+    """
+    Y_ANCHOR_PARTS = {"torso", "outfit"}
+    weighted_sum = 0.0
+    weight = 0.0
+
+    for result in results:
+        if getattr(result, "boxes", None) is None or getattr(result.boxes, "cls", None) is None:
+            continue
+        names_map = getattr(result, "names", {})
+        try:
+            cls_ids = result.boxes.cls.cpu().numpy().astype(int)
+            xyxy_boxes = result.boxes.xyxy.cpu().numpy()
+        except Exception:
+            continue
+
+        for idx, cls_id in enumerate(cls_ids):
+            if idx >= len(xyxy_boxes):
+                continue
+            cls_name = names_map.get(int(cls_id), str(cls_id))
+            if cls_name not in Y_ANCHOR_PARTS:
+                continue
+            x1, y1, x2, y2 = xyxy_boxes[idx].tolist()
+            bbox = (int(round(x1)), int(round(y1)), int(round(x2)), int(round(y2)))
+            area = _bbox_area(bbox)
+            if area <= 1.0:
+                continue
+            center_y = (float(y1) + float(y2)) * 0.5
+            weighted_sum += center_y * area
+            weight += area
+
+    if weight > 0.0:
+        return float(weighted_sum / weight)
+    return float(image_height) * 0.5
+
+
+def _remap_limb_label_by_position(
+    cls_name: str,
+    bbox: tuple[int, int, int, int],
+    midline_y: float,
+) -> str:
+    """Remap limb labels that contradict their vertical position in the image.
+
+    The body-part model is trained on standard standing poses and frequently
+    misclassifies raised arms as legs (positional bias). If a detection labeled
+    'leg' has its bounding-box center above the estimated waist midline, it is
+    almost certainly an arm — remap it.
+    """
+    if cls_name != "leg":
+        return cls_name
+    _, y1, _, y2 = bbox
+    center_y = (float(y1) + float(y2)) * 0.5
+    if center_y < midline_y:
+        return "arm"
+    return cls_name
+
+
 def _label_with_side(cls_name: str, bbox: tuple[int, int, int, int], midline_x: float) -> str:
     """Return a label like 'arm1' / 'arm2' for side-able parts.
 
@@ -156,6 +217,32 @@ def _expand_bbox_with_margin(
     return x1, y1, x2, y2
 
 
+def _scale_bbox_from_center(
+    bbox: tuple[int, int, int, int],
+    scale: float,
+    image_shape: tuple[int, int],
+) -> tuple[int, int, int, int]:
+    """Scale bbox around center (scale < 1.0 shrinks), clipped to image bounds."""
+    x1, y1, x2, y2 = bbox
+    if x2 <= x1 or y2 <= y1:
+        return 0, 0, 0, 0
+
+    width = x2 - x1 + 1
+    height = y2 - y1 + 1
+    cx = x1 + width * 0.5
+    cy = y1 + height * 0.5
+
+    new_w = max(2, int(round(width * scale)))
+    new_h = max(2, int(round(height * scale)))
+
+    new_x1 = int(round(cx - new_w * 0.5))
+    new_y1 = int(round(cy - new_h * 0.5))
+    new_x2 = new_x1 + new_w - 1
+    new_y2 = new_y1 + new_h - 1
+
+    return _clip_bbox((new_x1, new_y1, new_x2, new_y2), image_shape=image_shape)
+
+
 def _resize_mask_to_image(mask_bin: np.ndarray, image_shape: tuple[int, int]) -> np.ndarray:
     """Resize a binary mask to the given (H,W) using nearest-neighbor."""
     H, W = image_shape
@@ -209,11 +296,12 @@ def choose_best_rotation(model, image_np: np.ndarray, device: Optional[str], can
     best_score = -1.0
     for deg in candidate_degrees:
         rotated = rotate_image_np(image_np, deg)
-        predict_kwargs = {"source": rotated, "verbose": False}
+        predict_kwargs = {"source": rotated, "verbose": False, "conf": 0.15}
         if device is not None:
             predict_kwargs["device"] = device
         results = model.predict(**predict_kwargs)
         score = _prediction_score(results)
+        del results
         if score > best_score:
             best_score = score
             best_deg = deg
@@ -287,6 +375,9 @@ def process_image(
     save_annotated: bool = True,
     debug: bool = False,
     debug_print: bool = False,
+    face_multicrop: bool = False,
+    face_multicrop_parts: Optional[List[str]] = None,
+    face_multicrop_scales: Optional[List[float]] = None,
 ):
     image_pil = Image.open(image_path)
     if auto_orient:
@@ -310,7 +401,7 @@ def process_image(
         image_np = rotate_image_np(image_np, best_deg)
 
     # Key for crop/annotated alignment: run YOLO on the same pixels we're cropping.
-    predict_kwargs = {"source": image_np, "verbose": False}
+    predict_kwargs = {"source": image_np, "verbose": False, "conf": 0.15}
     if device is not None:
         predict_kwargs["device"] = device
     results = model.predict(**predict_kwargs)
@@ -320,9 +411,23 @@ def process_image(
     except Exception:
         midline_x = float(image_np.shape[1]) * 0.5
 
+    try:
+        midline_y = _compute_body_midline_y(results, image_height=int(image_np.shape[0]))
+    except Exception:
+        midline_y = float(image_np.shape[0]) * 0.5
+
     log.info(f"Processing {image_path.name}: {len(results)} result(s)")
     vis_boxes: List[tuple[int, int, int, int]] = []
     vis_labels: List[str] = []
+
+    multicrop_parts = {
+        p.strip().lower()
+        for p in (face_multicrop_parts or ["face"])
+        if isinstance(p, str) and p.strip()
+    }
+    multicrop_scales = [
+        float(s) for s in (face_multicrop_scales or [0.85, 0.70]) if 0.0 < float(s) < 1.0
+    ]
 
     crops_root = output_dir / "crops" / image_path.stem
     ensure_dir(crops_root)
@@ -389,6 +494,7 @@ def process_image(
             if (bbox[2] <= bbox[0] or bbox[3] <= bbox[1]) and mask_bin is not None:
                 bbox = mask_to_bbox(mask_bin, margin=margin, image_shape=image_np.shape[:2])
 
+            cls_name = _remap_limb_label_by_position(cls_name, bbox, midline_y)
             export_cls_name = cls_name
             if midline_x is not None:
                 export_cls_name = _label_with_side(cls_name, bbox, midline_x)
@@ -413,6 +519,40 @@ def process_image(
                     except Exception as e:
                         if debug_print:
                             log.debug(f"classification export failed for {filename}: {e}")
+
+                if face_multicrop and (cls_name.lower() in multicrop_parts):
+                    seen_bboxes = {bbox}
+                    for scale in multicrop_scales:
+                        scaled_bbox = _scale_bbox_from_center(
+                            bbox,
+                            scale=scale,
+                            image_shape=image_np.shape[:2],
+                        )
+                        if (
+                            scaled_bbox[2] <= scaled_bbox[0]
+                            or scaled_bbox[3] <= scaled_bbox[1]
+                            or scaled_bbox in seen_bboxes
+                        ):
+                            continue
+                        seen_bboxes.add(scaled_bbox)
+
+                        scale_tag = int(round(scale * 100.0))
+                        scale_token = f"{idx}mc{scale_tag}"
+                        mc_filename = f"{image_path.stem}_{export_cls_name}_{scale_token}.jpg"
+                        mc_saved = save_crop(image_np, scaled_bbox, crops_root / mc_filename)
+                        if not mc_saved:
+                            continue
+
+                        vis_boxes.append(scaled_bbox)
+                        vis_labels.append(f"{export_cls_name}_mc{scale_tag}")
+                        if classification_export_dir is not None:
+                            cls_dir = classification_export_dir / export_cls_name
+                            ensure_dir(cls_dir)
+                            try:
+                                Image.open(crops_root / mc_filename).save(cls_dir / mc_filename)
+                            except Exception as e:
+                                if debug_print:
+                                    log.debug(f"classification export failed for {mc_filename}: {e}")
 
     if add_head:
         head_components: List[np.ndarray] = []
@@ -472,6 +612,9 @@ def iterate_source(
     save_annotated: bool = True,
     debug: bool = False,
     debug_print: bool = False,
+    face_multicrop: bool = False,
+    face_multicrop_parts: Optional[List[str]] = None,
+    face_multicrop_scales: Optional[List[float]] = None,
 ):
     if source.is_file():
         process_image(
@@ -491,6 +634,9 @@ def iterate_source(
             save_annotated=save_annotated,
             debug=debug,
             debug_print=debug_print,
+            face_multicrop=face_multicrop,
+            face_multicrop_parts=face_multicrop_parts,
+            face_multicrop_scales=face_multicrop_scales,
         )
         return
 
@@ -518,6 +664,9 @@ def iterate_source(
             save_annotated=save_annotated,
             debug=debug,
             debug_print=debug_print,
+            face_multicrop=face_multicrop,
+            face_multicrop_parts=face_multicrop_parts,
+            face_multicrop_scales=face_multicrop_scales,
         )
 
 
@@ -533,10 +682,13 @@ def run_detection(
     debug: bool = False,
     alpha_png: bool = False,
     max_images: int = 200,
-    auto_orient: bool = True,
+    auto_orient: bool = False,
     rotate_degrees: int = 0,
     auto_rotate_subject: bool = True,
     classification_export_dir: Optional[str] = None,
+    face_multicrop: bool = False,
+    face_multicrop_parts: Optional[List[str]] = None,
+    face_multicrop_scales: Optional[List[float]] = None,
 ) -> Dict[str, Any]:
     """Run YOLO segmentation + crop extraction.
 
@@ -584,6 +736,9 @@ def run_detection(
         save_annotated=True,
         debug=debug,
         debug_print=debug,
+        face_multicrop=face_multicrop,
+        face_multicrop_parts=face_multicrop_parts,
+        face_multicrop_scales=face_multicrop_scales,
     )
 
     summary: Dict[str, Any] = {
@@ -595,6 +750,9 @@ def run_detection(
         "auto_orient": auto_orient,
         "rotate_degrees": rotate_degrees,
         "auto_rotate_subject": auto_rotate_subject,
+        "face_multicrop": face_multicrop,
+        "face_multicrop_parts": face_multicrop_parts,
+        "face_multicrop_scales": face_multicrop_scales,
     }
     log.success(f"Done. Outputs in {output_path}")
     return summary

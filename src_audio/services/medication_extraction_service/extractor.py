@@ -1,9 +1,13 @@
 import spacy
+import threading
 from src_audio.domain.entities import MedicationEntity
 from src_audio.domain.constants import NER_CONFIDENCE
 from config.logger import Logger
 
 log = Logger("[audio][medication]")
+
+_EXTRACTOR_SINGLETON = None
+_EXTRACTOR_LOCK = threading.Lock()
 
 
 class MedicationExtractor:
@@ -57,3 +61,15 @@ class MedicationExtractor:
             )
         entities.sort(key=lambda e: e.start_idx)
         return entities
+
+
+def get_medication_extractor() -> MedicationExtractor:
+    """Return a process-wide Med7 extractor singleton."""
+    global _EXTRACTOR_SINGLETON
+    if _EXTRACTOR_SINGLETON is not None:
+        return _EXTRACTOR_SINGLETON
+
+    with _EXTRACTOR_LOCK:
+        if _EXTRACTOR_SINGLETON is None:
+            _EXTRACTOR_SINGLETON = MedicationExtractor()
+    return _EXTRACTOR_SINGLETON

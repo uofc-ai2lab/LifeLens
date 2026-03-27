@@ -8,7 +8,7 @@ from src_audio.domain.constants import (
 )
 from src_audio.domain.entities import MedicationEntity, MedicationAdministration
 from src_audio.services.medication_extraction_service.extractor import (
-    MedicationExtractor,
+    get_medication_extractor,
 )
 from src_audio.services.medication_extraction_service.postprocessing import (
     postprocess_entities,
@@ -423,7 +423,7 @@ def run_medication_extraction(
     if audit_log is None:
         audit_log = []
     initial_audit_count: int = len(audit_log)
-    extractor = MedicationExtractor()
+    extractor = get_medication_extractor()
     transcript_data = []
 
     df = load_csv_file(transcript_path)

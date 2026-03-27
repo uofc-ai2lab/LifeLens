@@ -100,6 +100,7 @@ def build_dataloaders_from_folder(
         transforms.RandomResizedCrop(image_size, scale=(0.7, 1.0)),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomVerticalFlip(p=0.2),
+        transforms.RandomRotation(degrees=30),
         transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.02),
         transforms.RandomGrayscale(p=0.1),
         transforms.RandomAutocontrast(p=0.2),
@@ -170,6 +171,7 @@ def _build_crop_transforms(image_size: int) -> Tuple[transforms.Compose, transfo
         transforms.RandomResizedCrop(image_size, scale=(0.7, 1.0)),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomVerticalFlip(p=0.2),
+        transforms.RandomRotation(degrees=30),
         transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.02),
         transforms.RandomGrayscale(p=0.1),
         transforms.RandomAutocontrast(p=0.2),
@@ -557,9 +559,16 @@ def _setup_model_and_optimizer(
     freeze_backbone_epochs: int,
     lr: float,
     backbone_lr_mult: float,
+    finetune_checkpoint: Optional[str] = None,
 ) -> Tuple[nn.Module, Optional[nn.Module], AdamW]:
     """Create model, extract head, optionally freeze backbone, and build optimizer."""
     model = create_model(num_classes=num_classes, pretrained=True).to(device)
+
+    if finetune_checkpoint:
+        ckpt = torch.load(finetune_checkpoint, map_location=device)
+        model.load_state_dict(ckpt["state_dict"], strict=False)
+        log.info(f"Loaded weights for fine-tuning from: {finetune_checkpoint}")
+
     head = _get_classifier_head(model)
     
     if freeze_backbone or freeze_backbone_epochs > 0:
@@ -724,10 +733,12 @@ def train_swin_tiny(
     from_detection_crops: bool = False,
     detection_crops_root: Optional[str] = None,
     detection_label_position: int = -2,
+    finetune_checkpoint: Optional[str] = None,
+    balanced_sampling: bool = False,
 ) -> Dict[str, Any]:
     """Train Swin Tiny on an ImageFolder dataset and return metrics."""
     device, pin_memory = _setup_device_and_pin_memory(device)
-    
+
     train_loader, val_loader, test_loader, class_names = _load_dataloaders(
         from_detection_crops=from_detection_crops,
         detection_crops_root=detection_crops_root,
@@ -741,6 +752,24 @@ def train_swin_tiny(
         pin_memory=pin_memory,
         detection_label_position=detection_label_position,
     )
+
+    if balanced_sampling:
+        from torch.utils.data import WeightedRandomSampler
+        targets = [label for _, label in train_loader.dataset]
+        class_counts = torch.zeros(len(class_names))
+        for t in targets:
+            class_counts[t] += 1
+        weights = 1.0 / class_counts
+        sample_weights = torch.tensor([weights[t] for t in targets])
+        sampler = WeightedRandomSampler(sample_weights, num_samples=len(sample_weights), replacement=True)
+        train_loader = DataLoader(
+            train_loader.dataset,
+            batch_size=batch_size,
+            sampler=sampler,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+        )
+        log.info("Using balanced sampling (WeightedRandomSampler)")
     
     num_classes = len(class_names)
     model, head, optimizer = _setup_model_and_optimizer(
@@ -750,6 +779,7 @@ def train_swin_tiny(
         freeze_backbone_epochs=freeze_backbone_epochs,
         lr=lr,
         backbone_lr_mult=backbone_lr_mult,
+        finetune_checkpoint=finetune_checkpoint,
     )
     
     criterion = nn.CrossEntropyLoss()
