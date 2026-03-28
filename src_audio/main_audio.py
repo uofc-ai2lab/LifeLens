@@ -21,6 +21,7 @@ from config.audio_settings import USAGE_FILE_PATH
 from config.resource_usage import start_monitoring, stop_monitoring
 from config.logger import audio_logger as log
 from src_audio.utils.export_to_csv import export_to_csv
+from data_transfer.sender_global import get
 
 def put_latest(queue: Queue, item):
     """Drop old signal if queue is full, keep newest."""
@@ -73,9 +74,19 @@ def process_audio_chunk() -> bool:
             log.error("Transcription failed; skipping anonymization and extraction for this chunk.")
             return False
 
-        run_anonymization(str(chunk_path), transcript_path)
-        run_medication_extraction(str(chunk_path), transcript_path, medication_tracker, audit_log)
-        run_intervention_extraction(str(chunk_path), transcript_path)
+        anonymization_path = run_anonymization(str(chunk_path), transcript_path)
+        medication_path = run_medication_extraction(str(chunk_path), transcript_path, medication_tracker, audit_log)
+        intervention_path = run_intervention_extraction(str(chunk_path), transcript_path)
+
+        # Send data to server
+        data_sender = get()
+        data_sender.send_batch(
+            pipeline="audio", files=[
+                (str(anonymization_path), "anonymization"),
+                (str(medication_path), "medx"),
+                (str(intervention_path), "intervention_extraction")     
+            ])
+
         log.success(f"{chunk_path.name} processed")
         return True
 

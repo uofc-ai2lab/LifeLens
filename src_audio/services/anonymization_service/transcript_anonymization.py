@@ -6,7 +6,7 @@ from pathlib import Path
 
 log = Logger("[audio][anonymization]")
 
-def run_anonymization(chunk_path: str, transcript_path: str) -> None:
+def run_anonymization(chunk_path: str, transcript_path: str) -> Path:
     """
     Run the full transcript anonymization pipeline:
     - Load transcript CSV
@@ -17,7 +17,7 @@ def run_anonymization(chunk_path: str, transcript_path: str) -> None:
         extractor (MedicationExtractor): NER model instance.
 
     Returns:
-        None
+        a Path to the anonymized transcript CSV file.
     """
     log.header("Starting Anonymization...")
     anonymizer = TranscriptAnonymizer()
@@ -44,3 +44,4 @@ def run_anonymization(chunk_path: str, transcript_path: str) -> None:
     )
     log.info(f"Saved anonymization file to {anon_path.name if anon_path else 'file'}")
     log.success("Anonymization completed successfully!")
+    return anon_path

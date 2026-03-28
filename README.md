@@ -203,6 +203,11 @@ Dataset Assets (Priv_personpart):
    Image anonymization Fernet Key should also be set. Please ask Kameel Kasumu (Github: kameelkas) for the proper key to set.
    - `IMAGE_ENC_KEY`
 
+   For data transfer to our data server, the following variables should also be set. Please ask Kameel Kasumu (Github: kameelkas) for the proper values. 
+   - `MQTT_BROKER`
+   - `MQTT_USERNAME`
+   - `MQTT_PASSWORD`
+
 **Keep env.template updated with any new variables your services require.**
 
 # Audio Processing Pipeline
