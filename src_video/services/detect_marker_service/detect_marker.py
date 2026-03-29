@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 import sys
 import os
+import time
 from pupil_apriltags import Detector
 from config.logger import Logger
 from config.video_settings import (
@@ -29,14 +30,19 @@ from src_video.domain.constants import (
     COLOR_DISTANCE_TEXT,
     CAMERA_PARAMS
 )
-MIN_DECISION_MARGIN = 20  # Adjust based on environment
+MIN_DECISION_MARGIN = float(os.getenv("APRILTAG_MIN_DECISION_MARGIN", "20"))
 
 log = Logger("[video][apriltag]")
+_LAST_FILTER_LOG_AT = 0.0
 
 # ==================== APRILTAG DETECTOR ====================
 
 # Suppress verbose apriltag warnings by redirecting stderr temporarily
-log.info(f"Initializing AprilTag detector for {TAG_FAMILY}...")
+log.info(
+    "Initializing AprilTag detector "
+    f"family={TAG_FAMILY}, decimate={QUAD_DECIMATE}, "
+    f"min_margin={MIN_DECISION_MARGIN:.1f}, target_ids={TARGET_TAG_IDS}"
+)
 
 # Redirect stderr to suppress C++ library warnings
 stderr_fd = sys.stderr.fileno()
@@ -102,16 +108,35 @@ def detect_apriltags(
         detect_kwargs["camera_params"] = CAMERA_PARAMS
         detect_kwargs["tag_size"] = TAG_SIZE
 
-    tags = at_detector.detect(gray, **detect_kwargs)
+    raw_tags = at_detector.detect(gray, **detect_kwargs)
+    tags = [tag for tag in raw_tags if tag.decision_margin > MIN_DECISION_MARGIN]
 
-    tags = [tag for tag in tags if tag.decision_margin > MIN_DECISION_MARGIN]
+    global _LAST_FILTER_LOG_AT
+    now = time.time()
+    should_log = (now - _LAST_FILTER_LOG_AT) >= 2.0
+
+    if should_log and raw_tags and len(tags) != len(raw_tags):
+        dropped = len(raw_tags) - len(tags)
+        best_margin = max(float(tag.decision_margin) for tag in raw_tags)
+        log.info(
+            f"Detected {len(raw_tags)} raw tag(s), dropped {dropped} below margin "
+            f"threshold {MIN_DECISION_MARGIN:.1f} (best margin={best_margin:.2f})."
+        )
+        _LAST_FILTER_LOG_AT = now
     
     if show_visualization:
         draw_detections(frame, tags)
     
     # Filter by target IDs if specified
     if TARGET_TAG_IDS is not None:
+        ids_before = [int(tag.tag_id) for tag in tags]
         tags = [tag for tag in tags if tag.tag_id in TARGET_TAG_IDS]
+        if should_log and ids_before and not tags:
+            log.warning(
+                f"Tag(s) detected with IDs {ids_before}, but filtered out by "
+                f"TARGET_TAG_IDS={TARGET_TAG_IDS}. Leave TARGET_TAG_IDS blank to accept any tag."
+            )
+            _LAST_FILTER_LOG_AT = now
 
     detected_tag = bool(tags)
 

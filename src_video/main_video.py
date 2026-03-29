@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import time
+import datetime
 import threading, asyncio
 import shutil
 import gc
+import os
 import cv2
 import numpy as np
 import argparse
@@ -39,6 +41,19 @@ from src_video.services.person_reid_service.reid_service import (
     ReIDEvent,
 )
 
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return default
+
+# Temporary switch to measure RAM impact with REID disabled.
+REID_ENABLED = False
+
 # Set False to skip snapshots from center-crop fallback (low-confidence).
 # Recommended: keep False unless YOLO frequently misses the enrolled person.
 SNAPSHOT_ON_LOW_CONFIDENCE = False
@@ -46,9 +61,9 @@ SNAPSHOT_ON_LOW_CONFIDENCE = False
 # Run AprilTag detection every N frames while enrolling to reduce continuous
 # detector pressure and memory churn on long camera sessions.
 APRILTAG_DETECT_EVERY_N_FRAMES = 3
+APRILTAG_CONTINUOUS_SNAPSHOT_INTERVAL_S = 5.0
 
-# After first AprilTag hit, pause AprilTag calls and collect enrollment samples
-# directly to avoid running both heavy paths repeatedly.
+# Sample enrollment frames at a lower cadence to reduce model pressure.
 ENROLL_SAMPLE_EVERY_N_FRAMES = 2
 ENROLLMENT_TIMEOUT_S = 12.0
 
@@ -70,22 +85,24 @@ def _is_cuda_detection_failure(exc: Exception) -> bool:
 
 
 def _clear_cuda_cache_if_available() -> None:
-    """Best-effort CUDA + heap cleanup for video models."""
-    try:
-        import torch
-
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-    except Exception:
-        # Best-effort CUDA cleanup only.
-        pass
-
-    # Also trim host heap where possible.
-    cleanup_memory()
-    clear_jtop_cache()
+    """Best-effort CUDA + RAM cleanup for video models."""
+    drop_os_cache = os.getenv("LIFELENS_DROP_OS_PAGE_CACHE", "0").strip().lower() in {
+        "1", "true", "t", "yes", "y", "on"
+    }
+    cleanup_memory(
+        clear_cuda_cache=True,
+        clear_jtop=True,
+        drop_linux_page_cache=drop_os_cache,
+    )
 
 
 def _run_detection_with_cpu_fallback(settings: Dict[str, Any]) -> None:
+    requested_device = settings.get("DEVICE")
+    log.info(
+        "Detection configured device="
+        f"{requested_device if requested_device is not None else 'auto'}"
+    )
+
     detection_kwargs = dict(
         model=settings["DETECTION_MODEL"],
         source=_as_posix(IMAGE_SAVE_DIR),
@@ -100,9 +117,7 @@ def _run_detection_with_cpu_fallback(settings: Dict[str, Any]) -> None:
         max_images=int(settings["MAX_IMAGES"]),
         auto_rotate_subject=bool(settings.get("AUTO_ROTATE_SUBJECT", False)),
         classification_export_dir=None,
-        face_multicrop=bool(settings.get("FACE_MULTICROP", False)),
-        face_multicrop_parts=settings.get("FACE_MULTICROP_PARTS", ["face"]),
-        face_multicrop_scales=settings.get("FACE_MULTICROP_SCALES", [0.85, 0.70]),
+        crops_namespace=settings.get("CROPS_NAMESPACE"),
     )
 
     try:
@@ -203,16 +218,22 @@ def run_post_camera_pipeline(settings: Dict[str, Any], snapshot_count: int) -> b
     except Exception as e:
         log.warning(f"Could not unload Whisper before post-camera pipeline: {e}")
 
+    # Isolate each run's crops so classification does not traverse historical data.
+    run_id = datetime.datetime.now().strftime("run_%Y%m%d_%H%M%S")
+    run_settings = dict(settings)
+    run_settings["CROPS_NAMESPACE"] = run_id
+    run_settings["CROPS_ROOT"] = str(Path(settings["DETECTION_OUTPUT"]) / "crops" / run_id)
+
     try:
         with gpu_exclusive("video:detection+classification", logger=log):
-            _run_detection_with_cpu_fallback(settings)
+            _run_detection_with_cpu_fallback(run_settings)
             log.success("Detection done")
 
             # Flush CUDA allocations and trim heap between the two heavy models.
             _clear_cuda_cache_if_available()
 
             try:
-                _run_classification_with_cpu_fallback(settings)
+                _run_classification_with_cpu_fallback(run_settings)
                 log.success("Classification done")
             except Exception as e:
                 log.error(f"Classification failed: {e}")
@@ -220,7 +241,7 @@ def run_post_camera_pipeline(settings: Dict[str, Any], snapshot_count: int) -> b
         log.error(f"Detection failed: {e}")
         return False
 
-    if not body_ranking(settings):
+    if not body_ranking(run_settings):
         log.warning("Ranking failed")
     else:
         log.success("Ranking done")
@@ -250,9 +271,9 @@ def run_post_camera_pipeline(settings: Dict[str, Any], snapshot_count: int) -> b
     #     log.error(f"De-identification failed: {e}")
 
     try:
-        crops_root = Path(settings["CROPS_ROOT"])
+        crops_root = Path(run_settings["CROPS_ROOT"])
         if crops_root.exists():
-            if bool(settings.get("KEEP_CROPS", True)):
+            if bool(run_settings.get("KEEP_CROPS", True)):
                 log.info(f"Keeping crops for debugging: {crops_root}")
             else:
                 shutil.rmtree(crops_root)
@@ -297,12 +318,20 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
         return 0
 
     log.header("Video Pipeline Starting")
+    log.info(
+        "Video runtime config: "
+        f"APRILTAG_DETECT_EVERY_N_FRAMES={APRILTAG_DETECT_EVERY_N_FRAMES}, "
+        f"REID_ENABLED={REID_ENABLED}, "
+        f"SNAPSHOT_INTERVAL={SNAPSHOT_INTERVAL}"
+    )
 
     snapshot_count = 0
+    capture_flash_until = 0.0
+    capture_flash_duration_s = 0.18
 
     # ── ReID callback ─────────────────────────────────────────────────────
     def _on_reid(event: ReIDEvent):
-        nonlocal snapshot_count
+        nonlocal snapshot_count, capture_flash_until
 
         if event.confidence == "low" and not SNAPSHOT_ON_LOW_CONFIDENCE:
             log.info(
@@ -317,34 +346,41 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
         )
         if capture_frame_from_pipeline(event.frame, IMAGE_SAVE_DIR):
             snapshot_count += 1
+            capture_flash_until = time.time() + capture_flash_duration_s
             log.info(f"Snapshot saved ({snapshot_count} total)")
 
     # ── Build ReID service ────────────────────────────────────────────────
-    body_thresh = float(
-        settings.get(
-            "REID_BODY_THRESHOLD",
-            settings.get("REID_THRESHOLD", 0.80),
+    reid = None
+    if REID_ENABLED:
+        body_thresh = float(
+            settings.get(
+                "REID_BODY_THRESHOLD",
+                settings.get("REID_THRESHOLD", 0.80),
+            )
         )
-    )
 
-    reid = build_reid_service(
-        yolo_path         = settings.get(
-            "YOLO_MODEL_PATH",
-            "src_video/services/person_reid_service/yolov8n.onnx",
-        ),
-        embedder_path     = settings.get(
-            "EMBEDDER_ONNX_PATH",
-            "src_video/services/person_reid_service/resnet50_market1501_aicity156.onnx",
-        ),
-        use_trt           = bool(settings.get("REID_USE_TRT", False)),
-        similarity_thresh = body_thresh,
-        on_reid_callback  = _on_reid,
-    )
-    log.success("ReID service ready")
+        reid = build_reid_service(
+            yolo_path         = settings.get(
+                "YOLO_MODEL_PATH",
+                "src_video/services/person_reid_service/yolov8n.onnx",
+            ),
+            embedder_path     = settings.get(
+                "EMBEDDER_ONNX_PATH",
+                "src_video/services/person_reid_service/resnet50_market1501_aicity156.onnx",
+            ),
+            use_trt           = bool(settings.get("REID_USE_TRT", False)),
+            similarity_thresh = body_thresh,
+            on_reid_callback  = _on_reid,
+        )
+        log.success("ReID service ready")
+    else:
+        log.warning("REID disabled for RAM profiling")
 
     window = "CSI Camera"
+    log.info("Creating OpenCV window")
     cv2.namedWindow(window, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(window, 960, 540)
+    log.info("OpenCV window ready")
 
     frame_count = 0
     start_time  = time.time()
@@ -353,6 +389,11 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
     loop_count  = 0
     marker_locked = False
     enroll_started_at: Optional[float] = None
+    first_frame_logged = False
+    last_loop_heartbeat = time.time()
+    apriltag_visible = False
+    apriltag_has_been_seen = False
+    next_apriltag_snapshot_at: Optional[float] = None
 
     log.header("Camera session started  —  press Q / ESC to end")
 
@@ -370,6 +411,12 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
             if frame.size == 0:
                 continue
 
+            if not first_frame_logged:
+                log.success(
+                    f"First frame received: shape={frame.shape}, dtype={frame.dtype}"
+                )
+                first_frame_logged = True
+
             loop_count += 1
 
             frame_count += 1
@@ -379,21 +426,70 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
                 frame_count = 0
                 start_time  = time.time()
 
+            now = time.time()
+            if now - last_loop_heartbeat >= 5.0:
+                log.info(
+                    "Camera loop heartbeat: "
+                    f"fps={fps:.1f}, loop_count={loop_count}, "
+                    f"marker_locked={marker_locked}, enrolled={enrolled}, "
+                    f"apriltag_visible={apriltag_visible}, snapshots={snapshot_count}"
+                )
+                last_loop_heartbeat = now
+
             detected = False
-            if not enrolled and not marker_locked and (loop_count % APRILTAG_DETECT_EVERY_N_FRAMES == 0):
+            if (
+                not enrolled
+                and (loop_count % APRILTAG_DETECT_EVERY_N_FRAMES == 0)
+            ):
                 detected = detect_apriltags(
                     frame,
                     show_visualization=False,
                     print_info=False,
                 )
+                if detected != apriltag_visible:
+                    apriltag_visible = detected
+                    if apriltag_visible:
+                        log.info("AprilTag visible")
+                    else:
+                        log.info("AprilTag no longer visible")
+
+                if detected and not apriltag_has_been_seen:
+                    apriltag_has_been_seen = True
+                    next_apriltag_snapshot_at = now + APRILTAG_CONTINUOUS_SNAPSHOT_INTERVAL_S
 
             if detected and not marker_locked:
                 marker_locked = True
                 enroll_started_at = time.time()
                 log.info("AprilTag acquired — starting enrollment")
+                if capture_frame_from_pipeline(frame, IMAGE_SAVE_DIR):
+                    snapshot_count += 1
+                    capture_flash_until = time.time() + capture_flash_duration_s
+                    log.info(f"AprilTag snapshot saved ({snapshot_count} total)")
+
+            if (
+                apriltag_has_been_seen
+                and apriltag_visible
+                and next_apriltag_snapshot_at is not None
+                and now >= next_apriltag_snapshot_at
+            ):
+                if capture_frame_from_pipeline(frame, IMAGE_SAVE_DIR):
+                    snapshot_count += 1
+                    capture_flash_until = time.time() + capture_flash_duration_s
+                    log.info(
+                        "AprilTag continuous snapshot saved "
+                        f"({snapshot_count} total)"
+                    )
+                next_apriltag_snapshot_at = now + APRILTAG_CONTINUOUS_SNAPSHOT_INTERVAL_S
 
             # ── Enrollment ────────────────────────────────────────────────
-            if marker_locked and not enrolled and (loop_count % ENROLL_SAMPLE_EVERY_N_FRAMES == 0):
+            if (
+                reid is not None
+                and REID_ENABLED
+                and
+                marker_locked
+                and not enrolled
+                and (loop_count % ENROLL_SAMPLE_EVERY_N_FRAMES == 0)
+            ):
                 if reid.enroll_from_frame(frame):
                     enrolled = True
                     marker_locked = False
@@ -402,24 +498,45 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
 
                     if capture_frame_from_pipeline(frame, IMAGE_SAVE_DIR):
                         snapshot_count += 1
+                        capture_flash_until = time.time() + capture_flash_duration_s
                         log.info(f"Enrollment snapshot saved ({snapshot_count} total)")
 
             if marker_locked and not enrolled and enroll_started_at is not None:
                 if (time.time() - enroll_started_at) > ENROLLMENT_TIMEOUT_S:
                     marker_locked = False
                     enroll_started_at = None
-                    reid.reset_enrollment()
+                    if reid is not None:
+                        reid.reset_enrollment()
                     log.warning("Enrollment timed out — waiting for AprilTag reacquire")
 
             # ── Tracking ──────────────────────────────────────────────────
             # process_frame() runs YOLO internally each call.
             # Alternatively, pass person_bboxes from run_detection if you
             # want to reuse detections across the pipeline.
-            if enrolled:
+            if reid is not None and REID_ENABLED and enrolled:
                 reid.process_frame(frame)
 
-            reid.draw_debug(frame, person_bboxes=None)
+            if reid is not None:
+                reid.draw_debug(frame, person_bboxes=None)
             draw_overlay(frame, fps, processing=enrolled)
+
+            tag_label = "APRILTAG: DETECTED" if apriltag_visible else "APRILTAG: NOT DETECTED"
+            tag_color = (0, 220, 0) if apriltag_visible else (0, 0, 220)
+            cv2.putText(
+                frame,
+                tag_label,
+                (16, 34),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.75,
+                tag_color,
+                2,
+                cv2.LINE_AA,
+            )
+
+            if time.time() < capture_flash_until:
+                h, w = frame.shape[:2]
+                cv2.rectangle(frame, (2, 2), (w - 3, h - 3), (0, 255, 0), 2)
+
             cv2.imshow(window, frame)
 
             key = cv2.waitKey(1) & 0xFF
@@ -427,11 +544,15 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
                 log.info("Camera session ended by user")
                 break
             if key == ord('r'):
-                reid.reset_enrollment()
+                if reid is not None:
+                    reid.reset_enrollment()
                 enrolled       = False
                 marker_locked  = False
                 enroll_started_at = None
                 snapshot_count = 0
+                apriltag_visible = False
+                apriltag_has_been_seen = False
+                next_apriltag_snapshot_at = None
                 log.info("Enrollment reset — snapshots cleared")
 
     except KeyboardInterrupt:
@@ -441,8 +562,9 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
         video_pipeline.cleanup()
         cv2.destroyAllWindows()
 
-    log.info("Releasing ReID service...")
-    cleanup_memory(reid)
+    if reid is not None:
+        log.info("Releasing ReID service...")
+        cleanup_memory(reid)
     clear_jtop_cache()
 
     log.header("Camera closed — starting post-camera pipeline")

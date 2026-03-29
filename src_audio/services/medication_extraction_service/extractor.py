@@ -1,5 +1,6 @@
 import spacy
 import threading
+import gc
 from src_audio.domain.entities import MedicationEntity
 from src_audio.domain.constants import NER_CONFIDENCE
 from config.logger import Logger
@@ -73,3 +74,22 @@ def get_medication_extractor() -> MedicationExtractor:
         if _EXTRACTOR_SINGLETON is None:
             _EXTRACTOR_SINGLETON = MedicationExtractor()
     return _EXTRACTOR_SINGLETON
+
+
+def unload_medication_extractor() -> None:
+    """Release the Med7 extractor singleton to reclaim RAM under pressure."""
+    global _EXTRACTOR_SINGLETON
+
+    with _EXTRACTOR_LOCK:
+        if _EXTRACTOR_SINGLETON is None:
+            return
+
+        try:
+            _EXTRACTOR_SINGLETON.nlp = None
+        except Exception:
+            pass
+
+        _EXTRACTOR_SINGLETON = None
+
+    gc.collect()
+    log.info("Med7 extractor unloaded from memory")

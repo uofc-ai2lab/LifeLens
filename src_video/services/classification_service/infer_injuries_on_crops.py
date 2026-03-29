@@ -14,14 +14,12 @@ import csv
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 import torch
-from torch.utils.data import DataLoader, Dataset
-from torchvision import Module, transforms
+from torchvision import transforms
 import timm
 from PIL import Image
 
-from src_video.domain.entities import CropPrediction
 from config.logger import Logger
 
 log = Logger("[video][classification]")
@@ -52,21 +50,6 @@ def _default_val_transforms(image_size: int) -> transforms.Compose:
     )
 
 
-class _CropsDataset(Dataset):
-    def __init__(self, crop_paths: List[Path], image_size: int):
-        self.crop_paths = crop_paths
-        self.transform = _default_val_transforms(image_size)
-
-    def __len__(self) -> int:
-        return len(self.crop_paths)
-
-    def __getitem__(self, index: int):
-        image_path = self.crop_paths[index]
-        image = Image.open(image_path).convert("RGB")
-        image_tensor = self.transform(image)
-        return image_tensor, str(image_path)
-
-
 def _infer_body_part_from_filename(path: Path, delimiter: str = "_", label_position: int = -2) -> str:
     stem = path.stem
     tokens = stem.split(delimiter)
@@ -75,89 +58,65 @@ def _infer_body_part_from_filename(path: Path, delimiter: str = "_", label_posit
     return tokens[label_position]
 
 
-def _collect_crop_paths(crops_root: str) -> List[Path]:
-    """Recursively collect all image files from crops directory."""
+def _iter_crop_paths(crops_root: str) -> Iterator[Path]:
+    """Yield crop image paths recursively without materializing full path lists."""
     crops_root_path = Path(crops_root)
     if not crops_root_path.exists():
         raise FileNotFoundError(f"Crops root not found: {crops_root}")
-
-    crop_paths = sorted(
-        [
-            path
-            for path in crops_root_path.rglob("*")
-            if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png"}
-            # Ignore alpha-masked helper exports; they are not classifier inputs and
-            # their filename suffix breaks body_part parsing (e.g. *_arm1_0_alpha.png).
-            and not path.stem.lower().endswith("_alpha")
-        ]
-    )
-    if not crop_paths:
+    yielded = 0
+    for path in sorted(crops_root_path.rglob("*")):
+        if not path.is_file() or path.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
+            continue
+        # Ignore alpha-masked helper exports; they are not classifier inputs and
+        # their filename suffix breaks body_part parsing (e.g. *_arm1_0_alpha.png).
+        if path.stem.lower().endswith("_alpha"):
+            continue
+        yielded += 1
+        yield path
+    if yielded == 0:
         raise RuntimeError(f"No crop images found under {crops_root}")
-    log.info(f"Collected {len(crop_paths)} crops")
-    return crop_paths
 
 
-def _run_inference_on_crops(
-    model: Module,
-    data_loader: DataLoader,
-    device: torch.device,
-    crop_paths: List[Path],
-    injury_class_names: List[str],
-    filename_delimiter: str,
-    body_part_label_position: int,
-) -> List[CropPrediction]:
-    """Run inference on all crops and return predictions."""
-    predictions: List[CropPrediction] = []
+def _update_aggregation(
+    aggregation_by_image_and_part: Dict[Tuple[str, str], Dict[str, Any]],
+    *,
+    image_id: str,
+    body_part: str,
+    injury_name: str,
+    injury_probability: float,
+) -> None:
+    key = (image_id, body_part)
+    entry = aggregation_by_image_and_part.setdefault(
+        key,
+        {
+            "count": 0,
+            "counts": {},
+            "prob_sums": {},
+            "prob_max": {},
+        },
+    )
+    entry["count"] += 1
 
-    with torch.no_grad():
-        for images, image_paths in data_loader:
-            images = images.to(device)
-            logits = model(images)
-            probabilities = torch.softmax(logits, dim=1)
-            predicted_index = probabilities.argmax(dim=1)
-            predicted_probability = probabilities.gather(1, predicted_index.view(-1, 1)).squeeze(1)
+    counts: Dict[str, int] = entry["counts"]
+    prob_sums: Dict[str, float] = entry["prob_sums"]
+    prob_max: Dict[str, float] = entry["prob_max"]
 
-            for batch_index in range(len(image_paths)):
-                crop_path = Path(image_paths[batch_index])
-                image_id = crop_path.parent.name  # crops/<image_id>/<file>.jpg
-                body_part = _infer_body_part_from_filename(
-                    crop_path,
-                    delimiter=filename_delimiter,
-                    label_position=body_part_label_position,
-                )
-                injury_name = injury_class_names[int(predicted_index[batch_index].item())]
-                injury_probability = float(predicted_probability[batch_index].item())
-                predictions.append(
-                    CropPrediction(
-                        crop_path=str(crop_path),
-                        image_id=image_id,
-                        body_part=body_part,
-                        injury_pred=injury_name,
-                        injury_prob=injury_probability,
-                    )
-                )
-    return predictions
+    counts[injury_name] = counts.get(injury_name, 0) + 1
+    prob_sums[injury_name] = prob_sums.get(injury_name, 0.0) + injury_probability
+    prob_max[injury_name] = max(prob_max.get(injury_name, float("-inf")), injury_probability)
 
 
 def _aggregate_predictions_by_part(
-    predictions: List[CropPrediction],
+    aggregation_by_image_and_part: Dict[Tuple[str, str], Dict[str, Any]],
     use_max_non_no_injury: bool = False,
     no_injury_label: str = "no_injury",
 ) -> List[Dict[str, Any]]:
-    """Aggregate predictions by (image_id, body_part) using voting and average probability."""
-    aggregation_by_image_and_part: Dict[Tuple[str, str], Dict[str, Any]] = {}
-    
-    for pred in predictions:
-        key = (pred.image_id, pred.body_part)
-        entry = aggregation_by_image_and_part.setdefault(key, {"counts": {}, "probabilities": {}, "count": 0})
-        entry["count"] += 1
-        entry["counts"][pred.injury_pred] = entry["counts"].get(pred.injury_pred, 0) + 1
-        entry["probabilities"].setdefault(pred.injury_pred, []).append(pred.injury_prob)
-
+    """Aggregate predictions by (image_id, body_part) using compact running stats."""
     per_part_summary: List[Dict[str, Any]] = []
     for (image_id, body_part), entry in sorted(aggregation_by_image_and_part.items()):
         counts: Dict[str, int] = entry["counts"]
-        probabilities: Dict[str, List[float]] = entry["probabilities"]
+        prob_sums: Dict[str, float] = entry["prob_sums"]
+        prob_max: Dict[str, float] = entry["prob_max"]
         best_injury = ""
         if use_max_non_no_injury:
             non_no_injury_classes = [
@@ -166,7 +125,7 @@ def _aggregate_predictions_by_part(
             if non_no_injury_classes:
                 best_injury = max(
                     non_no_injury_classes,
-                    key=lambda name: max(probabilities.get(name, [0.0])),
+                    key=lambda name: prob_max.get(name, 0.0),
                 )
 
         if not best_injury:
@@ -174,10 +133,12 @@ def _aggregate_predictions_by_part(
                 counts.keys(),
                 key=lambda name: (
                     counts[name],
-                    sum(probabilities[name]) / max(1, len(probabilities[name])),
+                    prob_sums.get(name, 0.0) / max(1, counts[name]),
                 ),
                 reverse=True,
             )[0]
+
+        avg_prob = float(prob_sums.get(best_injury, 0.0) / max(1, counts[best_injury]))
 
         per_part_summary.append(
             {
@@ -186,7 +147,7 @@ def _aggregate_predictions_by_part(
                 "n_crops": int(entry["count"]),
                 "injury_pred": best_injury,
                 "vote_count": int(counts[best_injury]),
-                "avg_prob": float(sum(probabilities[best_injury]) / max(1, len(probabilities[best_injury]))),
+                "avg_prob": avg_prob,
             }
         )
     return per_part_summary
@@ -198,7 +159,7 @@ def _save_reports(
     checkpoint_path: str,
     crops_root: str,
     injury_class_names: List[str],
-    predictions: List[CropPrediction],
+    num_crops: int,
     per_part_summary: List[Dict[str, Any]],
 ) -> None:
     """Save JSON and CSV reports."""
@@ -206,8 +167,10 @@ def _save_reports(
         "checkpoint": checkpoint_path,
         "crops_root": crops_root,
         "injury_classes": injury_class_names,
-        "num_crops": len(predictions),
-        "predictions": [pred.__dict__ for pred in predictions],
+        "num_crops": int(num_crops),
+        # Intentionally omitted for memory safety on large runs.
+        "predictions": [],
+        "predictions_omitted": True,
         "per_part_summary": per_part_summary,
     }
 
@@ -257,34 +220,75 @@ def predict_injuries_on_detection_crops(
         f"({checkpoint_size_mb:.2f} MB, mtime={checkpoint_mtime})"
     )
     
-    crop_paths = _collect_crop_paths(crops_root)
+    if num_workers:
+        log.info("num_workers is ignored in streaming mode")
 
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model, injury_class_names = load_model_from_checkpoint(checkpoint_resolved, device)
 
-    dataset = _CropsDataset(crop_paths, image_size=image_size)
-    data_loader = DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=(device.type == "cuda"),
-    )
+    transform = _default_val_transforms(image_size)
+    aggregation_by_image_and_part: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    unique_image_ids: set[str] = set()
 
-    predictions = _run_inference_on_crops(
-        model=model,
-        data_loader=data_loader,
-        device=device,
-        crop_paths=crop_paths,
-        injury_class_names=injury_class_names,
-        filename_delimiter=filename_delimiter,
-        body_part_label_position=body_part_label_position,
-    )
+    batch_tensors: List[torch.Tensor] = []
+    batch_paths: List[Path] = []
+    processed_crops = 0
+
+    def _flush_batch() -> int:
+        if not batch_tensors:
+            return 0
+        images = torch.stack(batch_tensors, dim=0).to(
+            device,
+            non_blocking=(device.type == "cuda"),
+        )
+        logits = model(images)
+        probabilities = torch.softmax(logits, dim=1)
+        predicted_index = probabilities.argmax(dim=1)
+        predicted_probability = probabilities.gather(1, predicted_index.view(-1, 1)).squeeze(1)
+
+        for i, crop_path in enumerate(batch_paths):
+            image_id = crop_path.parent.name  # crops/<session>/<image_id>/<file>.jpg
+            unique_image_ids.add(image_id)
+
+            body_part = _infer_body_part_from_filename(
+                crop_path,
+                delimiter=filename_delimiter,
+                label_position=body_part_label_position,
+            )
+            injury_name = injury_class_names[int(predicted_index[i].item())]
+            injury_probability = float(predicted_probability[i].item())
+
+            _update_aggregation(
+                aggregation_by_image_and_part,
+                image_id=image_id,
+                body_part=body_part,
+                injury_name=injury_name,
+                injury_probability=injury_probability,
+            )
+
+        count = len(batch_paths)
+        batch_tensors.clear()
+        batch_paths.clear()
+        return count
+
+    with torch.no_grad():
+        for crop_path in _iter_crop_paths(crops_root):
+            image = Image.open(crop_path).convert("RGB")
+            image_tensor = transform(image)
+            batch_tensors.append(image_tensor)
+            batch_paths.append(crop_path)
+
+            if len(batch_tensors) >= max(1, int(batch_size)):
+                processed_crops += _flush_batch()
+
+        processed_crops += _flush_batch()
+
+    log.info(f"Collected {processed_crops} crops")
 
     per_part_summary = _aggregate_predictions_by_part(
-        predictions,
+        aggregation_by_image_and_part,
         use_max_non_no_injury=use_max_non_no_injury_aggregation,
         no_injury_label=no_injury_label,
     )
@@ -295,15 +299,15 @@ def predict_injuries_on_detection_crops(
         checkpoint_path=checkpoint_resolved,
         crops_root=crops_root,
         injury_class_names=injury_class_names,
-        predictions=predictions,
+        num_crops=processed_crops,
         per_part_summary=per_part_summary,
     )
 
-    log.success(f"Classification complete: {len(predictions)} crops")
+    log.success(f"Classification complete: {processed_crops} crops")
 
     return {
         "out_json": out_json_path,
         "out_csv": out_csv_path,
-        "num_crops": len(predictions),
-        "num_images": len(set(p.image_id for p in predictions)),
+        "num_crops": processed_crops,
+        "num_images": len(unique_image_ids),
     }

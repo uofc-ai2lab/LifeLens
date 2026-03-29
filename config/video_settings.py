@@ -94,20 +94,30 @@ def _env_list(name: str, default: list[str]) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
-def _env_float_list(name: str, default: list[float]) -> list[float]:
-    raw = os.getenv(name)
-    if raw is None or raw.strip() == "":
-        return default
-    values: list[float] = []
-    for item in raw.split(","):
-        item = item.strip()
-        if not item:
-            continue
-        try:
-            values.append(float(item))
-        except ValueError:
-            continue
-    return values if values else default
+def _resolve_video_device() -> str | None:
+    """Resolve video device without inheriting audio's default CPU setting.
+
+    Priority:
+    1) PIPELINE_DEVICE if explicitly set (including "cpu")
+    2) legacy DEVICE only when it is non-CPU (backward compatibility)
+    3) None => downstream auto-selection
+    """
+    pipeline_device = os.getenv("PIPELINE_DEVICE")
+    if pipeline_device is not None and pipeline_device.strip() != "":
+        return pipeline_device.strip()
+
+    legacy_device = os.getenv("DEVICE")
+    if legacy_device is None:
+        return None
+
+    legacy_device = legacy_device.strip()
+    if legacy_device == "":
+        return None
+
+    if legacy_device.lower() == "cpu":
+        return None
+
+    return legacy_device
 
 
 def load_video_pipeline_settings() -> dict:
@@ -129,6 +139,8 @@ def load_video_pipeline_settings() -> dict:
     annotated_dir = detection_output_path / "annotated"
     vis_dir = detection_output_path / "vis"
 
+    video_device = _resolve_video_device()
+
 
     return {
         "DETECTION_SOURCE": os.getenv("PIPELINE_DETECTION_SOURCE", str(VIDEO_SOURCE_DIR)).replace("\\", "/"),
@@ -145,18 +157,12 @@ def load_video_pipeline_settings() -> dict:
         "MIN_AREA": _env_int("PIPELINE_MIN_AREA", 250),
         "MARGIN": _env_float("PIPELINE_MARGIN", 0.00),
         "KEEP_CROPS": _env_bool("PIPELINE_KEEP_CROPS", False),
-        "FACE_MULTICROP": _env_bool("PIPELINE_FACE_MULTICROP", True),
-        "FACE_MULTICROP_PARTS": _env_list(
-            "PIPELINE_FACE_MULTICROP_PARTS",
-            ["face", "head", "neck", "arm", "hand", "leg", "foot", "torso"],
-        ),
-        "FACE_MULTICROP_SCALES": _env_float_list("PIPELINE_FACE_MULTICROP_SCALES", [0.85, 0.70]),
         "CLASSES": _env_list(
             "PIPELINE_CLASSES",
             ["face", "arm", "hand", "leg", "foot", "neck", "torso", "head"],
         ),
         "AUTO_ROTATE_SUBJECT": _env_bool("PIPELINE_AUTO_ROTATE_SUBJECT", False),
-        "DEVICE": os.getenv("PIPELINE_DEVICE", None),
+        "DEVICE": video_device,
         "DEBUG": _env_bool("PIPELINE_DEBUG", False),
         "INJURY_CHECKPOINT_PATH": os.getenv(
             "PIPELINE_INJURY_CHECKPOINT",

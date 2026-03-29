@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 from src_audio.utils.export_to_csv import export_to_csv
 from src_audio.utils.load_csv_file import load_csv_file
 import pandas as pd
@@ -19,6 +20,17 @@ from src_audio.services.medication_extraction_service.postprocessing import (
 from config.logger import Logger
 
 log = Logger("[audio][medication]")
+
+_AUDIT_MAX_ROWS = max(0, int(os.getenv("LIFELENS_AUDIO_AUDIT_MAX_ROWS", "5000")))
+
+
+def _append_bounded_audit(audit_log: list[dict], event: dict) -> None:
+    """Append audit event while keeping memory bounded for long sessions."""
+    if _AUDIT_MAX_ROWS > 0 and len(audit_log) >= _AUDIT_MAX_ROWS:
+        overflow = len(audit_log) - _AUDIT_MAX_ROWS + 1
+        if overflow > 0:
+            del audit_log[:overflow]
+    audit_log.append(event)
 
 
 def _resolve_canonical_name(word: str) -> str:
@@ -243,7 +255,8 @@ def extract_med_admins_with_confidence(
             canonical = _resolve_canonical_name(drug_ent.word)
 
             if intent not in actionable_intents:
-                audit_log.append(
+                _append_bounded_audit(
+                    audit_log,
                     {
                         "audio_chunk_file": audio_chunk_file,
                         "start_time": segment["start_time"],
@@ -277,7 +290,8 @@ def extract_med_admins_with_confidence(
 
             # Confirmation suppression
             if canonical in chunk_records or tracker.is_known(canonical, record.start_time):
-                audit_log.append(
+                _append_bounded_audit(
+                    audit_log,
                     {
                         "audio_chunk_file": audio_chunk_file,
                         "start_time": segment["start_time"],

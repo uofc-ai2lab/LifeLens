@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import datetime
 import threading, asyncio
 import shutil
 import cv2
@@ -49,6 +50,9 @@ def put_latest(queue: Queue, item):
     queue.put(item)
 
 def process_single_image(settings: Dict[str, Any]) -> bool:
+    run_id = datetime.datetime.now().strftime("run_%Y%m%d_%H%M%S")
+    run_crops_root = Path(settings["DETECTION_OUTPUT"]) / "crops" / run_id
+
     try:
         with gpu_exclusive("video:detection+classification", logger=log):
             run_detection(
@@ -65,14 +69,14 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
                 max_images=int(settings["MAX_IMAGES"]),
                 auto_rotate_subject=bool(settings.get("AUTO_ROTATE_SUBJECT", False)),
                 classification_export_dir=None,
+                crops_namespace=run_id,
             )
 
             log.success("Detection done")
 
             try:
-                crops_root = Path(settings["CROPS_ROOT"])
                 infer_summary = predict_injuries_on_detection_crops(
-                    crops_root=_as_posix(str(crops_root)),
+                    crops_root=_as_posix(str(run_crops_root)),
                     checkpoint_path=str(settings["INJURY_CHECKPOINT_PATH"]),
                     out_json_path=str(settings["INJURY_REPORT_JSON"]),
                     out_csv_path=str(settings["INJURY_REPORT_CSV"]),
@@ -93,14 +97,20 @@ def process_single_image(settings: Dict[str, Any]) -> bool:
         log.error(f"Detection failed: {e}")
         return False
 
-    if not body_ranking(settings):
+    ranking_settings = dict(settings)
+    ranking_settings["CROPS_ROOT"] = str(run_crops_root)
+
+    if not body_ranking(ranking_settings):
         log.warning("Ranking failed")
 
     try:
-        crops_root = Path(settings["CROPS_ROOT"])
+        crops_root = run_crops_root
         if crops_root.exists():
-            # shutil.rmtree(crops_root)  # Keep crops for debugging/inspection
-            crops_root.mkdir(parents=True, exist_ok=True)
+            if bool(settings.get("KEEP_CROPS", True)):
+                log.info(f"Keeping crops for debugging: {crops_root}")
+            else:
+                shutil.rmtree(crops_root)
+                log.info(f"Removed crops directory: {crops_root}")
 
     except Exception as e:
         log.warning(f"Cleanup failed: {e}")

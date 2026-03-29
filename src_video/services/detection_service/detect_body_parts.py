@@ -22,6 +22,42 @@ from src_video.domain.constants import DETECTION_PART_DEFAULT, MIDLINE_PARTS, SI
 log = Logger("[video][detection]")
 
 
+def _resolve_detection_device(requested_device: Optional[str]) -> str:
+    """Resolve inference device string for ultralytics predict calls."""
+    raw = (requested_device or "").strip().lower()
+    if raw in {"", "none", "auto"}:
+        return "cuda:0" if torch.cuda.is_available() else "cpu"
+
+    if raw == "cuda":
+        raw = "cuda:0"
+
+    if raw.startswith("cuda") and not torch.cuda.is_available():
+        log.warning(
+            "Requested CUDA device but torch reports CUDA unavailable; "
+            "falling back to CPU"
+        )
+        return "cpu"
+
+    return raw
+
+
+def _log_detection_device(requested_device: Optional[str], resolved_device: str) -> None:
+    cuda_available = bool(torch.cuda.is_available())
+    gpu_name = "n/a"
+    if cuda_available:
+        try:
+            gpu_name = torch.cuda.get_device_name(0)
+        except Exception:
+            gpu_name = "unknown"
+    log.info(
+        "Device requested="
+        f"{requested_device if requested_device is not None else 'auto'} | "
+        f"resolved={resolved_device} | "
+        f"torch.cuda.is_available={cuda_available} | "
+        f"gpu={gpu_name}"
+    )
+
+
 def _bbox_center_x(bbox: tuple[int, int, int, int]) -> float:
     x1, _, x2, _ = bbox
     return (float(x1) + float(x2)) * 0.5
@@ -375,9 +411,7 @@ def process_image(
     save_annotated: bool = True,
     debug: bool = False,
     debug_print: bool = False,
-    face_multicrop: bool = False,
-    face_multicrop_parts: Optional[List[str]] = None,
-    face_multicrop_scales: Optional[List[float]] = None,
+    crops_namespace: Optional[str] = None,
 ):
     image_pil = Image.open(image_path)
     if auto_orient:
@@ -420,16 +454,10 @@ def process_image(
     vis_boxes: List[tuple[int, int, int, int]] = []
     vis_labels: List[str] = []
 
-    multicrop_parts = {
-        p.strip().lower()
-        for p in (face_multicrop_parts or ["face"])
-        if isinstance(p, str) and p.strip()
-    }
-    multicrop_scales = [
-        float(s) for s in (face_multicrop_scales or [0.85, 0.70]) if 0.0 < float(s) < 1.0
-    ]
-
-    crops_root = output_dir / "crops" / image_path.stem
+    if crops_namespace:
+        crops_root = output_dir / "crops" / str(crops_namespace) / image_path.stem
+    else:
+        crops_root = output_dir / "crops" / image_path.stem
     ensure_dir(crops_root)
     if save_annotated:
         annotated_root = output_dir / "annotated"
@@ -520,39 +548,7 @@ def process_image(
                         if debug_print:
                             log.debug(f"classification export failed for {filename}: {e}")
 
-                if face_multicrop and (cls_name.lower() in multicrop_parts):
-                    seen_bboxes = {bbox}
-                    for scale in multicrop_scales:
-                        scaled_bbox = _scale_bbox_from_center(
-                            bbox,
-                            scale=scale,
-                            image_shape=image_np.shape[:2],
-                        )
-                        if (
-                            scaled_bbox[2] <= scaled_bbox[0]
-                            or scaled_bbox[3] <= scaled_bbox[1]
-                            or scaled_bbox in seen_bboxes
-                        ):
-                            continue
-                        seen_bboxes.add(scaled_bbox)
-
-                        scale_tag = int(round(scale * 100.0))
-                        scale_token = f"{idx}mc{scale_tag}"
-                        mc_filename = f"{image_path.stem}_{export_cls_name}_{scale_token}.jpg"
-                        mc_saved = save_crop(image_np, scaled_bbox, crops_root / mc_filename)
-                        if not mc_saved:
-                            continue
-
-                        vis_boxes.append(scaled_bbox)
-                        vis_labels.append(f"{export_cls_name}_mc{scale_tag}")
-                        if classification_export_dir is not None:
-                            cls_dir = classification_export_dir / export_cls_name
-                            ensure_dir(cls_dir)
-                            try:
-                                Image.open(crops_root / mc_filename).save(cls_dir / mc_filename)
-                            except Exception as e:
-                                if debug_print:
-                                    log.debug(f"classification export failed for {mc_filename}: {e}")
+                # Multicrop generation was removed to reduce output volume and memory pressure.
 
     if add_head:
         head_components: List[np.ndarray] = []
@@ -612,9 +608,7 @@ def iterate_source(
     save_annotated: bool = True,
     debug: bool = False,
     debug_print: bool = False,
-    face_multicrop: bool = False,
-    face_multicrop_parts: Optional[List[str]] = None,
-    face_multicrop_scales: Optional[List[float]] = None,
+    crops_namespace: Optional[str] = None,
 ):
     if source.is_file():
         process_image(
@@ -634,9 +628,7 @@ def iterate_source(
             save_annotated=save_annotated,
             debug=debug,
             debug_print=debug_print,
-            face_multicrop=face_multicrop,
-            face_multicrop_parts=face_multicrop_parts,
-            face_multicrop_scales=face_multicrop_scales,
+            crops_namespace=crops_namespace,
         )
         return
 
@@ -664,9 +656,7 @@ def iterate_source(
             save_annotated=save_annotated,
             debug=debug,
             debug_print=debug_print,
-            face_multicrop=face_multicrop,
-            face_multicrop_parts=face_multicrop_parts,
-            face_multicrop_scales=face_multicrop_scales,
+            crops_namespace=crops_namespace,
         )
 
 
@@ -686,9 +676,7 @@ def run_detection(
     rotate_degrees: int = 0,
     auto_rotate_subject: bool = True,
     classification_export_dir: Optional[str] = None,
-    face_multicrop: bool = False,
-    face_multicrop_parts: Optional[List[str]] = None,
-    face_multicrop_scales: Optional[List[float]] = None,
+    crops_namespace: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run YOLO segmentation + crop extraction.
 
@@ -714,6 +702,14 @@ def run_detection(
 
     model_obj = load_model(model)
 
+    resolved_device = _resolve_detection_device(device)
+    _log_detection_device(device, resolved_device)
+    try:
+        # Move model once so repeated predicts don't trigger implicit transfers.
+        model_obj.to(resolved_device)
+    except Exception as e:
+        log.warning(f"Could not move model to {resolved_device}: {e}")
+
     export_dir_path: Optional[Path] = Path(classification_export_dir) if classification_export_dir else None
     if export_dir_path:
         ensure_dir(export_dir_path)
@@ -728,7 +724,7 @@ def run_detection(
         effective_add_head,
         alpha_png,
         max_images,
-        device=device,
+        device=resolved_device,
         auto_orient=auto_orient,
         rotate_degrees=rotate_degrees,
         auto_rotate_subject=auto_rotate_subject,
@@ -736,9 +732,7 @@ def run_detection(
         save_annotated=True,
         debug=debug,
         debug_print=debug,
-        face_multicrop=face_multicrop,
-        face_multicrop_parts=face_multicrop_parts,
-        face_multicrop_scales=face_multicrop_scales,
+        crops_namespace=crops_namespace,
     )
 
     summary: Dict[str, Any] = {
@@ -747,12 +741,12 @@ def run_detection(
         "output": str(output_path),
         "classification_export_dir": (str(export_dir_path) if export_dir_path else None),
         "classes": classes,
+        "requested_device": device,
+        "resolved_device": resolved_device,
         "auto_orient": auto_orient,
         "rotate_degrees": rotate_degrees,
         "auto_rotate_subject": auto_rotate_subject,
-        "face_multicrop": face_multicrop,
-        "face_multicrop_parts": face_multicrop_parts,
-        "face_multicrop_scales": face_multicrop_scales,
+        "crops_namespace": crops_namespace,
     }
     log.success(f"Done. Outputs in {output_path}")
     return summary
