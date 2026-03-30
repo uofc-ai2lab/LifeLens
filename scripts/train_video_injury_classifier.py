@@ -30,6 +30,7 @@ import argparse
 import importlib.util
 from pathlib import Path
 import sys
+import time
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -45,6 +46,32 @@ TRAINER_PATH = (
 sys.path.insert(0, str(PROJECT_ROOT))
 
 DEFAULT_DATA_DIR = "data/video/source_files/Images/Wound_dataset"
+DEFAULT_SAVE_ROOT = "checkpoints/classificationModel/injury"
+
+
+def _timestamp_tag() -> str:
+    return time.strftime("%Y%m%d_%H%M%S")
+
+
+def _pick_non_overwriting_save_root(requested: Path) -> Path:
+    """Return a save root that will not overwrite an existing best checkpoint.
+
+    If the requested directory already contains a best checkpoint (or metrics), we
+    create a timestamped run subdirectory under it.
+    """
+    requested.mkdir(parents=True, exist_ok=True)
+
+    existing_markers = [
+        requested / "best_swin_tiny_patch4_window7_224.pt",
+        requested / "metrics_swin_tiny_patch4_window7_224.json",
+        requested / "training_history_swin_tiny_patch4_window7_224.json",
+    ]
+    if any(p.exists() for p in existing_markers):
+        run_dir = requested / f"run_{_timestamp_tag()}_balanced"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        return run_dir
+
+    return requested
 
 
 def _load_train_swin_tiny():
@@ -67,8 +94,12 @@ def _parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--save-root",
-        default="checkpoints/classificationModel/injury",
-        help="Directory to save checkpoint + metrics (default: checkpoints/classificationModel/injury)",
+        default=DEFAULT_SAVE_ROOT,
+        help=(
+            "Directory to save checkpoint + metrics. "
+            "If this directory already contains a best checkpoint, we will create a timestamped run subfolder to avoid overwriting. "
+            f"(default: {DEFAULT_SAVE_ROOT})"
+        ),
     )
 
     p.add_argument("--epochs", type=int, default=5)
@@ -84,6 +115,20 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--backbone-lr-mult", type=float, default=0.1)
     p.add_argument("--num-workers", type=int, default=0)
     p.add_argument("--no-confusion-matrix", action="store_true")
+    p.add_argument(
+        "--checkpoint",
+        default=None,
+        help="Path to existing checkpoint to fine-tune from instead of starting from ImageNet weights",
+    )
+    p.add_argument(
+        "--balanced-sampling",
+        default=True,
+        action=argparse.BooleanOptionalAction,
+        help=(
+            "Use class-balanced sampling for the training DataLoader (WeightedRandomSampler). "
+            "Helps reduce bias when classes are imbalanced. (default: true)"
+        ),
+    )
 
     return p.parse_args()
 
@@ -95,13 +140,17 @@ def main() -> int:
     if not data_dir.exists():
         raise FileNotFoundError(f"Data dir not found: {data_dir}")
 
-    save_root = Path(args.save_root)
+    requested_save_root = Path(args.save_root)
+    save_root = _pick_non_overwriting_save_root(requested_save_root)
     save_root.mkdir(parents=True, exist_ok=True)
 
     train_swin_tiny = _load_train_swin_tiny()
 
     print(f"Training injury classifier from ImageFolder: {data_dir}")
-    print(f"Saving to: {save_root}")
+    if save_root != requested_save_root:
+        print(f"Saving to: {save_root} (auto-created run dir to avoid overwriting {requested_save_root})")
+    else:
+        print(f"Saving to: {save_root}")
 
     train_swin_tiny(
         data_dir=str(data_dir),
@@ -118,11 +167,23 @@ def main() -> int:
         num_workers=int(args.num_workers),
         save_root=str(save_root),
         make_confusion_matrices=(not bool(args.no_confusion_matrix)),
+        finetune_checkpoint=args.checkpoint,
         from_detection_crops=False,
         detection_crops_root=None,
         detection_label_position=-2,
         device=None,
+        balanced_sampling=bool(args.balanced_sampling),
     )
+
+    try:
+        latest_ptr = requested_save_root / "LATEST_CHECKPOINT.txt"
+        ckpt_path = save_root / "best_swin_tiny_patch4_window7_224.pt"
+        latest_ptr.parent.mkdir(parents=True, exist_ok=True)
+        with latest_ptr.open("w", encoding="utf-8") as f:
+            f.write(str(ckpt_path.resolve()))
+        print(f"Wrote latest checkpoint pointer: {latest_ptr} -> {ckpt_path}")
+    except Exception as e:
+        print(f"Warning: could not write LATEST_CHECKPOINT.txt pointer: {e}")
 
     print("Done. If you want the pipeline to use this checkpoint, set PIPELINE_INJURY_CHECKPOINT to:")
     print(str(save_root / "best_swin_tiny_patch4_window7_224.pt"))

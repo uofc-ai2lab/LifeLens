@@ -23,8 +23,17 @@ VIDEO_OUTPUT_DIR = VIDEO_DIR / "output_files"
 
 SNAPSHOT_INTERVAL = int(os.getenv('SNAPSHOT_INTERVAL', '2'))  # seconds between snapshots
 
+YOLO_MODEL_PATH = "src_video/services/person_reid_service/yolov8n.onnx"
+EMBEDDER_ONNX_PATH = "src_video/services/person_reid_service/resnet50_market1501_aicity156.onnx"
+REID_USE_TRT = False
+REID_BODY_THRESHOLD = 0.80
+REID_THRESHOLD = 0.80
+
 IMAGE_SAVE_DIR = VIDEO_DIR / "saved_imgs"
 os.makedirs(IMAGE_SAVE_DIR, exist_ok=True)
+
+PROCESSED_IMAGE_DIR = VIDEO_DIR / "processed_images"
+os.makedirs(PROCESSED_IMAGE_DIR, exist_ok=True)
 
 # Tag Detection Settings
 TAG_SIZE = float(os.getenv('TAG_SIZE', '0.025'))  # Tag size in meters
@@ -85,6 +94,32 @@ def _env_list(name: str, default: list[str]) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def _resolve_video_device() -> str | None:
+    """Resolve video device without inheriting audio's default CPU setting.
+
+    Priority:
+    1) PIPELINE_DEVICE if explicitly set (including "cpu")
+    2) legacy DEVICE only when it is non-CPU (backward compatibility)
+    3) None => downstream auto-selection
+    """
+    pipeline_device = os.getenv("PIPELINE_DEVICE")
+    if pipeline_device is not None and pipeline_device.strip() != "":
+        return pipeline_device.strip()
+
+    legacy_device = os.getenv("DEVICE")
+    if legacy_device is None:
+        return None
+
+    legacy_device = legacy_device.strip()
+    if legacy_device == "":
+        return None
+
+    if legacy_device.lower() == "cpu":
+        return None
+
+    return legacy_device
+
+
 def load_video_pipeline_settings() -> dict:
     pipeline_root = os.getenv("PIPELINE_ROOT", str(VIDEO_OUTPUT_DIR)).replace("\\", "/")
     detection_output = os.getenv("PIPELINE_DETECTION_OUTPUT", f"{pipeline_root}/DetectionOutput")
@@ -104,6 +139,8 @@ def load_video_pipeline_settings() -> dict:
     annotated_dir = detection_output_path / "annotated"
     vis_dir = detection_output_path / "vis"
 
+    video_device = _resolve_video_device()
+
 
     return {
         "DETECTION_SOURCE": os.getenv("PIPELINE_DETECTION_SOURCE", str(VIDEO_SOURCE_DIR)).replace("\\", "/"),
@@ -118,12 +155,14 @@ def load_video_pipeline_settings() -> dict:
         "ADD_HEAD": _env_bool("PIPELINE_ADD_HEAD", True),
         "ALPHA_PNG": _env_bool("PIPELINE_ALPHA_PNG", False),
         "MIN_AREA": _env_int("PIPELINE_MIN_AREA", 250),
-        "MARGIN": _env_float("PIPELINE_MARGIN", 0.10),
+        "MARGIN": _env_float("PIPELINE_MARGIN", 0.00),
+        "KEEP_CROPS": _env_bool("PIPELINE_KEEP_CROPS", False),
         "CLASSES": _env_list(
             "PIPELINE_CLASSES",
             ["face", "arm", "hand", "leg", "foot", "neck", "torso", "head"],
         ),
-        "DEVICE": os.getenv("PIPELINE_DEVICE", None),
+        "AUTO_ROTATE_SUBJECT": _env_bool("PIPELINE_AUTO_ROTATE_SUBJECT", False),
+        "DEVICE": video_device,
         "DEBUG": _env_bool("PIPELINE_DEBUG", False),
         "INJURY_CHECKPOINT_PATH": os.getenv(
             "PIPELINE_INJURY_CHECKPOINT",
@@ -143,5 +182,7 @@ def load_video_pipeline_settings() -> dict:
         # Crop filename parsing
         # Crops are named like: <origstem>_<body_part>_<idx>.jpg
         # This controls which token is interpreted as body-part label.
-        "BODY_PART_LABEL_POSITION": _env_int("PIPELINE_BODY_PART_LABEL_POSITION", -2)
+        "BODY_PART_LABEL_POSITION": _env_int("PIPELINE_BODY_PART_LABEL_POSITION", -2),
+        "INJURY_AGG_MAX_NON_NO_INJURY": _env_bool("PIPELINE_INJURY_AGG_MAX_NON_NO_INJURY", True),
+        "NO_INJURY_LABEL": os.getenv("PIPELINE_NO_INJURY_LABEL", "no_injury"),
     }

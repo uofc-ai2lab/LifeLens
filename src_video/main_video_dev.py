@@ -1,0 +1,322 @@
+from __future__ import annotations
+
+import time
+import datetime
+import threading, asyncio
+import shutil
+import cv2
+import numpy as np
+import argparse
+from pathlib import Path
+from typing import Dict, Any, Optional
+from queue import Queue, Empty
+
+from config.jetson_startup import run_jetson_startup_tasks
+from config.resource_usage import start_monitoring, stop_monitoring
+from config.audio_settings import USAGE_FILE_PATH
+from config.logger import video_logger as log
+from config.gpu_guard import gpu_exclusive
+from config.video_settings import (
+    load_video_pipeline_settings,
+    SNAPSHOT_INTERVAL,
+    IMAGE_SAVE_DIR,
+)
+
+from src_video.services.camera_capture_service.gstreamer_video_pipeline import (
+    GStreamerVideoPipeline,
+    draw_overlay,
+    capture_frame_from_pipeline,
+)
+from src_video.services.detection_service.detect_body_parts import run_detection
+from src_video.services.body_ranking.body_injury_ranking import body_ranking
+from src_video.services.classification_service.infer_injuries_on_crops import predict_injuries_on_detection_crops
+from src_video.services.detect_marker_service.detect_marker import detect_apriltags
+
+APRILTAG_DETECT_EVERY_N_FRAMES = 3
+
+def _as_posix(path: str) -> str:
+    return str(path).replace("\\", "/")
+
+
+def put_latest(queue: Queue, item):
+    """
+    Drop old item if queue is full, keep newest.
+    """
+    if queue.full():
+        try:
+            queue.get_nowait()
+        except Empty:
+            pass
+    queue.put(item)
+
+def process_single_image(settings: Dict[str, Any]) -> bool:
+    run_id = datetime.datetime.now().strftime("run_%Y%m%d_%H%M%S")
+    run_crops_root = Path(settings["DETECTION_OUTPUT"]) / "crops" / run_id
+
+    try:
+        with gpu_exclusive("video:detection+classification", logger=log):
+            run_detection(
+                model=settings["DETECTION_MODEL"],
+                source=_as_posix(IMAGE_SAVE_DIR),
+                output=_as_posix(settings["DETECTION_OUTPUT"]),
+                classes=settings["CLASSES"],
+                margin=float(settings["MARGIN"]),
+                min_area=int(settings["MIN_AREA"]),
+                device=settings.get("DEVICE"),
+                add_head=bool(settings["ADD_HEAD"]),
+                debug=bool(settings["DEBUG"]),
+                alpha_png=bool(settings["ALPHA_PNG"]),
+                max_images=int(settings["MAX_IMAGES"]),
+                auto_rotate_subject=bool(settings.get("AUTO_ROTATE_SUBJECT", False)),
+                classification_export_dir=None,
+                crops_namespace=run_id,
+            )
+
+            log.success("Detection done")
+
+            try:
+                infer_summary = predict_injuries_on_detection_crops(
+                    crops_root=_as_posix(str(run_crops_root)),
+                    checkpoint_path=str(settings["INJURY_CHECKPOINT_PATH"]),
+                    out_json_path=str(settings["INJURY_REPORT_JSON"]),
+                    out_csv_path=str(settings["INJURY_REPORT_CSV"]),
+                    image_size=int(settings["INJURY_IMG_SIZE"]),
+                    batch_size=int(settings["INJURY_BATCH_SIZE"]),
+                    num_workers=int(settings["INJURY_NUM_WORKERS"]),
+                    device=None,
+                    filename_delimiter="_",
+                    body_part_label_position=int(settings["BODY_PART_LABEL_POSITION"]),
+                )
+
+                log.success("Classification done")
+
+            except Exception as e:
+                log.error(f"Classification failed: {e}")
+
+    except Exception as e:
+        log.error(f"Detection failed: {e}")
+        return False
+
+    ranking_settings = dict(settings)
+    ranking_settings["CROPS_ROOT"] = str(run_crops_root)
+
+    if not body_ranking(ranking_settings):
+        log.warning("Ranking failed")
+
+    try:
+        crops_root = run_crops_root
+        if crops_root.exists():
+            if bool(settings.get("KEEP_CROPS", True)):
+                log.info(f"Keeping crops for debugging: {crops_root}")
+            else:
+                shutil.rmtree(crops_root)
+                log.info(f"Removed crops directory: {crops_root}")
+
+    except Exception as e:
+        log.warning(f"Cleanup failed: {e}")
+
+    log.info("Image processed")
+    return True
+
+
+def processing_worker(queue: Queue, settings: Dict[str, Any]):
+    BATCH_SIZE = 2
+    BATCH_TIMEOUT = 2.0
+    batch = []
+    last_flush = time.time()
+
+    log.info("Processing worker started")
+
+    while True:
+        try:
+            job = queue.get(timeout=0.5)
+
+        except Empty:
+            job = None
+
+        # Shutdown
+        if job is None and batch:
+            pass
+        elif job is None:
+            continue
+
+        if job == "STOP":
+            queue.task_done()
+            break
+
+        batch.append(job)
+        queue.task_done()
+
+        now = time.time()
+
+        if (
+            len(batch) >= BATCH_SIZE
+            or (now - last_flush) >= BATCH_TIMEOUT
+        ):
+            log.info(f"Processing batch ({len(batch)} jobs)")
+            try:
+                process_single_image(settings)
+            except Exception as e:
+                log.error(f"Batch processing error: {e}")
+
+            batch.clear()
+            last_flush = now
+
+    log.info("Processing worker stopped")
+
+
+def main(
+    video_pipeline: Optional[GStreamerVideoPipeline] = None,
+    external_stop_event: Optional[threading.Event] = None,
+) -> int:
+    """
+    Main video processing pipeline.
+    
+    Args:
+        video_pipeline: Pre-initialized GStreamer video pipeline object from orchestrator.
+    """
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dev", action="store_true")
+    args = parser.parse_args()
+    
+    settings = load_video_pipeline_settings()
+    DEV_MODE = args.dev
+    
+    if video_pipeline is None and not DEV_MODE:
+        log.error("VIDEO pipeline failed to initialize camera")
+        return 1
+        
+    if DEV_MODE:
+        log.header("DEV Mode")
+        start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
+        process_single_image(settings)
+        stop_monitoring()
+        return 0
+
+    log.header("Video Pipeline Starting")
+
+    image_queue = Queue(maxsize=3)
+
+    worker = threading.Thread(
+        target=processing_worker,
+        args=(image_queue, settings),
+        daemon=True,
+    )
+
+    worker.start()
+    window = "CSI Camera"
+    cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window, 960, 540)
+
+    last_snap = 0
+    frame_count = 0
+    start_time = time.time()
+    fps = 0.0
+    loop_count = 0
+
+    processing = False
+    log.header("Video Pipeline Started")
+
+    try:
+        while True:
+            if external_stop_event is not None and external_stop_event.is_set():
+                log.info("External stop requested")
+                break
+
+            ok, frame = video_pipeline.read_frame()
+            if not ok or frame is None:
+                log.error("Camera read failed")
+                break
+
+            # Check if frame is valid
+            if frame.size == 0:
+                log.error("Empty frame received")
+                continue
+
+            loop_count += 1
+
+            # FPS
+            frame_count += 1
+            elapsed = time.time() - start_time
+
+            if elapsed >= 2.0:
+                fps = frame_count / elapsed
+                frame_count = 0
+                start_time = time.time()
+
+            # Marker detection (throttled to reduce detector churn)
+            detected = False
+            if loop_count % APRILTAG_DETECT_EVERY_N_FRAMES == 0:
+                detected = detect_apriltags(
+                    frame,
+                    show_visualization=False,
+                    print_info=False,
+                )
+            now = time.time()
+
+            # Capture
+            if detected and (now - last_snap) >= SNAPSHOT_INTERVAL:
+
+                if capture_frame_from_pipeline(frame, IMAGE_SAVE_DIR):
+
+                    job = {
+                        "time": now,
+                        "id": int(now * 1000),
+                    }
+
+                    put_latest(image_queue, job)
+                    processing = True
+                    last_snap = now
+
+                    log.success("Job queued")
+
+
+            draw_overlay(frame, fps, processing)
+            cv2.imshow(window, frame)
+            
+            # Single waitKey with proper ESC and 'q' handling
+            key = cv2.waitKey(1) & 0xFF
+            if key == 27 or key == ord('q'):
+                log.info("Exit key pressed")
+                if external_stop_event is not None:
+                    external_stop_event.set()
+                break
+
+
+    except KeyboardInterrupt:
+        log.info("Interrupted")
+
+    finally:
+        log.info("Shutting down")
+        image_queue.put("STOP")
+        worker.join(timeout=5)
+
+        video_pipeline.cleanup()
+        
+        cv2.destroyAllWindows()
+
+    return 0
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dev", action="store_true")
+    args = parser.parse_args()
+    
+    if args.dev:
+        raise SystemExit(main())
+    else:
+        # Standalone camera mode
+        log.info("Running startup tasks...")
+        run_jetson_startup_tasks()
+        start_monitoring(interval=1.0, log_file=USAGE_FILE_PATH, show_stderr_line=True)
+        video_pipeline = GStreamerVideoPipeline()
+        if not video_pipeline.start():
+            log.error("Failed to initialize camera")
+            raise SystemExit(1)
+        
+        try:
+            raise SystemExit(main(video_pipeline))
+        finally:
+            video_pipeline.cleanup()
+            stop_monitoring()
