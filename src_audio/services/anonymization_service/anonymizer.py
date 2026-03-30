@@ -9,8 +9,13 @@ import hmac
 import hashlib
 import base64
 import os
+import threading
+import gc
 from config.logger import Logger
 log = Logger("[audio][anonymizer]")
+
+_ANONYMIZER_SINGLETON = None
+_ANONYMIZER_LOCK = threading.Lock()
 
 class TranscriptAnonymizer:
     """
@@ -88,3 +93,36 @@ class TranscriptAnonymizer:
         results = self.analyzer.analyze(text=text, language=language, entities=list(self.entity_operators.keys()))
         anonymized_result = self.anonymizer.anonymize(text=text, analyzer_results=results, operators=self.entity_operators)
         return anonymized_result.text
+
+
+def get_transcript_anonymizer() -> TranscriptAnonymizer:
+    """Return a process-wide anonymizer singleton."""
+    global _ANONYMIZER_SINGLETON
+    if _ANONYMIZER_SINGLETON is not None:
+        return _ANONYMIZER_SINGLETON
+
+    with _ANONYMIZER_LOCK:
+        if _ANONYMIZER_SINGLETON is None:
+            _ANONYMIZER_SINGLETON = TranscriptAnonymizer()
+    return _ANONYMIZER_SINGLETON
+
+
+def unload_transcript_anonymizer() -> None:
+    """Release anonymizer singleton so long-running sessions can reclaim RAM."""
+    global _ANONYMIZER_SINGLETON
+
+    with _ANONYMIZER_LOCK:
+        if _ANONYMIZER_SINGLETON is None:
+            return
+
+        try:
+            _ANONYMIZER_SINGLETON.analyzer = None
+            _ANONYMIZER_SINGLETON.anonymizer = None
+            _ANONYMIZER_SINGLETON.entity_operators = None
+        except Exception:
+            pass
+
+        _ANONYMIZER_SINGLETON = None
+
+    gc.collect()
+    log.info("Transcript anonymizer unloaded from memory")

@@ -1,6 +1,6 @@
 from src_audio.utils.load_csv_file import load_csv_file 
 from src_audio.utils.export_to_csv import export_to_csv
-from src_audio.services.anonymization_service.anonymizer import TranscriptAnonymizer
+from src_audio.services.anonymization_service.anonymizer import get_transcript_anonymizer
 from config.logger import Logger
 from pathlib import Path
 
@@ -20,7 +20,7 @@ def run_anonymization(chunk_path: str, transcript_path: str) -> Path:
         a Path to the anonymized transcript CSV file.
     """
     log.header("Starting Anonymization...")
-    anonymizer = TranscriptAnonymizer()
+    anonymizer = get_transcript_anonymizer()
     df = load_csv_file(transcript_path)
     log.info(f"Processing {len(df)} segments")
     

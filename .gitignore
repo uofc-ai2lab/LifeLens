@@ -17,6 +17,7 @@ data/resource_usage.csv
 data/audio/medX_audit_audio.csv
 src_audio/services/transcription_service/models/
 resnet50_market1501_aicity156.onnx
+yolov8n.onnx
 
 .gitignore
 # OS / Editor
@@ -355,3 +356,7 @@ data/video/source_files/Images/Wound_dataset/
 
 # transcription models
 src_audio/services/transcription_service/models/
+
+
+# new swin tiny model checkpoint
+/checkpoints

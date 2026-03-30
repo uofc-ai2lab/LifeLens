@@ -51,8 +51,6 @@ def normalize_whisper_segments(segments, base_datetime: datetime = None):
 
     normalized = []
     for i, seg in enumerate(segments):
-        import datetime as dt
-
         rel_start = (
             seg.get("start")
             if seg.get("start") is not None
@@ -60,9 +58,35 @@ def normalize_whisper_segments(segments, base_datetime: datetime = None):
         )
         rel_end = (
             seg.get("end")
-            if seg.get("end") is not None
+            if  seg.get("end")is not None
             else seg.get("timestamp", [None, None])[1]
         )
+
+        try:
+            rel_start = float(rel_start) if rel_start is not None else 0.0
+        except (TypeError, ValueError):
+            log.warning(
+                f"Invalid segment start timestamp at index {i}: {rel_start}. Using 0.0s."
+            )
+            rel_start = 0.0
+
+        if rel_end is None:
+            # Whisper may omit end timestamp when audio cuts off mid-word.
+            rel_end = rel_start
+        else:
+            try:
+                rel_end = float(rel_end)
+            except (TypeError, ValueError):
+                log.warning(
+                    f"Invalid segment end timestamp at index {i}: {rel_end}. Using start timestamp."
+                )
+                rel_end = rel_start
+
+        if rel_end < rel_start:
+            log.warning(
+                f"Segment end precedes start at index {i} ({rel_start} -> {rel_end}). Clamping end to start."
+            )
+            rel_end = rel_start
 
         # 2. Add relative seconds to the base datetime
         real_start_dt = base_datetime + timedelta(seconds=rel_start)
@@ -118,6 +142,24 @@ def get_chunk_advance_seconds(audio_file: str) -> float:
     return max(advance_seconds, 0.0)
 
 
+def unload_whisper_model() -> None:
+    """Release Whisper from memory. Call before heavy inference on memory-constrained systems."""
+    global _WHISPER_PIPE, _WHISPER_FALLBACK, _WHISPER_PIPE_MODEL_PATH
+    _WHISPER_PIPE = None
+    _WHISPER_FALLBACK = None
+    _WHISPER_PIPE_MODEL_PATH = None
+    try:
+        import ctypes
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        libc = ctypes.CDLL("libc.so.6")
+        libc.malloc_trim(0)
+    except Exception:
+        pass
+    log.info("Whisper model unloaded from memory")
+
+
 def load_fine_tuned_whisper(model_path: str):
     """Loads the fine-tuned Whisper LoRA model via HF Pipeline."""
     global _WHISPER_PIPE, _WHISPER_PIPE_MODEL_PATH
@@ -167,7 +209,7 @@ def load_fine_tuned_whisper(model_path: str):
         # Step 1: Load base model — no device_map, keeps accelerate out entirely
         base_model = WhisperForConditionalGeneration.from_pretrained(
             base_model_name,
-            torch_dtype=dtype,
+            dtype=dtype,
             low_cpu_mem_usage=True,
         )
 

@@ -12,6 +12,8 @@ from src_video.domain.constants import (
     CAPTURE_HEIGHT,
     DISPLAY_WIDTH,
     DISPLAY_HEIGHT,
+    SENSOR_ID,
+    CAMERA_BRIGHTNESS,
     COLOR_TEXT,
     FRAME_RATE,
     FLIP_METHOD,
@@ -36,13 +38,14 @@ else:
     Gst = None
 
 def get_gstreamer_video_pipeline(
-    sensor_id: int = 0,
+    sensor_id: int = SENSOR_ID,
     capture_width: int = CAPTURE_WIDTH,
     capture_height: int = CAPTURE_HEIGHT,
     display_width: int = DISPLAY_WIDTH,
     display_height: int = DISPLAY_HEIGHT,
     framerate: int = FRAME_RATE,
     flip_method: int = FLIP_METHOD,
+    brightness: float = CAMERA_BRIGHTNESS,
 ) -> str:
     """
     Returns a GStreamer pipeline string for NVIDIA Jetson CSI camera capture.
@@ -58,16 +61,20 @@ def get_gstreamer_video_pipeline(
         display_height: Display height in pixels
         framerate: Target frame rate in FPS
         flip_method: Image flip method (0=none, 1=clockwise, 2=rotate-180, 3=counter-clockwise)
+        brightness: videobalance brightness in [-1.0, 1.0]; positive brightens image
     
     Returns:
         GStreamer pipeline string for video capture via appsink
     """
+    brightness = max(-1.0, min(1.0, float(brightness)))
+
     return (
         f"nvarguscamerasrc sensor-id={sensor_id} ! "
         f"video/x-raw(memory:NVMM), width=(int){capture_width}, height=(int){capture_height}, framerate=(fraction){framerate}/1 ! "
         f"nvvidconv flip-method={flip_method} ! "
         f"video/x-raw, width=(int){display_width}, height=(int){display_height}, format=(string)BGRx ! "
-        f"videoconvert ! video/x-raw, format=(string)BGR ! "
+        f"videoconvert ! videobalance brightness={brightness:.3f} ! "
+        f"video/x-raw, format=(string)BGR ! "
         f"appsink drop=true max-buffers=1 sync=false"
     )
 
@@ -122,7 +129,7 @@ class GStreamerVideoPipeline:
     - Warmup sequence to ensure stable operation
     """
     
-    def __init__(self, flip_method: int = 0):
+    def __init__(self, flip_method: int = FLIP_METHOD):
         """
         Initialize the GStreamer video pipeline.
         

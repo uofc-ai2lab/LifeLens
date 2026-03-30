@@ -1,15 +1,40 @@
-import os, sys
+import os
 from pathlib import Path
 import pandas as pd
 import spacy
 import re
+import gc
 from src_audio.utils.export_to_csv import export_to_csv
 from src_audio.utils.load_csv_file import load_csv_file 
-from config.audio_settings import MODEL_PACK
+import config.audio_settings as audio_settings
 from src_audio.domain.constants import INTERVENTIONS, REPLACEMENTS, INTER_COLUMNS
 from config.logger import Logger
 
 log = Logger("[audio][intervention]")
+
+
+def _ensure_model_pack_loaded():
+    """Return a usable MedCAT model pack, reloading it if previously unloaded."""
+    model_pack = audio_settings.MODEL_PACK
+    if model_pack is not None:
+        return model_pack
+
+    enable_medcat = int(os.getenv("ENABLE_MEDCAT", "0"))
+    if not enable_medcat:
+        return None
+
+    cat_cls = getattr(audio_settings, "CAT", None)
+    model_pack_path = getattr(audio_settings, "MODEL_PACK_PATH", None)
+    if cat_cls is None or model_pack_path is None:
+        return None
+
+    try:
+        log.info("Reloading MedCAT model pack after memory unload")
+        audio_settings.MODEL_PACK = cat_cls.load_model_pack(model_pack_path)
+        return audio_settings.MODEL_PACK
+    except Exception as e:
+        log.error(f"Failed to reload MedCAT model pack: {e}")
+        return None
 
 def normalize_text(text):
     """Normalize text for better matching"""
@@ -51,9 +76,10 @@ def run_intervention_extraction(chunk_path: str, transcript_path: str) -> Path:
     log.header("Starting Intervention Extraction...")
 
     df = load_csv_file(transcript_path)
-    if MODEL_PACK is None:
+    model_pack = _ensure_model_pack_loaded()
+    if model_pack is None:
         log.error("MedCAT not installed or environment broken")
-        sys.exit(1)
+        return
     
     log.info(f"Processing {len(df)} segments")
     
@@ -80,7 +106,7 @@ def run_intervention_extraction(chunk_path: str, transcript_path: str) -> Path:
             }
         
         # MedCAT for entity extraction
-        medcat_out = MODEL_PACK.get_entities(text_norm, only_cui=False)
+        medcat_out = model_pack.get_entities(text_norm, only_cui=False)
         
         # Process MedCAT entities
         for ent in medcat_out["entities"].values():
@@ -128,3 +154,14 @@ def run_intervention_extraction(chunk_path: str, transcript_path: str) -> Path:
     log.info(f"{len(extracted_interventions)} interventions found")
     log.success("Intervention extraction completed successfully!")
     return inter_path
+
+def unload_intervention_resources() -> None:
+    """Release MedCAT/spaCy resources loaded via audio settings."""
+    try:
+        audio_settings.MODEL_PACK = None
+        audio_settings.NLP = None
+    except Exception:
+        pass
+
+    gc.collect()
+    log.info("Intervention resources unloaded from memory")
