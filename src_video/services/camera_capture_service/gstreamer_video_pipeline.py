@@ -12,6 +12,7 @@ from src_video.domain.constants import (
     CAPTURE_HEIGHT,
     DISPLAY_WIDTH,
     DISPLAY_HEIGHT,
+    SENSOR_ID,
     CAMERA_BRIGHTNESS,
     COLOR_TEXT,
     FRAME_RATE,
@@ -37,7 +38,7 @@ else:
     Gst = None
 
 def get_gstreamer_video_pipeline(
-    sensor_id: int = 0,
+    sensor_id: int = SENSOR_ID,
     capture_width: int = CAPTURE_WIDTH,
     capture_height: int = CAPTURE_HEIGHT,
     display_width: int = DISPLAY_WIDTH,
