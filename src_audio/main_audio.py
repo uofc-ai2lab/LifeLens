@@ -264,7 +264,7 @@ def process_audio_chunk() -> bool:
             pipeline="audio", files=[
                 (str(anonymization_path), "anonymization"),
                 (str(medication_path), "medx"),
-                (str(intervention_path), "intervention_extraction")     
+                (str(intervention_path), "intervention")     
             ])
         log.success(f"{chunk_path.name} processed")
         _clear_cuda_cache_if_available()
