@@ -411,7 +411,7 @@ def run_medication_extraction(
     transcript_path: str,
     tracker: MedicationStateTracker | None = None,
     audit_log: list[dict] | None = None,
-) -> None:
+) -> Path:
     """
     Run the full medication extraction pipeline for one audio chunk.
 
@@ -467,7 +467,7 @@ def run_medication_extraction(
 
     rows = prepare_medication_rows(confirmed_admins)
 
-    export_to_csv(
+    med_path = export_to_csv(
         data=rows,
         audio_chunk_path=Path(chunk_path),
         service="medX",
@@ -482,3 +482,4 @@ def run_medication_extraction(
         )
 
     log.success("Medication extraction completed successfully!")
+    return med_path

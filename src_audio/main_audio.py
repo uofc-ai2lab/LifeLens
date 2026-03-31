@@ -28,6 +28,7 @@ from config.resource_usage import start_monitoring, stop_monitoring
 from config.memory_cleanup import cleanup_memory, clear_jtop_cache
 from config.logger import audio_logger as log
 from src_audio.utils.export_to_csv import export_to_csv
+from data_transfer.sender_global import get
 
 def put_latest(queue: Queue, item):
     """Drop old signal if queue is full, keep newest."""
@@ -234,6 +235,9 @@ def process_audio_chunk() -> bool:
         chunk_path = move_chunk_to_processed(latest)
         log.info(f"Moved to processed dir: {chunk_path}")
 
+        # get data sender
+        data_sender = get()
+
         transcript_path = run_transcription(str(chunk_path))
         _release_models_on_memory_pressure(stage="transcription")
         clear_jtop_cache()
@@ -242,17 +246,26 @@ def process_audio_chunk() -> bool:
             _clear_cuda_cache_if_available()
             return False
 
-        run_anonymization(str(chunk_path), transcript_path)
+        anonymization_path =run_anonymization(str(chunk_path), transcript_path)
         _release_models_on_memory_pressure(stage="anonymization")
         clear_jtop_cache()
 
-        run_medication_extraction(str(chunk_path), transcript_path, medication_tracker, audit_log)
+        medication_path = run_medication_extraction(str(chunk_path), transcript_path, medication_tracker, audit_log)
         _release_models_on_memory_pressure(stage="medication")
         clear_jtop_cache()
 
-        run_intervention_extraction(str(chunk_path), transcript_path)
+        intervention_path = run_intervention_extraction(str(chunk_path), transcript_path)
         _release_models_on_memory_pressure(stage="intervention")
         clear_jtop_cache()
+
+        # Send data to server
+        if data_sender is not None:
+            data_sender.send_batch(
+            pipeline="audio", files=[
+                (str(anonymization_path), "anonymization"),
+                (str(medication_path), "medx"),
+                (str(intervention_path), "intervention")     
+            ])
         log.success(f"{chunk_path.name} processed")
         _clear_cuda_cache_if_available()
         return True
