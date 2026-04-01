@@ -25,6 +25,10 @@ from config.logger import Logger
 log = Logger("[video][classification]")
 
 
+def _is_excluded_injury_label(label: str) -> bool:
+    return label.strip().lower() == "ingrown nails"
+
+
 def load_model_from_checkpoint(checkpoint_path: str, device: torch.device) -> Tuple[torch.nn.Module, List[str]]:
     checkpoint = torch.load(checkpoint_path, map_location=device)
     model_name = checkpoint.get("model_name")
@@ -114,9 +118,19 @@ def _aggregate_predictions_by_part(
     """Aggregate predictions by (image_id, body_part) using compact running stats."""
     per_part_summary: List[Dict[str, Any]] = []
     for (image_id, body_part), entry in sorted(aggregation_by_image_and_part.items()):
-        counts: Dict[str, int] = entry["counts"]
-        prob_sums: Dict[str, float] = entry["prob_sums"]
-        prob_max: Dict[str, float] = entry["prob_max"]
+        counts: Dict[str, int] = {
+            name: value for name, value in entry["counts"].items() if not _is_excluded_injury_label(name)
+        }
+        prob_sums: Dict[str, float] = {
+            name: value for name, value in entry["prob_sums"].items() if name in counts
+        }
+        prob_max: Dict[str, float] = {
+            name: value for name, value in entry["prob_max"].items() if name in counts
+        }
+
+        if not counts:
+            continue
+
         best_injury = ""
         if use_max_non_no_injury:
             non_no_injury_classes = [
@@ -163,6 +177,7 @@ def _save_reports(
     per_part_summary: List[Dict[str, Any]],
 ) -> None:
     """Save JSON and CSV reports."""
+    injury_class_names = [name for name in injury_class_names if not _is_excluded_injury_label(name)]
     out_json = {
         "checkpoint": checkpoint_path,
         "crops_root": crops_root,

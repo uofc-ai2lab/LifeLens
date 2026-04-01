@@ -186,6 +186,7 @@ def move_images_to_processed() -> None:
     """Move all images from IMAGE_SAVE_DIR into PROCESSED_IMAGE_DIR."""
     inbox_dir = Path(IMAGE_SAVE_DIR)
     processed_dir = Path(PROCESSED_IMAGE_DIR)
+
     processed_dir.mkdir(parents=True, exist_ok=True)
 
     moved = 0
@@ -285,6 +286,23 @@ def run_post_camera_pipeline(settings: Dict[str, Any], snapshot_count: int) -> b
     return True
 
 
+def _reset_video_directory_on_startup() -> None:
+    """Delete and recreate the video data directory at run start."""
+    video_root = Path(IMAGE_SAVE_DIR).parent
+
+    try:
+        if video_root.exists():
+            shutil.rmtree(video_root)
+            log.info(f"Deleted startup video directory: {video_root}")
+
+        (video_root / "source_files").mkdir(parents=True, exist_ok=True)
+        Path(IMAGE_SAVE_DIR).mkdir(parents=True, exist_ok=True)
+        Path(PROCESSED_IMAGE_DIR).mkdir(parents=True, exist_ok=True)
+        log.info(f"Recreated startup video directories under: {video_root}")
+    except Exception as e:
+        log.warning(f"Startup video directory reset failed: {e}")
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════
@@ -294,8 +312,11 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
     parser.add_argument("--dev", action="store_true")
     args = parser.parse_args()
 
+    _reset_video_directory_on_startup()
+
     settings = load_video_pipeline_settings()
     DEV_MODE  = args.dev
+    
 
     if video_pipeline is None and not DEV_MODE:
         log.error("VIDEO pipeline failed to initialize camera")
@@ -316,6 +337,7 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
         run_post_camera_pipeline(settings, snapshot_count=snapshot_count)
         stop_monitoring()
         return 0
+     
 
     log.header("Video Pipeline Starting")
     log.info(
@@ -522,10 +544,11 @@ def main(video_pipeline: Optional[GStreamerVideoPipeline] = None, external_stop_
 
             tag_label = "APRILTAG: DETECTED" if apriltag_visible else "APRILTAG: NOT DETECTED"
             tag_color = (0, 220, 0) if apriltag_visible else (0, 0, 220)
+            tag_w = cv2.getTextSize(tag_label, cv2.FONT_HERSHEY_SIMPLEX, 0.75, 2)[0][0]
             cv2.putText(
                 frame,
                 tag_label,
-                (16, 34),
+                (max(16, frame.shape[1] - tag_w - 16), 34),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.75,
                 tag_color,
